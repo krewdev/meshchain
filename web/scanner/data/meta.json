@@ -1,0 +1,7 @@
+{
+  "snapshot_unix": 1783678202,
+  "source": "data/chain_state.json",
+  "note": "Public testnet snapshot for Vercel scanner. Refresh by re-deploy after sync.",
+  "auth": "open",
+  "mesh2fa": "planned"
+}

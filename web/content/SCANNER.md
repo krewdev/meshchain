@@ -1,60 +1,60 @@
 # MeshChain Scanner (testnet explorer)
 
-Internet-accessible blockchain scanner for **meshchain-testnet-1**.
+## Public URL (Vercel)
 
-## Run
+**https://meshchain-sigma.vercel.app/scanner/**
+
+Static explorer that loads a published snapshot of `chain_state.json`.  
+**Internet-open** for testnet. Mesh 2FA is planned for the self-hosted mode.
+
+### Refresh the public snapshot
 
 ```bash
-# Need chain data first
-cargo build -p mesh -p meshchain-node -p meshchain-scanner
-./target/debug/mesh testnet-setup
-./target/debug/mesh demo   # or mint-for-deposit after vault deposit
-
-# Public scanner (bind all interfaces)
-./target/debug/meshchain-scanner --data-dir ./data --listen 0.0.0.0:8787 --auth open
+# after producing new blocks / mints locally
+./scripts/sync_scanner_snapshot.sh
+vercel --prod
+# or push to main if Git auto-deploys
 ```
 
-Open: http://YOUR_IP:8787/
+### Optional live API
 
-## Auth modes
+Run the Rust process and point the Vercel UI at it:
 
-| Mode | Flag | Behavior |
-|------|------|----------|
-| **Open** (now) | `--auth open` | Anyone on the internet can browse |
-| **Mesh 2FA** (later) | `--auth mesh2fa` | API returns 401 until client signs a mesh challenge |
+```bash
+cargo build -p meshchain-scanner
+./target/debug/meshchain-scanner --data-dir ./data --listen 0.0.0.0:8787 --auth open
+# open:
+# https://meshchain-sigma.vercel.app/scanner/?api=https://YOUR_HOST:8787
+```
 
-Challenge endpoints (always available):
+| Mode | Flag / URL | Behavior |
+|------|------------|----------|
+| Open (now) | `--auth open` or Vercel static | Public browse |
+| Mesh 2FA (later) | `--auth mesh2fa` | Require signed mesh challenge |
 
-- `GET /api/v1/auth/challenge`
-- `POST /api/v1/auth/verify` `{ challenge_id, pubkey_hex, signature_hex }`
-
-When enforcing mesh2fa, wire a session cookie after verify.
-
-## API
+## Self-hosted API routes
 
 | Path | Description |
 |------|-------------|
-| `GET /api/v1/status` | Height, supply, auth mode |
-| `GET /api/v1/blocks?limit=50` | Recent blocks |
-| `GET /api/v1/blocks/:height` | One block |
-| `GET /api/v1/accounts?limit=100` | Accounts by balance |
-| `GET /api/v1/accounts/:id` | Mesh name or hex short id |
+| `GET /` | Explorer UI |
+| `GET /api/v1/status` | Height, supply, auth |
+| `GET /api/v1/blocks` | Recent blocks |
+| `GET /api/v1/accounts` | Accounts + mesh names |
 | `GET /api/v1/search?q=` | Name / hex / height |
 | `GET /api/v1/validators` | Validator set |
-| `GET /api/v1/network` | network.json metadata |
-| `GET /api/v1/auth/mode` | open vs mesh2fa |
+| `GET /api/v1/auth/challenge` | Mesh 2FA challenge |
+| `POST /api/v1/auth/verify` | Verify signature |
 
-## Internet access
+## Vercel static files
 
-1. Run with `--listen 0.0.0.0:8787`
-2. Open firewall / cloud security group for TCP 8787
-3. Optional: reverse-proxy with TLS (Caddy/nginx) → `scanner.yourdomain.com`
-
-## Data source
-
-Reads `data/chain_state.json` (reloads every few seconds).  
-Point `--data-dir` at a live validator’s data directory.
+```
+web/scanner/index.html
+web/scanner/js/app.js
+web/scanner/js/meshname.js
+web/scanner/data/chain_state.json   # snapshot
+web/scanner/data/meta.json
+```
 
 ## TESTNET
 
-tMESH has **no cash value**. Do not treat balances as real money.
+tMESH has **no cash value**.

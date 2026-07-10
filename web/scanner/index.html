@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MeshChain Scanner — Testnet Explorer</title>
+  <meta name="description" content="Public MeshChain testnet blockchain scanner. Browse blocks, mesh names, and tMESH balances." />
+  <meta property="og:title" content="MeshChain Scanner" />
+  <meta property="og:description" content="Testnet explorer for meshchain-testnet-1" />
+  <link rel="stylesheet" href="/styles.css" />
+  <style>
+    .stat { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: .9rem; }
+    .stat .l { color: var(--muted); font-size: .75rem; text-transform: uppercase; letter-spacing: .04em; }
+    .stat .v { font-size: 1.15rem; font-weight: 700; margin-top: .25rem; word-break: break-all; }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: .75rem; margin-bottom: 1.25rem; }
+    .panel { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 1rem; margin-bottom: 1rem; }
+    .panel h2 { margin: 0 0 .75rem; font-size: 1.05rem; }
+    .search { display: flex; gap: .5rem; flex-wrap: wrap; }
+    .search input {
+      flex: 1; min-width: 200px; background: #0a0f18; border: 1px solid var(--border);
+      border-radius: 10px; padding: .65rem .8rem; color: var(--text); font: inherit;
+    }
+    .btn-sm {
+      background: linear-gradient(135deg, #0ea5e9, #22c55e); border: 0; border-radius: 10px;
+      padding: .65rem 1rem; font-weight: 600; cursor: pointer; color: #041018; font: inherit;
+    }
+    .btn-ghost {
+      background: transparent; border: 1px solid var(--border); border-radius: 10px;
+      padding: .65rem 1rem; cursor: pointer; color: var(--text); font: inherit; text-decoration: none;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+    th, td { text-align: left; padding: .55rem .4rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+    th { color: var(--muted); font-size: .75rem; text-transform: uppercase; }
+    code { font-family: ui-monospace, Menlo, monospace; font-size: .85em; background: rgba(148,163,184,.1); padding: .1rem .3rem; border-radius: 4px; }
+    .err { color: #f87171; }
+    .ok { color: var(--accent2, #34d399); }
+    .row-actions { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; }
+    #snapMeta, #errBanner { font-size: .85rem; color: var(--muted); margin: .5rem 0 1rem; }
+    #errBanner:not(:empty) { color: #f87171; }
+  </style>
+</head>
+<body>
+  <div class="testnet-banner">
+    PUBLIC SCANNER · meshchain-testnet-1 · tMESH has no cash value ·
+    Internet open · Mesh 2FA later ·
+    <a href="/docs/?doc=SCANNER">Docs</a>
+  </div>
+  <header class="nav">
+    <div class="wrap nav-inner">
+      <a class="brand" href="/">
+        <span class="logo" aria-hidden="true"></span>
+        MeshChain
+      </a>
+      <nav class="nav-links">
+        <a href="/">Home</a>
+        <a class="active" href="/scanner/">Scanner</a>
+        <a href="/docs/?doc=TESTNET">Testnet</a>
+        <a href="/docs/">Docs</a>
+        <a href="https://github.com/krewdev/meshchain" target="_blank" rel="noopener">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap" style="padding-top:1.25rem;padding-bottom:3rem">
+    <header style="display:flex;flex-wrap:wrap;gap:1rem;justify-content:space-between;align-items:center;margin-bottom:1rem">
+      <div>
+        <h1 style="margin:0;font-size:1.5rem">Blockchain Scanner</h1>
+        <span class="badge" id="authBadge" style="margin-top:.4rem;display:inline-block">loading…</span>
+      </div>
+      <div class="row-actions">
+        <button class="btn-ghost" type="button" id="btnRefresh">Refresh</button>
+        <a class="btn-ghost" href="/scanner/data/chain_state.json">Raw JSON</a>
+      </div>
+    </header>
+
+    <div id="errBanner"></div>
+    <div id="snapMeta"></div>
+    <div class="stats" id="stats"></div>
+
+    <div class="panel">
+      <h2>Search</h2>
+      <div class="search">
+        <input id="q" placeholder="Mesh name (M4K7X-…), short hex, or block height" />
+        <button class="btn-sm" type="button" id="btnSearch">Search</button>
+      </div>
+      <div id="searchOut" class="muted" style="margin-top:.75rem"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Recent blocks</h2>
+      <div id="blocks" class="muted">Loading…</div>
+    </div>
+
+    <div class="panel">
+      <h2>Top accounts</h2>
+      <div id="accounts" class="muted">Loading…</div>
+    </div>
+
+    <div class="panel">
+      <h2>Validators</h2>
+      <div id="validators" class="muted">Loading…</div>
+    </div>
+
+    <div class="panel">
+      <h2>Mesh 2FA (later)</h2>
+      <p class="muted" style="margin-top:0">
+        This Vercel deployment is <strong>public (open)</strong>. For live chain data + mesh 2FA, run the Rust scanner and open
+        <code>/scanner/?api=https://YOUR_HOST:8787</code>
+      </p>
+      <button class="btn-ghost" type="button" id="btnChallenge">Get challenge info</button>
+      <pre id="challenge" class="muted" style="white-space:pre-wrap;font-size:.8rem"></pre>
+    </div>
+
+    <p class="muted">
+      Data: <code>/scanner/data/chain_state.json</code> ·
+      Docs: <a href="/docs/?doc=SCANNER">Scanner guide</a> ·
+      Network: <a href="/testnet/network.json">network.json</a>
+    </p>
+  </main>
+
+  <footer class="footer">
+    <div class="wrap footer-inner">
+      <div>MeshChain Scanner · TESTNET</div>
+      <div>
+        <a href="/">Home</a> ·
+        <a href="https://github.com/krewdev/meshchain">GitHub</a>
+      </div>
+    </div>
+  </footer>
+
+  <script type="module" src="/scanner/js/app.js"></script>
+</body>
+</html>

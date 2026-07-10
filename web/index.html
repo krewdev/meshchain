@@ -27,7 +27,7 @@
         <a href="#features">Features</a>
         <a href="#wallets">Wallets</a>
         <a href="#testnet">Testnet</a>
-        <a href="#scanner">Scanner</a>
+        <a href="/scanner/">Scanner</a>
         <a href="#donate">Donate</a>
         <a href="/docs/">Docs</a>
         <a href="https://github.com/krewdev/meshchain" target="_blank" rel="noopener">GitHub</a>
@@ -152,15 +152,20 @@
           Internet-open explorer for testnet blocks, mesh names, and balances.
           Later: require mesh 2FA (<code class="inline-code">--auth mesh2fa</code>).
         </p>
+        <p style="margin-bottom:1rem">
+          <a class="btn btn-primary" href="/scanner/">Open public scanner</a>
+          <a class="btn btn-ghost" href="/scanner/data/chain_state.json" style="margin-left:.5rem">Raw chain JSON</a>
+        </p>
         <div class="panel" style="margin-bottom:1rem">
-<pre><span class="prompt">$</span> <span class="cmd">cargo build -p meshchain-scanner</span>
+<pre><span class="cmt"># Public (Vercel): https://meshchain-sigma.vercel.app/scanner/</span>
+<span class="cmt"># Live operator API (optional self-host):</span>
+<span class="prompt">$</span> <span class="cmd">cargo build -p meshchain-scanner</span>
 <span class="prompt">$</span> <span class="cmd">./target/debug/meshchain-scanner --data-dir ./data --listen 0.0.0.0:8787 --auth open</span>
-<span class="cmt"># UI  → http://YOUR_IP:8787/</span>
-<span class="cmt"># API → http://YOUR_IP:8787/api/v1/status</span></pre>
+<span class="cmt"># Then: /scanner/?api=https://YOUR_HOST:8787</span></pre>
         </div>
         <p class="meta">
           Docs: <a href="/docs/?doc=SCANNER">Scanner guide</a> ·
-          Search mesh names like <code class="inline-code">M3SQRT-XTA1Y-ZJ6</code>
+          Snapshot refresh: <code class="inline-code">./scripts/sync_scanner_snapshot.sh && vercel --prod</code>
         </p>
       </div>
     </section>
