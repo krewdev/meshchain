@@ -1,0 +1,11 @@
+{
+  "live_api": "",
+  "poll_secs": 15,
+  "fallback_to_snapshot": true,
+  "notes": [
+    "Set live_api to your always-on Rust scanner URL for real-time updates without redeploying Vercel.",
+    "Example: https://scanner.example.com  (no trailing slash)",
+    "Override anytime with ?api=https://host:8787",
+    "Or use GitHub Actions to auto-refresh the snapshot (see .github/workflows/scanner-snapshot.yml)"
+  ]
+}

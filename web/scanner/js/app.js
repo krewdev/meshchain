@@ -1,19 +1,22 @@
 /**
- * MeshChain public scanner (Vercel static).
- * Loads /scanner/data/chain_state.json snapshot.
- * Live mode optional: ?api=https://host:8787 uses Rust scanner API when available.
+ * MeshChain public scanner (Vercel).
+ *
+ * Auto-update strategies (in priority order):
+ * 1. ?api=https://host:8787  — force live Rust scanner
+ * 2. config.json live_api    — always-on host (no Vercel redeploy)
+ * 3. Snapshot JSON under /scanner/data/ — updated via GitHub Action / sync script
  */
 import { meshNameFromShortHex, tipHashHex, bytesToHex } from "./meshname.js";
 
 const params = new URLSearchParams(location.search);
-const LIVE_API = (params.get("api") || "").replace(/\/$/, "");
 const DATA_BASE = "/scanner/data";
 
 const $ = (id) => document.getElementById(id);
 
-function fmtMesh(n) {
-  return (Number(n) / 1e6).toLocaleString(undefined, { maximumFractionDigits: 6 });
-}
+let LIVE_API = (params.get("api") || "").replace(/\/$/, "");
+let POLL_SECS = 15;
+let CHAIN = null;
+let MODE = "snapshot"; // snapshot | live
 
 async function loadJson(url) {
   const r = await fetch(url, { cache: "no-cache" });
@@ -21,44 +24,50 @@ async function loadJson(url) {
   return r.json();
 }
 
-async function getStatus(chain, meta) {
-  if (LIVE_API) {
-    try {
-      return await loadJson(`${LIVE_API}/api/v1/status`);
-    } catch (_) {
-      /* fall through to snapshot */
+async function loadConfig() {
+  try {
+    const cfg = await loadJson(`${DATA_BASE}/config.json`);
+    if (!LIVE_API && cfg.live_api) {
+      LIVE_API = String(cfg.live_api).replace(/\/$/, "");
     }
+    if (cfg.poll_secs && Number(cfg.poll_secs) > 0) {
+      POLL_SECS = Number(cfg.poll_secs);
+    }
+    return cfg;
+  } catch {
+    return {};
   }
-  return {
-    ok: true,
-    service: "meshchain-scanner-vercel",
-    auth_mode: "open",
-    chain_id: chain.chain_id,
-    height: chain.height,
-    tip_hash_hex: tipHashHex(chain.tip_hash),
-    total_supply: chain.total_supply,
-    total_supply_tmesh: chain.total_supply / 1e6,
-    account_count: Object.keys(chain.accounts || {}).length,
-    block_count: (chain.applied || []).length,
-    validators: (chain.validators || []).length,
-    is_testnet: true,
-    warning: "TESTNET ONLY — tMESH has no cash value",
-    snapshot: meta,
-    mesh_2fa: {
-      enforced: false,
-      status: "available_not_enforced",
-      note: "Use live Rust scanner with --auth mesh2fa later",
-    },
-  };
 }
 
-function accountRows(chain, limit = 50) {
+async function tryLive(path) {
+  if (!LIVE_API) return null;
+  try {
+    return await loadJson(`${LIVE_API}${path}`);
+  } catch (e) {
+    console.warn("live API failed", path, e);
+    return null;
+  }
+}
+
+function fmtMesh(n) {
+  return (Number(n) / 1e6).toLocaleString(undefined, { maximumFractionDigits: 6 });
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
+  );
+}
+
+function accountRowsFromChain(chain, limit = 50) {
   const rows = Object.entries(chain.accounts || {}).map(([hex, a]) => {
     let mesh_name = hex;
     try {
       mesh_name = meshNameFromShortHex(hex);
     } catch (_) {}
-    const pk = Array.isArray(a.pubkey) ? bytesToHex(Uint8Array.from(a.pubkey)) : a.pubkey_hex || "";
+    const pk = Array.isArray(a.pubkey)
+      ? bytesToHex(Uint8Array.from(a.pubkey))
+      : a.pubkey_hex || "";
     return {
       short_id_hex: hex,
       mesh_name,
@@ -73,9 +82,8 @@ function accountRows(chain, limit = 50) {
   return rows.slice(0, limit);
 }
 
-function blockRows(chain, limit = 30) {
-  const applied = chain.applied || [];
-  return applied
+function blockRowsFromChain(chain, limit = 30) {
+  return (chain.applied || [])
     .slice()
     .reverse()
     .slice(0, limit)
@@ -86,27 +94,28 @@ function blockRows(chain, limit = 30) {
     }));
 }
 
-function validatorRows(chain) {
+function validatorRowsFromChain(chain) {
   return (chain.validators || []).map((pkArr, i) => {
-    const pubkey_hex = Array.isArray(pkArr) ? bytesToHex(Uint8Array.from(pkArr)) : String(pkArr);
-    // short id = first 8 of sha256(pubkey) — approximate display via account map lookup
+    const pubkey_hex = Array.isArray(pkArr)
+      ? bytesToHex(Uint8Array.from(pkArr))
+      : String(pkArr);
     let mesh_name = `validator-${i}`;
-    let short_id_hex = "";
     for (const [hex, acc] of Object.entries(chain.accounts || {})) {
-      const apk = Array.isArray(acc.pubkey) ? bytesToHex(Uint8Array.from(acc.pubkey)) : "";
+      const apk = Array.isArray(acc.pubkey)
+        ? bytesToHex(Uint8Array.from(acc.pubkey))
+        : "";
       if (apk === pubkey_hex) {
-        short_id_hex = hex;
         try {
           mesh_name = meshNameFromShortHex(hex);
         } catch (_) {}
         break;
       }
     }
-    return { index: i, pubkey_hex, mesh_name, short_id_hex };
+    return { index: i, pubkey_hex, mesh_name };
   });
 }
 
-function search(q, chain) {
+function searchLocal(q, chain) {
   q = (q || "").trim();
   if (!q) return { kind: "empty", message: "Enter a mesh name, short hex, or block height" };
   if (/^\d+$/.test(q)) {
@@ -115,7 +124,7 @@ function search(q, chain) {
     if (b) return { kind: "block", block: b };
   }
   const qUp = q.toUpperCase().replace(/-/g, "");
-  for (const row of accountRows(chain, 10000)) {
+  for (const row of accountRowsFromChain(chain, 10000)) {
     const nameUp = row.mesh_name.toUpperCase().replace(/-/g, "");
     if (
       row.short_id_hex === q.toLowerCase() ||
@@ -130,9 +139,10 @@ function search(q, chain) {
 }
 
 function renderStats(s) {
-  $("authBadge").textContent = s.mesh_2fa?.enforced
-    ? "auth: mesh2fa"
-    : "auth: open (public · Vercel snapshot)";
+  $("authBadge").textContent =
+    MODE === "live"
+      ? `live · ${s.auth_mode || "open"}`
+      : "snapshot · open (public)";
   $("stats").innerHTML = [
     ["Height", s.height],
     ["Supply (tMESH)", fmtMesh(s.total_supply)],
@@ -143,15 +153,11 @@ function renderStats(s) {
   ]
     .map(
       ([l, v]) =>
-        `<div class="stat"><div class="l">${l}</div><div class="v">${escapeHtml(String(v))}</div></div>`
+        `<div class="stat"><div class="l">${l}</div><div class="v">${escapeHtml(
+          String(v)
+        )}</div></div>`
     )
     .join("");
-  if (s.snapshot?.snapshot_unix) {
-    $("snapMeta").textContent =
-      "Snapshot: " +
-      new Date(s.snapshot.snapshot_unix * 1000).toISOString() +
-      (LIVE_API ? ` · live API: ${LIVE_API}` : " · static Vercel data (re-deploy to refresh)");
-  }
 }
 
 function renderBlocks(blocks) {
@@ -181,7 +187,7 @@ function renderAccounts(rows) {
         .map(
           (a) => `<tr>
       <td><a href="#" data-q="${a.mesh_name}"><code>${a.mesh_name}</code></a></td>
-      <td>${a.balance_tmesh.toFixed(6)} tMESH</td>
+      <td>${Number(a.balance_tmesh).toFixed(6)} tMESH</td>
       <td>${a.nonce}</td>
       <td>${a.has_cold_key ? "yes" : "—"}</td>
     </tr>`
@@ -206,54 +212,115 @@ function renderValidators(rows) {
   </table>`;
 }
 
-function escapeHtml(s) {
-  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+async function loadLive() {
+  const status = await tryLive("/api/v1/status");
+  if (!status) return false;
+
+  const [blocksRes, accountsRes, validatorsRes] = await Promise.all([
+    tryLive("/api/v1/blocks?limit=30"),
+    tryLive("/api/v1/accounts?limit=50"),
+    tryLive("/api/v1/validators"),
+  ]);
+  if (!blocksRes || !accountsRes) return false;
+
+  MODE = "live";
+  CHAIN = null; // search uses live API
+  renderStats(status);
+  renderBlocks(blocksRes.blocks || []);
+  renderAccounts(accountsRes.accounts || []);
+  if (validatorsRes?.validators) renderValidators(validatorsRes.validators);
+
+  $("snapMeta").textContent =
+    `Live · ${LIVE_API} · auto-refresh every ${POLL_SECS}s · mesh2fa: ${
+      status.mesh_2fa?.status || "n/a"
+    }`;
+  $("errBanner").textContent = "";
+  return true;
 }
 
-function fmtMesh(n) {
-  return fmtMeshNumber(n);
-}
-function fmtMeshNumber(n) {
-  return (Number(n) / 1e6).toLocaleString(undefined, { maximumFractionDigits: 6 });
-}
+async function loadSnapshot() {
+  const [chain, meta] = await Promise.all([
+    loadJson(`${DATA_BASE}/chain_state.json`),
+    loadJson(`${DATA_BASE}/meta.json`).catch(() => ({})),
+  ]);
+  CHAIN = chain;
+  MODE = "snapshot";
+  const status = {
+    ok: true,
+    auth_mode: "open",
+    chain_id: chain.chain_id,
+    height: chain.height,
+    total_supply: chain.total_supply,
+    account_count: Object.keys(chain.accounts || {}).length,
+    block_count: (chain.applied || []).length,
+    validators: (chain.validators || []).length,
+  };
+  renderStats(status);
+  renderBlocks(blockRowsFromChain(chain));
+  renderAccounts(accountRowsFromChain(chain));
+  renderValidators(validatorRowsFromChain(chain));
 
-let CHAIN = null;
-
-function doSearch() {
-  const q = $("q").value.trim();
-  const out = $("searchOut");
-  if (!CHAIN) return;
-  const r = search(q, CHAIN);
-  if (r.kind === "account" && r.account) {
-    const a = r.account;
-    out.innerHTML = `<span class="ok">Account</span> <code>${a.mesh_name}</code><br>
-      Balance: <strong>${a.balance_tmesh.toFixed(6)} tMESH</strong> · nonce ${a.nonce}<br>
-      Hex: <code>${a.short_id_hex}</code>`;
-  } else if (r.kind === "block" && r.block) {
-    const b = r.block;
-    out.innerHTML = `<span class="ok">Block</span> #${b.height} · ${b.tx_count} tx · <code>${b.hash_hex}</code>`;
-  } else {
-    out.innerHTML = `<span class="err">${r.message || "Not found"}</span>`;
-  }
+  const when = meta.snapshot_unix
+    ? new Date(meta.snapshot_unix * 1000).toISOString()
+    : "unknown";
+  $("snapMeta").textContent =
+    `Snapshot ${when} · auto-refresh page every ${POLL_SECS}s · ` +
+    (LIVE_API
+      ? `live API unreachable (${LIVE_API}), using snapshot`
+      : "set live_api in config.json for real-time updates without redeploy");
+  $("errBanner").textContent = "";
 }
 
 async function loadAll() {
   try {
-    const [chain, meta] = await Promise.all([
-      loadJson(`${DATA_BASE}/chain_state.json`),
-      loadJson(`${DATA_BASE}/meta.json`).catch(() => ({})),
-    ]);
-    CHAIN = chain;
-    const status = await getStatus(chain, meta);
-    status.snapshot = meta;
-    renderStats(status);
-    renderBlocks(blockRows(chain));
-    renderAccounts(accountRows(chain));
-    renderValidators(validatorRows(chain));
-    $("errBanner").textContent = "";
+    await loadConfig();
+    const liveOk = await loadLive();
+    if (!liveOk) await loadSnapshot();
   } catch (e) {
     console.error(e);
     $("errBanner").textContent = String(e);
+  }
+}
+
+async function doSearch() {
+  const q = $("q").value.trim();
+  const out = $("searchOut");
+  if (!q) {
+    out.textContent = "";
+    return;
+  }
+  try {
+    if (MODE === "live" && LIVE_API) {
+      const r = await loadJson(
+        `${LIVE_API}/api/v1/search?q=${encodeURIComponent(q)}`
+      );
+      if (r.kind === "account" && r.account) {
+        const a = r.account;
+        out.innerHTML = `<span class="ok">Account</span> <code>${a.mesh_name}</code><br>
+          Balance: <strong>${Number(a.balance_tmesh).toFixed(6)} tMESH</strong> · nonce ${a.nonce}<br>
+          Hex: <code>${a.short_id_hex}</code>`;
+      } else if (r.kind === "block" && r.block) {
+        const b = r.block;
+        out.innerHTML = `<span class="ok">Block</span> #${b.height} · ${b.tx_count} tx · <code>${b.hash_hex}</code>`;
+      } else {
+        out.innerHTML = `<span class="err">${r.message || "Not found"}</span>`;
+      }
+      return;
+    }
+    const r = searchLocal(q, CHAIN);
+    if (r.kind === "account" && r.account) {
+      const a = r.account;
+      out.innerHTML = `<span class="ok">Account</span> <code>${a.mesh_name}</code><br>
+        Balance: <strong>${a.balance_tmesh.toFixed(6)} tMESH</strong> · nonce ${a.nonce}<br>
+        Hex: <code>${a.short_id_hex}</code>`;
+    } else if (r.kind === "block" && r.block) {
+      const b = r.block;
+      out.innerHTML = `<span class="ok">Block</span> #${b.height} · ${b.tx_count} tx · <code>${b.hash_hex}</code>`;
+    } else {
+      out.innerHTML = `<span class="err">${r.message || "Not found"}</span>`;
+    }
+  } catch (e) {
+    out.innerHTML = `<span class="err">${escapeHtml(String(e))}</span>`;
   }
 }
 
@@ -280,13 +347,18 @@ $("btnChallenge").addEventListener("click", async () => {
   }
   $("challenge").textContent = JSON.stringify(
     {
-      note: "Mesh 2FA challenge requires the live Rust scanner (--auth mesh2fa).",
-      vercel: "Static Vercel scanner is public (open). Point ?api=https://your-host:8787 for live 2FA.",
-      example: "https://meshchain-sigma.vercel.app/scanner/?api=https://YOUR_VPS:8787",
+      how_to_auto_update: [
+        "1) BEST: Run meshchain-scanner on a VPS and set web/scanner/data/config.json live_api",
+        "2) Or open /scanner/?api=https://YOUR_HOST:8787",
+        "3) Or GitHub Action syncs snapshot every N minutes (see .github/workflows/scanner-snapshot.yml)",
+      ],
+      mesh2fa: "Enable on live scanner with --auth mesh2fa",
     },
     null,
     2
   );
 });
 
-loadAll();
+loadAll().then(() => {
+  setInterval(loadAll, POLL_SECS * 1000);
+});

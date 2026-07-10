@@ -3,6 +3,7 @@
   const DOCS = [
     { id: "TESTNET", title: "Public testnet" },
     { id: "SCANNER", title: "Blockchain scanner" },
+    { id: "SCANNER_AUTO_UPDATE", title: "Scanner auto-update" },
     { id: "E2E_TESTNET", title: "E2E results" },
     { id: "HOST_OPS", title: "Host ops" },
     { id: "VPS_PUBLIC", title: "VPS & tunnel" },

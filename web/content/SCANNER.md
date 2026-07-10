@@ -4,16 +4,21 @@
 
 **https://meshchain-sigma.vercel.app/scanner/**
 
-Static explorer that loads a published snapshot of `chain_state.json`.  
-**Internet-open** for testnet. Mesh 2FA is planned for the self-hosted mode.
+**Internet-open** for testnet. Mesh 2FA is for self-hosted mode later.
 
-### Refresh the public snapshot
+### Auto-update (read this)
+
+See **[SCANNER_AUTO_UPDATE.md](./SCANNER_AUTO_UPDATE.md)** — three ways:
+
+1. **Live API** (best): host `meshchain-scanner`, set `web/scanner/data/config.json` → `live_api`
+2. **GitHub Action** snapshot every 30m via secret `MESHCHAIN_CHAIN_STATE_URL`
+3. **Manual:** `./scripts/sync_scanner_snapshot.sh && git push`
+
+### Refresh the public snapshot (manual)
 
 ```bash
-# after producing new blocks / mints locally
 ./scripts/sync_scanner_snapshot.sh
-vercel --prod
-# or push to main if Git auto-deploys
+git add web/scanner/data && git commit -m "chore: scanner snapshot" && git push
 ```
 
 ### Optional live API

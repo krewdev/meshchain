@@ -1,0 +1,70 @@
+# Auto-refresh the public Vercel scanner snapshot.
+#
+# Mode A (recommended): self-hosted runner or any machine with chain data runs
+#   ./scripts/sync_scanner_snapshot.sh && git push
+#   (this workflow also runs that on a schedule IF chain state is available)
+#
+# Mode B: set repo secret MESHCHAIN_CHAIN_STATE_URL to a public/private URL
+#   that returns chain_state.json from your always-on validator/scanner.
+#
+# Vercel Git integration redeploys automatically when this workflow pushes.
+
+name: Scanner snapshot refresh
+
+on:
+  schedule:
+    # Every 30 minutes
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+  push:
+    paths:
+      - "data/chain_state.json"
+      - "scripts/sync_scanner_snapshot.sh"
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  sync-snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fetch chain state (optional remote URL)
+        env:
+          CHAIN_URL: ${{ secrets.MESHCHAIN_CHAIN_STATE_URL }}
+        run: |
+          mkdir -p data
+          if [ -n "$CHAIN_URL" ]; then
+            echo "Downloading chain state from MESHCHAIN_CHAIN_STATE_URL"
+            curl -fsSL "$CHAIN_URL" -o data/chain_state.json
+            python3 -c "import json; json.load(open('data/chain_state.json')); print('json ok')"
+          elif [ -f data/chain_state.json ]; then
+            echo "Using committed data/chain_state.json"
+          else
+            echo "No remote URL and no local data/chain_state.json — skipping snapshot update"
+            echo "SKIP=1" >> "$GITHUB_ENV"
+          fi
+
+      - name: Sync into web/scanner/data
+        if: env.SKIP != '1'
+        run: |
+          chmod +x scripts/sync_scanner_snapshot.sh
+          ./scripts/sync_scanner_snapshot.sh data/chain_state.json
+
+      - name: Commit if changed
+        if: env.SKIP != '1'
+        run: |
+          git config user.name "meshchain-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add web/scanner/data/chain_state.json web/scanner/data/meta.json web/scanner/data/network.json || true
+          if git diff --staged --quiet; then
+            echo "No snapshot changes"
+          else
+            git commit -m "chore: refresh scanner snapshot $(date -u +%Y-%m-%dT%H:%MZ)"
+            git push
+          fi
