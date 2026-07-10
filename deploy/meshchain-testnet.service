@@ -1,15 +1,18 @@
 [Unit]
-Description=MeshChain testnet host (validators + faucet)
-After=network.target
+Description=MeshChain public testnet host (3 validators + faucet + scanner)
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-WorkingDirectory=/opt/meshchain
-ExecStart=/opt/meshchain/scripts/start_testnet_host.sh
-ExecStop=/opt/meshchain/scripts/stop_testnet_host.sh
 User=meshchain
 Group=meshchain
+WorkingDirectory=/opt/meshchain
+EnvironmentFile=-/etc/meshchain/testnet.env
+ExecStart=/usr/local/bin/meshchain-testnet-start
+ExecStop=/usr/local/bin/meshchain-testnet-stop
+TimeoutStartSec=120
 
 [Install]
 WantedBy=multi-user.target

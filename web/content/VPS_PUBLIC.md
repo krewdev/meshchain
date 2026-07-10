@@ -7,53 +7,72 @@
 Any small VPS (DigitalOcean, Hetzner, Linode, AWS Lightsail):
 
 - Ubuntu 22.04+  
-- 1 vCPU / 1–2 GB RAM  
-- Open ports: `8787` (faucet), optionally `9100-9102` (validators for peers)
+- 1 vCPU / 1–2 GB RAM · 20–40 GB disk  
+- Open ports: `8787` (faucet), `8788` (scanner), optionally `9100-9102` (validators)
 
-### 2. Install
+**Pick:** Hetzner CX22 or DigitalOcean $6 droplet.
 
-```bash
-sudo adduser --disabled-password meshchain
-sudo mkdir -p /opt/meshchain && sudo chown meshchain:meshchain /opt/meshchain
-sudo -u meshchain bash -lc '
-  curl https://sh.rustup.rs -sSf | sh -s -- -y
-  source $HOME/.cargo/env
-  git clone https://github.com/krewdev/meshchain.git /opt/meshchain
-  cd /opt/meshchain
-  cargo build -p meshchain-node --release
-  ./scripts/host_bootstrap.sh
-'
-```
+### 2. One-shot install (recommended)
 
-### 3. Run as service
+On a **fresh Ubuntu VPS as root**:
 
 ```bash
-sudo cp /opt/meshchain/deploy/meshchain-testnet.service /etc/systemd/system/
-# edit WorkingDirectory if needed
-sudo systemctl daemon-reload
-sudo systemctl enable --now meshchain-testnet
-curl http://127.0.0.1:8787/info
+# optional domain for HTTPS via Caddy
+export MESHCHAIN_DOMAIN=faucet.yourdomain.com
+
+curl -fsSL https://raw.githubusercontent.com/krewdev/meshchain/main/deploy/vps-setup.sh | sudo bash
 ```
+
+With a local checkout:
+
+```bash
+sudo MESHCHAIN_DOMAIN=faucet.yourdomain.com bash deploy/vps-setup.sh
+```
+
+What it installs:
+
+- user `meshchain`  
+- Rust + release build (`meshchain-node`, scanner, CLI)  
+- testnet genesis (3 validators)  
+- systemd `meshchain-testnet`  
+- faucet `:8787` + scanner `:8788`  
+- ufw rules  
+- optional Caddy if `MESHCHAIN_DOMAIN` is set  
+
+### 3. Useful commands after install
+
+```bash
+systemctl status meshchain-testnet
+journalctl -u meshchain-testnet -n 50
+tail -f /opt/meshchain/data/host/logs/faucet.log
+curl -s http://127.0.0.1:8787/info
+curl -s http://127.0.0.1:8788/api/v1/status
+```
+
+Env file: `/etc/meshchain/testnet.env` (see `deploy/testnet.env.example`).
 
 ### 4. Publish endpoints
 
-Point DNS `faucet.yourdomain.com` → VPS IP (A record).  
-Nginx/Caddy reverse proxy with HTTPS optional.
-
-Update `testnet/network.json`:
+1. DNS **A record**: `faucet.yourdomain.com` → VPS public IP  
+2. Wait for TLS (Caddy) if domain set  
+3. Update site faucet default + `testnet/network.json`:
 
 ```json
 "endpoints": {
   "faucet_api": "https://faucet.yourdomain.com",
-  "faucet_ui": "https://meshchain-sigma.vercel.app/faucet/"
+  "faucet_ui": "https://meshchain-sigma.vercel.app/faucet/",
+  "scanner_api": "https://faucet.yourdomain.com/api/"
 }
 ```
 
-### 5. Firewall
+4. On the Vercel faucet page, set **Faucet API URL** to your domain.
+
+### 5. Firewall (if not using the script)
 
 ```bash
 sudo ufw allow OpenSSH
 sudo ufw allow 8787/tcp
+sudo ufw allow 8788/tcp
 # optional peer gossip:
 # sudo ufw allow 9100:9102/tcp
 sudo ufw enable
