@@ -13,7 +13,7 @@ use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use meshchain_ledger::genesis::ONE_MESH;
 use meshchain_ledger::state::ChainState;
-use meshchain_proto::address::{parse_short_id_hex, short_id, short_id_hex};
+use meshchain_proto::address::{mesh_name, parse_recipient, short_id, short_id_hex};
 use meshchain_proto::crypto::Keypair;
 use meshchain_proto::pq::PqKeypair;
 use meshchain_proto::tx::{Tx, TxBody};
@@ -87,7 +87,7 @@ enum Commands {
         name: String,
     },
 
-    /// Show your address (who people send money to)
+    /// Show your mesh name (who people send money to)
     Address {
         #[arg(long, default_value = "wallet.json")]
         wallet: String,
@@ -99,9 +99,9 @@ enum Commands {
         wallet: String,
     },
 
-    /// Send MESH to someone (use their short address)
+    /// Send MESH to someone (mesh name like M4K7X-J9P2Q-R3W, or hex)
     Send {
-        /// Their short address (16 hex characters)
+        /// Their mesh name (M4K7X-J9P2Q-R3W) or 16-char hex
         to: String,
         /// How much MESH to send (whole number or decimal like 1.5)
         amount: String,
@@ -349,10 +349,13 @@ fn main() -> Result<()> {
             let kp = Keypair::generate();
             fs::write(&path, serde_json::to_string_pretty(&kp.to_file())?)?;
             let sid = short_id(&kp.public_key());
+            let tag = mesh_name(&sid);
             println!("New wallet created.");
-            println!("  File:    {}", path.display());
-            println!("  Address: {}", short_id_hex(&sid));
+            println!("  File:      {}", path.display());
+            println!("  Mesh name: {tag}");
+            println!("  (hex id:   {})", short_id_hex(&sid));
             println!();
+            println!("Share your mesh name so people can pay you.");
             println!("Keep this file secret. Anyone with it can spend your MESH.");
             println!("For large long-term savings also run: mesh new-cold-key");
         }
@@ -379,9 +382,11 @@ fn main() -> Result<()> {
         Commands::Address { wallet } => {
             let path = wallet_path(&dir, &wallet);
             let kp = load_wallet(&path)?;
-            println!("Wallet:  {}", path.display());
-            println!("Address: {}", short_id_hex(&short_id(&kp.public_key())));
-            println!("(People send MESH to this address.)");
+            let sid = short_id(&kp.public_key());
+            println!("Wallet:    {}", path.display());
+            println!("Mesh name: {}", mesh_name(&sid));
+            println!("Hex id:    {}", short_id_hex(&sid));
+            println!("(Share your mesh name — like M4K7X-J9P2Q-R3W — so people can pay you.)");
         }
 
         Commands::Balance { wallet } => {
@@ -389,7 +394,7 @@ fn main() -> Result<()> {
             let state_path = dir.join("chain_state.json");
             if !state_path.exists() {
                 bail!(
-                    "No network state yet. Run:\n  mesh setup\n  mesh demo"
+                    "No network state yet. Run:\n  mesh testnet-setup\n  mesh demo"
                 );
             }
             let kp = load_wallet(&path)?;
@@ -398,15 +403,15 @@ fn main() -> Result<()> {
             let bal = st.balance_of(&sid);
             let nonce = st.account(&sid).map(|a| a.nonce).unwrap_or(0);
             let cold = st.account(&sid).and_then(|a| a.pq_pk.as_ref()).is_some();
-            println!("Address:  {}", short_id_hex(&sid));
-            println!("Balance:  {} MESH", fmt_mesh(bal));
-            println!("Sends:    {nonce} completed from this wallet");
-            println!("Network:  block #{}", st.height);
+            println!("Mesh name: {}", mesh_name(&sid));
+            println!("Balance:   {} MESH", fmt_mesh(bal));
+            println!("Sends:     {nonce} completed from this wallet");
+            println!("Network:   block #{}", st.height);
             if cold {
-                println!("Cold key: locked to this account (large sends use it)");
+                println!("Cold key:  locked to this account (large sends use it)");
             } else {
                 println!(
-                    "Cold key: not bound yet (needed for sends ≥ {} MESH)",
+                    "Cold key:  not bound yet (needed for sends ≥ {} MESH)",
                     fmt_mesh(st.pq_required_above)
                 );
             }
@@ -437,9 +442,12 @@ fn main() -> Result<()> {
                     fmt_mesh(acc.balance)
                 );
             }
-            let to_sid = parse_short_id_hex(&to).map_err(|e| anyhow::anyhow!(e))?;
+            let to_sid = parse_recipient(&to).map_err(|e| anyhow::anyhow!(e))?;
             if st.account(&to_sid).is_none() {
-                bail!("Unknown address. The receiver must already be on this network.");
+                bail!(
+                    "Unknown recipient {}. They must already be on this network.",
+                    mesh_name(&to_sid)
+                );
             }
             let body = TxBody::Transfer {
                 nonce: acc.nonce,
@@ -467,7 +475,7 @@ fn main() -> Result<()> {
             fs::write(&out_path, &json)?;
 
             println!("Payment signed.");
-            println!("  To:     {to}");
+            println!("  To:     {} ({to})", mesh_name(&to_sid));
             println!("  Amount: {} MESH", fmt_mesh(units));
             println!("  Id:     {}", tx.txid_hex());
             println!("  File:   {}", out_path.display());

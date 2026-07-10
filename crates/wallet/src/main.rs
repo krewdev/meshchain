@@ -3,7 +3,9 @@
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use meshchain_ledger::state::ChainState;
-use meshchain_proto::address::{short_id, short_id_hex, parse_short_id_hex};
+use meshchain_proto::address::{
+    mesh_name, parse_recipient, short_id, short_id_hex,
+};
 use meshchain_proto::crypto::Keypair;
 use meshchain_proto::pq::{PqKeypair, PqSigned};
 use meshchain_proto::tx::{Tx, TxBody};
@@ -93,9 +95,10 @@ fn main() -> Result<()> {
             fs::write(&out, serde_json::to_string_pretty(&kp.to_file())?)?;
             let sid = short_id(&kp.public_key());
             println!("wrote {}", out.display());
-            println!("scheme:  ed25519 (NOT quantum-safe long-term)");
-            println!("public:  {}", hex::encode(kp.public_key()));
-            println!("short:   {}", short_id_hex(&sid));
+            println!("scheme:    ed25519 (NOT quantum-safe long-term)");
+            println!("mesh name: {}", mesh_name(&sid));
+            println!("hex id:    {}", short_id_hex(&sid));
+            println!("public:    {}", hex::encode(kp.public_key()));
         }
         Commands::PqKeygen { out } => {
             let kp = PqKeypair::generate().map_err(|e| anyhow::anyhow!(e.to_string()))?;
@@ -113,8 +116,9 @@ fn main() -> Result<()> {
         Commands::Address { key } => {
             let kp = load_key(&key)?;
             let sid = short_id(&kp.public_key());
-            println!("public:  {}", hex::encode(kp.public_key()));
-            println!("short:   {}", short_id_hex(&sid));
+            println!("mesh name: {}", mesh_name(&sid));
+            println!("hex id:    {}", short_id_hex(&sid));
+            println!("public:    {}", hex::encode(kp.public_key()));
         }
         Commands::PqAddress { key } => {
             let file: meshchain_proto::pq::PqKeypairFile =
@@ -146,8 +150,9 @@ fn main() -> Result<()> {
             let st = ChainState::load_json(&state).map_err(|e| anyhow::anyhow!(e.to_string()))?;
             let bal = st.balance_of(&sid);
             let nonce = st.account(&sid).map(|a| a.nonce).unwrap_or(0);
-            println!("short:    {}", short_id_hex(&sid));
-            println!("balance:  {} base units ({:.6} MESH)", bal, bal as f64 / ONE_MESH as f64);
+            println!("mesh name: {}", mesh_name(&sid));
+            println!("hex id:    {}", short_id_hex(&sid));
+            println!("balance:   {} base units ({:.6} MESH)", bal, bal as f64 / ONE_MESH as f64);
             println!("nonce:    {nonce}");
             println!("height:   {}", st.height);
             println!("supply:   {}", st.total_supply);
@@ -174,7 +179,7 @@ fn main() -> Result<()> {
             if units > acc.balance {
                 bail!("insufficient balance");
             }
-            let to_sid = parse_short_id_hex(&to).map_err(|e| anyhow::anyhow!(e))?;
+            let to_sid = parse_recipient(&to).map_err(|e| anyhow::anyhow!(e))?;
             if st.account(&to_sid).is_none() {
                 bail!("recipient not registered on chain");
             }
