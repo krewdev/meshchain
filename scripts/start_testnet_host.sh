@@ -5,11 +5,15 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 NODE="${MESHCHAIN_BIN:-$ROOT/target/release/meshchain-node}"
+SCANNER="${MESHCHAIN_SCANNER:-$ROOT/target/release/meshchain-scanner}"
 if [[ ! -x "$NODE" ]]; then
   NODE="$ROOT/target/debug/meshchain-node"
 fi
+if [[ ! -x "$SCANNER" ]]; then
+  SCANNER="$ROOT/target/debug/meshchain-scanner"
+fi
 if [[ ! -x "$NODE" ]]; then
-  echo "Build first: cargo build -p meshchain-node --release"
+  echo "Build first: cargo build -p meshchain-node -p meshchain-scanner --release"
   echo "Or: ./scripts/host_bootstrap.sh"
   exit 1
 fi
@@ -56,10 +60,32 @@ export CORS_ORIGIN="*"
 nohup python3 "$ROOT/services/faucet/faucet_server.py" >"$LOG/faucet.log" 2>&1 &
 echo $! >>"$PIDFILE"
 
+if [[ -x "$SCANNER" ]]; then
+  echo "starting scanner (live API) on :8788"
+  # Prefer host v0 ledger; fall back to ./data if host empty
+  SCAN_DATA="$HOST_DATA/v0"
+  if [[ ! -f "$SCAN_DATA/chain_state.json" && -f "$ROOT/data/chain_state.json" ]]; then
+    SCAN_DATA="$ROOT/data"
+  fi
+  nohup "$SCANNER" \
+    --data-dir "$SCAN_DATA" \
+    --listen "0.0.0.0:8788" \
+    --auth open \
+    --reload-secs 5 \
+    >"$LOG/scanner.log" 2>&1 &
+  echo $! >>"$PIDFILE"
+else
+  echo "warn: meshchain-scanner not built — skip live API (run host_bootstrap.sh)"
+fi
+
 echo "Host running. PIDs in $PIDFILE"
-echo "  Logs:   $LOG"
-echo "  Faucet: http://127.0.0.1:8787/info"
-echo "  Stop:   ./scripts/stop_testnet_host.sh"
+echo "  Logs:    $LOG"
+echo "  Faucet:  http://127.0.0.1:8787/info"
+echo "  Scanner: http://127.0.0.1:8788/"
+echo "  Live:    ./scripts/start_scanner_live.sh   # public Cloudflare URL + Vercel"
+echo "  Stop:    ./scripts/stop_testnet_host.sh"
 sleep 2
 curl -s http://127.0.0.1:8787/info || true
+echo
+curl -s http://127.0.0.1:8788/api/v1/status | head -c 200 || true
 echo

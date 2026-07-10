@@ -5,10 +5,11 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 echo "== MeshChain testnet host bootstrap =="
-cargo build -p meshchain-node -p mesh --release
+cargo build -p meshchain-node -p mesh -p meshchain-scanner --release
 
 BIN="$ROOT/target/release/mesh"
 NODE="$ROOT/target/release/meshchain-node"
+SCANNER="$ROOT/target/release/meshchain-scanner"
 HOST_DATA="$ROOT/data/host"
 mkdir -p "$HOST_DATA"
 
@@ -33,5 +34,7 @@ cp -f "$HOST_DATA"/keys/faucet.json "$HOST_DATA/v0/keys/" 2>/dev/null || true
 
 echo "Bootstrap OK."
 echo "  Start host:  ./scripts/start_testnet_host.sh"
+echo "  Live API:    ./scripts/start_scanner_live.sh   # Cloudflare tunnel + Vercel live_api"
 echo "  Or Docker:   docker compose up -d   (after bootstrap)"
 echo "  Faucet:      http://127.0.0.1:8787/info"
+echo "  Scanner:     http://127.0.0.1:8788/"

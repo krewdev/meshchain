@@ -12,4 +12,5 @@ else
   echo "no pidfile; pkill meshchain-node / faucet if needed"
   pkill -f "meshchain-node run" 2>/dev/null || true
   pkill -f "faucet_server.py" 2>/dev/null || true
+  pkill -f "meshchain-scanner" 2>/dev/null || true
 fi

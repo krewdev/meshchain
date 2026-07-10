@@ -7,38 +7,40 @@ The chain keeps changing on your validator, so “auto-update” needs one of th
 
 ## Option A — Live API (best, real-time)
 
-Run the Rust scanner on any always-on host (VPS, Pi, Railway, Fly.io).  
-The Vercel page **polls it every 15s** — **no redeploy** when the chain moves.
+The Vercel page **polls a live Rust scanner every 15s** — **no redeploy** when the chain moves.
 
-### 1. Host the API
+### One command (this machine)
+
+```bash
+./scripts/host_bootstrap.sh          # once: build + genesis
+./scripts/start_testnet_host.sh      # validators + faucet :8787 + scanner :8788
+./scripts/start_scanner_live.sh      # Cloudflare tunnel + config live_api + vercel deploy
+```
+
+Then open: **https://meshchain-sigma.vercel.app/scanner/**
+
+| Piece | Port / URL |
+|-------|------------|
+| Scanner API (local) | `http://127.0.0.1:8788` |
+| Public tunnel | `https://….trycloudflare.com` (printed by script) |
+| Vercel UI | polls `live_api` from `web/scanner/data/config.json` |
+
+Stop:
+
+```bash
+./scripts/stop_scanner_live.sh
+./scripts/stop_testnet_host.sh
+```
+
+> Cloudflare quick-tunnel URLs change when the tunnel restarts — re-run `start_scanner_live.sh`.
+
+### Manual VPS (fixed domain)
 
 ```bash
 cargo build -p meshchain-scanner --release
-./target/release/meshchain-scanner \
-  --data-dir /path/to/validator/data \
-  --listen 0.0.0.0:8787 \
-  --auth open
+./target/release/meshchain-scanner --data-dir ./data --listen 0.0.0.0:8788 --auth open
+# set live_api in config.json to https://scanner.yourdomain.com, deploy once
 ```
-
-Put TLS in front (Caddy/nginx) → e.g. `https://scanner.yourdomain.com`
-
-### 2. Point Vercel UI at it
-
-Edit `web/scanner/data/config.json`:
-
-```json
-{
-  "live_api": "https://scanner.yourdomain.com",
-  "poll_secs": 15,
-  "fallback_to_snapshot": true
-}
-```
-
-Commit + deploy once. After that, data updates automatically from the live API.
-
-**One-off test without editing config:**
-
-https://meshchain-sigma.vercel.app/scanner/?api=https://YOUR_HOST:8787
 
 ---
 
