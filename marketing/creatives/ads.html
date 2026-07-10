@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MeshChain — Ad creatives</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #03060c;
+      --text: #e8f4ff;
+      --muted: #8ba3c0;
+      --cyan: #22d3ee;
+      --em: #34d399;
+      --warn: #fbbf24;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Outfit, system-ui, sans-serif;
+      background: #111;
+      color: var(--text);
+      padding: 2rem;
+    }
+    h1 { font-weight: 700; margin: 0 0 0.5rem; }
+    .note { color: #94a3b8; margin-bottom: 2rem; max-width: 720px; line-height: 1.5; }
+    .grid { display: flex; flex-wrap: wrap; gap: 2rem; align-items: flex-start; }
+    .label {
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 0.75rem;
+      color: #64748b;
+      margin-bottom: 0.5rem;
+      letter-spacing: 0.04em;
+    }
+
+    /* ——— 16:9 Hero ——— */
+    .ad-hero {
+      width: 960px;
+      height: 540px;
+      position: relative;
+      overflow: hidden;
+      border-radius: 12px;
+      background: #03060c center/cover no-repeat;
+      background-image: url("hero-banner-bg.jpg");
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    }
+    .ad-hero .shade {
+      position: absolute; inset: 0;
+      background: linear-gradient(105deg, rgba(3,6,12,0.92) 38%, rgba(3,6,12,0.35) 70%, rgba(3,6,12,0.55) 100%);
+    }
+    .ad-hero .inner {
+      position: relative; z-index: 1;
+      height: 100%;
+      padding: 2.5rem 3rem;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      max-width: 58%;
+    }
+    .badge {
+      display: inline-block;
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      color: #fffbeb;
+      background: linear-gradient(90deg, #92400e, #b45309);
+      padding: 0.35rem 0.7rem;
+      border-radius: 999px;
+      width: fit-content;
+      margin-bottom: 1.1rem;
+    }
+    .ad-hero h2 {
+      margin: 0 0 0.85rem;
+      font-size: 2.35rem;
+      line-height: 1.15;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+    .ad-hero h2 em {
+      font-style: normal;
+      background: linear-gradient(90deg, var(--cyan), var(--em));
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    .ad-hero p {
+      margin: 0 0 1.5rem;
+      color: var(--muted);
+      font-size: 1.05rem;
+      line-height: 1.45;
+    }
+    .cta-row {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+    .cta {
+      background: linear-gradient(135deg, #0891b2, #059669);
+      color: #fff;
+      font-weight: 700;
+      font-size: 0.95rem;
+      padding: 0.7rem 1.2rem;
+      border-radius: 10px;
+    }
+    .url {
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 0.85rem;
+      color: var(--cyan);
+    }
+    .foot {
+      position: absolute;
+      bottom: 1.1rem;
+      left: 3rem;
+      right: 3rem;
+      z-index: 1;
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 0.62rem;
+      color: #64748b;
+    }
+
+    /* ——— 1:1 Square ——— */
+    .ad-square {
+      width: 540px;
+      height: 540px;
+      position: relative;
+      overflow: hidden;
+      border-radius: 12px;
+      background: #03060c center/cover no-repeat;
+      background-image: url("social-square-bg.jpg");
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    }
+    .ad-square .shade {
+      position: absolute; inset: 0;
+      background: linear-gradient(180deg, rgba(3,6,12,0.55) 0%, rgba(3,6,12,0.25) 40%, rgba(3,6,12,0.92) 100%);
+    }
+    .ad-square .inner {
+      position: relative; z-index: 1;
+      height: 100%;
+      padding: 2rem;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+    }
+    .ad-square .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      font-weight: 700;
+      font-size: 1.1rem;
+      margin-bottom: auto;
+    }
+    .ad-square .brand img {
+      width: 40px; height: 40px; border-radius: 10px;
+    }
+    .ad-square h2 {
+      margin: 0 0 0.6rem;
+      font-size: 2rem;
+      line-height: 1.15;
+      font-weight: 800;
+    }
+    .ad-square p {
+      margin: 0 0 1rem;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+    .pillars {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.45rem;
+      margin-bottom: 1rem;
+    }
+    .pillars span {
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 0.68rem;
+      color: var(--cyan);
+      border: 1px solid rgba(34,211,238,0.25);
+      background: rgba(12,20,36,0.7);
+      padding: 0.4rem 0.5rem;
+      border-radius: 8px;
+    }
+    .ad-square .url { font-size: 0.78rem; }
+    .ad-square .foot {
+      position: static;
+      margin-top: 0.75rem;
+      font-size: 0.58rem;
+    }
+
+    /* ——— 9:16 Story ——— */
+    .ad-story {
+      width: 360px;
+      height: 640px;
+      position: relative;
+      overflow: hidden;
+      border-radius: 12px;
+      background: #03060c center/cover no-repeat;
+      background-image: url("story-vertical-bg.jpg");
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    }
+    .ad-story .shade {
+      position: absolute; inset: 0;
+      background: linear-gradient(180deg, rgba(3,6,12,0.4) 20%, rgba(3,6,12,0.15) 45%, rgba(3,6,12,0.94) 78%);
+    }
+    .ad-story .inner {
+      position: relative; z-index: 1;
+      height: 100%;
+      padding: 2rem 1.5rem 1.75rem;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      text-align: center;
+    }
+    .ad-story .brand-top {
+      position: absolute;
+      top: 2rem; left: 0; right: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 0.5rem;
+      font-weight: 700;
+      font-size: 1rem;
+    }
+    .ad-story .brand-top img { width: 36px; height: 36px; border-radius: 9px; }
+    .ad-story h2 {
+      margin: 0 0 0.75rem;
+      font-size: 1.65rem;
+      line-height: 1.2;
+      font-weight: 800;
+    }
+    .ad-story p {
+      margin: 0 0 1.25rem;
+      color: var(--muted);
+      font-size: 0.9rem;
+      line-height: 1.4;
+    }
+    .ad-story .cta {
+      display: block;
+      margin: 0 auto 1rem;
+      width: fit-content;
+    }
+    .ad-story .foot {
+      position: static;
+      text-align: center;
+      font-size: 0.55rem;
+      line-height: 1.35;
+    }
+
+    /* ——— Banner strip 1200x300 ——— */
+    .ad-strip {
+      width: 960px;
+      height: 240px;
+      position: relative;
+      overflow: hidden;
+      border-radius: 12px;
+      background: linear-gradient(120deg, #03060c 0%, #0c1424 45%, #06201a 100%);
+      border: 1px solid rgba(34,211,238,0.2);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+      display: flex;
+      align-items: center;
+      padding: 1.5rem 2rem;
+      gap: 1.5rem;
+    }
+    .ad-strip img.logo {
+      width: 96px; height: 96px; border-radius: 20px;
+      box-shadow: 0 0 40px rgba(34,211,238,0.35);
+    }
+    .ad-strip h2 {
+      margin: 0 0 0.4rem;
+      font-size: 1.65rem;
+      font-weight: 800;
+    }
+    .ad-strip p { margin: 0 0 0.6rem; color: var(--muted); font-size: 0.95rem; }
+    .ad-strip .url { font-size: 0.85rem; }
+    .ad-strip .disc {
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 0.58rem;
+      color: #64748b;
+      margin-top: 0.5rem;
+    }
+
+    /* ——— Vault variant square ——— */
+    .ad-vault {
+      width: 540px;
+      height: 540px;
+      border-radius: 12px;
+      background:
+        radial-gradient(600px 400px at 80% 20%, rgba(167,139,250,0.15), transparent 50%),
+        radial-gradient(500px 360px at 20% 80%, rgba(34,211,238,0.12), transparent 50%),
+        #03060c;
+      border: 1px solid rgba(34,211,238,0.18);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+      padding: 2rem;
+      display: flex;
+      flex-direction: column;
+    }
+    .ad-vault .brand {
+      display: flex; align-items: center; gap: 0.55rem;
+      font-weight: 700; margin-bottom: 2rem;
+    }
+    .ad-vault .brand img { width: 36px; height: 36px; border-radius: 9px; }
+    .ad-vault .steps {
+      display: flex; flex-direction: column; gap: 0.85rem;
+      margin: 1.25rem 0 1.5rem;
+    }
+    .ad-vault .step {
+      display: flex; gap: 0.75rem; align-items: flex-start;
+      font-size: 0.95rem;
+    }
+    .ad-vault .n {
+      font-family: "IBM Plex Mono", monospace;
+      color: var(--cyan);
+      font-weight: 600;
+      min-width: 1.5rem;
+    }
+    .ad-vault h2 {
+      margin: 0;
+      font-size: 1.85rem;
+      font-weight: 800;
+      line-height: 1.2;
+    }
+    .ad-vault h2 span {
+      background: linear-gradient(90deg, var(--cyan), #a78bfa);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    .ad-vault .cta { width: fit-content; margin-top: auto; }
+    .ad-vault .foot { position: static; margin-top: 1rem; font-size: 0.58rem; }
+  </style>
+</head>
+<body>
+  <h1>MeshChain ad creatives</h1>
+  <p class="note">
+    Open this file in a browser. Screenshot each frame (or use browser device tools).
+    Backgrounds pull from the same folder. All headlines use real fonts — safe for exact text.
+  </p>
+
+  <div class="grid">
+    <div>
+      <div class="label">HERO · 960×540 (16:9) · X / YouTube / web</div>
+      <div class="ad-hero" id="hero">
+        <div class="shade"></div>
+        <div class="inner">
+          <div class="badge">PUBLIC TESTNET · LIVE</div>
+          <h2>Money that moves when the <em>internet doesn’t</em>.</h2>
+          <p>Privacy-forward ledger for Meshtastic LoRa. Off-grid hold. Hybrid vaults. Quantum-safe cold path.</p>
+          <div class="cta-row">
+            <div class="cta">Join the testnet</div>
+            <div class="url">meshchain-sigma.vercel.app</div>
+          </div>
+        </div>
+        <div class="foot">tMESH has no cash value · Not an official Meshtastic product · Open source</div>
+      </div>
+    </div>
+
+    <div>
+      <div class="label">SQUARE · 540×540 · Feed</div>
+      <div class="ad-square" id="square">
+        <div class="shade"></div>
+        <div class="inner">
+          <div class="brand">
+            <img src="logo.jpg" alt="" />
+            MeshChain
+          </div>
+          <h2>Off-grid value on LoRa.</h2>
+          <p>Hold. Mesh. Unlock — without cell service.</p>
+          <div class="pillars">
+            <span>No SIM required</span>
+            <span>Hybrid dual-control</span>
+            <span>PQ cold keys</span>
+            <span>Live scanner</span>
+          </div>
+          <div class="url">meshchain-sigma.vercel.app</div>
+          <div class="foot">Public testnet · tMESH has no cash value</div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="label">STORY · 360×640 · 9:16</div>
+      <div class="ad-story" id="story">
+        <div class="shade"></div>
+        <div class="brand-top">
+          <img src="logo.jpg" alt="" />
+          MeshChain
+        </div>
+        <div class="inner">
+          <div class="badge" style="margin: 0 auto 1rem;">TESTNET</div>
+          <h2>The vault the internet alone can’t open.</h2>
+          <p>Mesh proof + attestors required. Browser isn’t enough.</p>
+          <div class="cta">Open scanner →</div>
+          <div class="url">/scanner/</div>
+          <div class="foot">tMESH has no cash value · Not official Meshtastic · github.com/krewdev/meshchain</div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="label">STRIP · 960×240 · Display / newsletter</div>
+      <div class="ad-strip" id="strip">
+        <img class="logo" src="logo.jpg" alt="MeshChain" />
+        <div>
+          <h2>Your nodes already talk. Now they can settle.</h2>
+          <p>Mesh-native testnet ledger · hybrid Solana vault · open source</p>
+          <div class="url">meshchain-sigma.vercel.app &nbsp;·&nbsp; github.com/krewdev/meshchain</div>
+          <div class="disc">Public testnet only · tMESH has no cash value · Not an official Meshtastic product</div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="label">VAULT · 540×540 · Crypto audiences</div>
+      <div class="ad-vault" id="vault">
+        <div class="brand">
+          <img src="logo.jpg" alt="" />
+          MeshChain
+        </div>
+        <h2>Hybrid dual-control.<br /><span>Mesh unlocks the vault.</span></h2>
+        <div class="steps">
+          <div class="step"><span class="n">01</span><span>Deposit SOL on Solana <strong>devnet</strong>, bound to mesh ID</span></div>
+          <div class="step"><span class="n">02</span><span>Mint matching tMESH on the mesh ledger</span></div>
+          <div class="step"><span class="n">03</span><span>Cash-out needs burn + multi-attestor co-sign</span></div>
+        </div>
+        <div class="cta">Read the vault docs</div>
+        <div class="foot">tMESH has no cash value · Experimental software · Not financial advice</div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
