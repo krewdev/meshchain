@@ -5,6 +5,7 @@
     { id: "SCANNER", title: "Blockchain scanner" },
     { id: "E2E_TESTNET", title: "E2E results" },
     { id: "HOST_OPS", title: "Host ops" },
+    { id: "VPS_PUBLIC", title: "VPS & tunnel" },
     { id: "MULTI_VALIDATOR", title: "Multi-validator" },
     { id: "GETTING_STARTED", title: "Getting started" },
     { id: "DONATE", title: "Donate" },
