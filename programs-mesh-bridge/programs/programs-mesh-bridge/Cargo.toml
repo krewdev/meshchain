@@ -1,0 +1,27 @@
+[package]
+name = "programs-mesh-bridge"
+version = "0.1.0"
+description = "MeshChain Solana vault bridge — deposit SOL/stables, withdraw on mesh burn"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "programs_mesh_bridge"
+
+[features]
+default = []
+cpi = ["no-entrypoint"]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
+anchor-debug = []
+custom-heap = []
+custom-panic = []
+
+[dependencies]
+anchor-lang = "0.32.1"
+anchor-spl = "0.32.1"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("solana"))'] }

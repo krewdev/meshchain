@@ -1,0 +1,32 @@
+# Build
+/target
+**/target
+**/node_modules
+.yarn
+.DS_Store
+*.rs.bk
+
+# Local network / keys (never commit secrets)
+/data
+**/data/keys
+**/*.json.bak
+**/cold.json
+**/wallet.json
+**/id.json
+
+# Anchor / Solana
+programs-mesh-bridge/target
+programs-mesh-bridge/.anchor
+programs-mesh-bridge/test-ledger
+programs-mesh-bridge/node_modules
+**/*-keypair.json
+!programs-mesh-bridge/target/deploy/.gitkeep
+
+# IDE
+.idea
+.vscode
+*.swp
+
+# Env
+.env
+.env.*

@@ -1,0 +1,21 @@
+[package]
+name = "meshchain-node"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "MeshChain validator node and multi-validator simulator"
+
+[[bin]]
+name = "meshchain-node"
+path = "src/main.rs"
+
+[dependencies]
+meshchain-proto = { workspace = true }
+meshchain-ledger = { workspace = true }
+meshchain-transport = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+hex = { workspace = true }
+anyhow = { workspace = true }
+clap = { workspace = true }
+rand = { workspace = true }

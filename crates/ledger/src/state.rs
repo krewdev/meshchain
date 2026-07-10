@@ -1,0 +1,387 @@
+use crate::error::LedgerError;
+use crate::genesis::GenesisConfig;
+use meshchain_proto::address::{short_id, short_id_hex, Address, ShortId};
+use meshchain_proto::block::Block;
+use meshchain_proto::crypto::PublicKey;
+use meshchain_proto::tx::{Tx, TxBody};
+use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
+use std::fs;
+use std::path::Path;
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Account {
+    pub pubkey: Address,
+    pub balance: u64,
+    pub nonce: u32,
+    /// Bound ML-DSA-65 public key (first large PQ spend locks it to this account).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pq_pk: Option<Vec<u8>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AppliedBlock {
+    pub height: u64,
+    pub hash_hex: String,
+    pub tx_count: u8,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChainState {
+    pub chain_id: String,
+    pub height: u64,
+    pub tip_hash: [u8; 32],
+    pub block_reward: u64,
+    pub slot_secs: u64,
+    pub validators: Vec<PublicKey>,
+    pub minters: HashSet<PublicKey>,
+    pub accounts: HashMap<String, Account>, // key = short_id hex
+    pub total_supply: u64,
+    pub applied: Vec<AppliedBlock>,
+    /// Amounts at or above this require PQ signatures on Transfer/Burn.
+    #[serde(default = "default_pq_threshold_state")]
+    pub pq_required_above: u64,
+}
+
+fn default_pq_threshold_state() -> u64 {
+    crate::genesis::ONE_MESH.saturating_mul(100)
+}
+
+impl ChainState {
+    pub fn from_genesis(genesis: &GenesisConfig) -> Result<Self, LedgerError> {
+        let validators = genesis
+            .validator_keys()
+            .map_err(|e| LedgerError::State(e))?;
+        if validators.is_empty() {
+            return Err(LedgerError::State("at least one validator required".into()));
+        }
+        let minters = genesis.minter_set().map_err(|e| LedgerError::State(e))?;
+        let initial = genesis
+            .initial_accounts()
+            .map_err(|e| LedgerError::State(e))?;
+
+        let mut accounts = HashMap::new();
+        let mut total_supply = 0u64;
+        for (sid, (pk, bal)) in initial {
+            total_supply = total_supply.saturating_add(bal);
+            accounts.insert(
+                short_id_hex(&sid),
+                Account {
+                    pubkey: pk,
+                    balance: bal,
+                    nonce: 0,
+                    pq_pk: None,
+                },
+            );
+        }
+
+        // Ensure validators have accounts (0 balance ok)
+        for pk in &validators {
+            let sid = short_id(pk);
+            let key = short_id_hex(&sid);
+            accounts.entry(key).or_insert(Account {
+                pubkey: *pk,
+                balance: 0,
+                nonce: 0,
+                pq_pk: None,
+            });
+        }
+
+        Ok(Self {
+            chain_id: genesis.chain_id.clone(),
+            height: 0,
+            tip_hash: [0u8; 32],
+            block_reward: genesis.block_reward,
+            slot_secs: genesis.slot_secs,
+            validators,
+            minters,
+            accounts,
+            total_supply,
+            applied: vec![],
+            pq_required_above: genesis.pq_required_above,
+        })
+    }
+
+    pub fn account(&self, sid: &ShortId) -> Option<&Account> {
+        self.accounts.get(&short_id_hex(sid))
+    }
+
+    pub fn account_mut(&mut self, sid: &ShortId) -> Option<&mut Account> {
+        self.accounts.get_mut(&short_id_hex(sid))
+    }
+
+    pub fn balance_of(&self, sid: &ShortId) -> u64 {
+        self.account(sid).map(|a| a.balance).unwrap_or(0)
+    }
+
+    pub fn ensure_account(&mut self, pk: &PublicKey) -> ShortId {
+        let sid = short_id(pk);
+        let key = short_id_hex(&sid);
+        self.accounts.entry(key).or_insert(Account {
+            pubkey: *pk,
+            balance: 0,
+            nonce: 0,
+            pq_pk: None,
+        });
+        sid
+    }
+
+    pub fn validator_index(&self, pk: &PublicKey) -> Option<u8> {
+        self.validators
+            .iter()
+            .position(|v| v == pk)
+            .map(|i| i as u8)
+    }
+
+    /// Fail-secure: require ML-DSA-65 when amount is large OR when burning vault-linked assets.
+    fn enforce_pq_policy(
+        &mut self,
+        tx: &Tx,
+        from: &ShortId,
+        amount: u64,
+        vault_linked: bool,
+    ) -> Result<(), LedgerError> {
+        let need_pq = vault_linked || amount >= self.pq_required_above;
+        if !need_pq {
+            return Ok(());
+        }
+        if !tx.has_pq() {
+            return Err(LedgerError::PqRequired);
+        }
+        tx.verify_pq()
+            .map_err(|e| LedgerError::Proto(e.to_string()))?;
+        let pk = tx.pq_pk.as_ref().unwrap();
+        let acc = self
+            .account_mut(from)
+            .ok_or_else(|| LedgerError::AccountNotFound(short_id_hex(from)))?;
+        match &acc.pq_pk {
+            None => {
+                // First cold spend binds this PQ key forever to the account.
+                acc.pq_pk = Some(pk.clone());
+            }
+            Some(bound) if bound == pk => {}
+            Some(_) => return Err(LedgerError::PqKeyMismatch),
+        }
+        Ok(())
+    }
+
+    /// Apply a verified tx to state (mutates). Does not check block context.
+    pub fn apply_tx(&mut self, tx: &Tx) -> Result<(), LedgerError> {
+        tx.verify()
+            .map_err(|e| LedgerError::Proto(e.to_string()))?;
+
+        match &tx.body {
+            TxBody::Register { nonce, pubkey } => {
+                let sid = short_id(pubkey);
+                let key = short_id_hex(&sid);
+                if let Some(existing) = self.accounts.get(&key) {
+                    if existing.pubkey != *pubkey {
+                        return Err(LedgerError::ShortIdCollision);
+                    }
+                    // idempotent if same
+                    if existing.nonce != 0 || *nonce != 0 {
+                        return Err(LedgerError::AlreadyRegistered);
+                    }
+                }
+                let acc = self.accounts.entry(key).or_insert(Account {
+                    pubkey: *pubkey,
+                    balance: 0,
+                    nonce: 0,
+                    pq_pk: None,
+                });
+                if acc.nonce != *nonce {
+                    return Err(LedgerError::InvalidNonce {
+                        expected: acc.nonce,
+                        got: *nonce,
+                    });
+                }
+                acc.nonce = acc.nonce.saturating_add(1);
+            }
+            TxBody::Transfer {
+                nonce,
+                from,
+                to,
+                amount,
+            } => {
+                // Balance check before PQ so users see "not enough" first.
+                {
+                    let from_acc = self
+                        .account(from)
+                        .ok_or_else(|| LedgerError::AccountNotFound(short_id_hex(from)))?;
+                    if from_acc.balance < *amount {
+                        return Err(LedgerError::InsufficientBalance);
+                    }
+                    if from_acc.nonce != *nonce {
+                        return Err(LedgerError::InvalidNonce {
+                            expected: from_acc.nonce,
+                            got: *nonce,
+                        });
+                    }
+                }
+                self.enforce_pq_policy(tx, from, *amount, false)?;
+                // Debit from
+                {
+                    let from_acc = self
+                        .account_mut(from)
+                        .ok_or_else(|| LedgerError::AccountNotFound(short_id_hex(from)))?;
+                    if from_acc.balance < *amount {
+                        return Err(LedgerError::InsufficientBalance);
+                    }
+                    from_acc.balance -= amount;
+                    from_acc.nonce = from_acc.nonce.saturating_add(1);
+                }
+                // Credit to (create if needed with unknown pubkey placeholder — need full key)
+                // For transfers to unregistered short ids, require recipient already known
+                let to_key = short_id_hex(to);
+                if !self.accounts.contains_key(&to_key) {
+                    return Err(LedgerError::AccountNotFound(to_key));
+                }
+                let to_acc = self.accounts.get_mut(&to_key).unwrap();
+                to_acc.balance = to_acc.balance.saturating_add(*amount);
+            }
+            TxBody::Mint {
+                nonce,
+                to,
+                amount,
+                ..
+            } => {
+                if !self.minters.contains(&tx.signer) {
+                    return Err(LedgerError::UnauthorizedMinter);
+                }
+                // Minter nonce on minter account
+                let minter_sid = short_id(&tx.signer);
+                {
+                    let minter = self.account_mut(&minter_sid).ok_or_else(|| {
+                        LedgerError::AccountNotFound(short_id_hex(&minter_sid))
+                    })?;
+                    if minter.nonce != *nonce {
+                        return Err(LedgerError::InvalidNonce {
+                            expected: minter.nonce,
+                            got: *nonce,
+                        });
+                    }
+                    minter.nonce = minter.nonce.saturating_add(1);
+                }
+                let to_key = short_id_hex(to);
+                if !self.accounts.contains_key(&to_key) {
+                    return Err(LedgerError::AccountNotFound(to_key));
+                }
+                let to_acc = self.accounts.get_mut(&to_key).unwrap();
+                to_acc.balance = to_acc.balance.saturating_add(*amount);
+                self.total_supply = self.total_supply.saturating_add(*amount);
+            }
+            TxBody::Burn {
+                nonce,
+                from,
+                amount,
+                asset_id,
+                redeem_hint,
+                ..
+            } => {
+                // Vault-linked burns (SOL/BTC claims) always need cold PQ auth — fail secure.
+                let vault_linked = *asset_id != 0;
+                // redeem_hint must not be empty/all-zero (force hashed destination commitment)
+                if *redeem_hint == [0u8; 32] {
+                    return Err(LedgerError::State(
+                        "burn needs a hashed redeem destination (privacy)".into(),
+                    ));
+                }
+                {
+                    let from_acc = self
+                        .account(from)
+                        .ok_or_else(|| LedgerError::AccountNotFound(short_id_hex(from)))?;
+                    if from_acc.balance < *amount {
+                        return Err(LedgerError::InsufficientBalance);
+                    }
+                    if from_acc.nonce != *nonce {
+                        return Err(LedgerError::InvalidNonce {
+                            expected: from_acc.nonce,
+                            got: *nonce,
+                        });
+                    }
+                }
+                self.enforce_pq_policy(tx, from, *amount, vault_linked)?;
+                let from_acc = self
+                    .account_mut(from)
+                    .ok_or_else(|| LedgerError::AccountNotFound(short_id_hex(from)))?;
+                from_acc.balance -= amount;
+                from_acc.nonce = from_acc.nonce.saturating_add(1);
+                self.total_supply = self.total_supply.saturating_sub(*amount);
+            }
+        }
+        Ok(())
+    }
+
+    /// Apply a block: verify linkage, producer, txs, pay block reward.
+    pub fn apply_block(&mut self, block: &Block) -> Result<(), LedgerError> {
+        block
+            .verify_producer_sig()
+            .map_err(|e| LedgerError::Proto(e.to_string()))?;
+
+        // First applied block must be genesis height 0; then strictly increasing.
+        let expected_height = if self.applied.is_empty() {
+            0
+        } else {
+            self.height + 1
+        };
+
+        if block.header.height != expected_height {
+            return Err(LedgerError::BadHeight {
+                expected: expected_height,
+                got: block.header.height,
+            });
+        }
+
+        if block.header.height == 0 {
+            if block.header.prev_hash != [0u8; 32] {
+                return Err(LedgerError::BadPrevHash);
+            }
+        } else if block.header.prev_hash != self.tip_hash {
+            return Err(LedgerError::BadPrevHash);
+        }
+
+        let prod_idx = self
+            .validator_index(&block.header.producer)
+            .ok_or(LedgerError::UnknownProducer)?;
+        if prod_idx != block.header.producer_index {
+            return Err(LedgerError::UnknownProducer);
+        }
+
+        for tx in &block.txs {
+            self.apply_tx(tx)?;
+        }
+
+        // Block reward on non-genesis blocks
+        let reward = self.block_reward;
+        if block.header.height > 0 && reward > 0 {
+            let sid = short_id(&block.header.producer);
+            self.ensure_account(&block.header.producer);
+            let acc = self.account_mut(&sid).unwrap();
+            acc.balance = acc.balance.saturating_add(reward);
+            self.total_supply = self.total_supply.saturating_add(reward);
+        }
+
+        let hash = block.hash();
+        self.height = block.header.height;
+        self.tip_hash = hash;
+        self.applied.push(AppliedBlock {
+            height: block.header.height,
+            hash_hex: hex::encode(hash),
+            tx_count: block.header.tx_count,
+        });
+        Ok(())
+    }
+
+    pub fn save_json(&self, path: &Path) -> Result<(), LedgerError> {
+        let s = serde_json::to_string_pretty(self).map_err(|e| LedgerError::Io(e.to_string()))?;
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).map_err(|e| LedgerError::Io(e.to_string()))?;
+        }
+        fs::write(path, s).map_err(|e| LedgerError::Io(e.to_string()))
+    }
+
+    pub fn load_json(path: &Path) -> Result<Self, LedgerError> {
+        let s = fs::read_to_string(path).map_err(|e| LedgerError::Io(e.to_string()))?;
+        serde_json::from_str(&s).map_err(|e| LedgerError::Io(e.to_string()))
+    }
+}

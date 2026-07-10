@@ -1,0 +1,17 @@
+[package]
+name = "meshchain-ledger"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "MeshChain ledger state, genesis, apply transactions"
+
+[dependencies]
+meshchain-proto = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+hex = { workspace = true }
+thiserror = { workspace = true }
+sha2 = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

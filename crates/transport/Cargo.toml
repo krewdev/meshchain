@@ -1,0 +1,19 @@
+[package]
+name = "meshchain-transport"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "MeshChain packet framing + Meshtastic/sim transports"
+
+[dependencies]
+meshchain-proto = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+bincode = { workspace = true }
+hex = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+sha2 = { workspace = true }
+
+[dev-dependencies]
+meshchain-proto = { workspace = true }
