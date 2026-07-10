@@ -30,3 +30,4 @@ programs-mesh-bridge/node_modules
 # Env
 .env
 .env.*
+.vercel

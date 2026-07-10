@@ -1,0 +1,9 @@
+target
+**/target
+data
+**/node_modules
+programs-mesh-bridge/node_modules
+programs-mesh-bridge/target
+.git
+**/*.rs.bk
+.cargo

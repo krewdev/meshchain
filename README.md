@@ -6,7 +6,9 @@ MeshChain is an open-source **mesh-native ledger** and wallet toolkit. Everyday 
 
 > Built **for** the Meshtastic ecosystem. Not an official Meshtastic Foundation product — community software that runs **on** Meshtastic radios and channels.
 
-[Meshtastic](https://meshtastic.org/) · [Docs](./docs/) · [Security](./docs/SECURITY_HARDENING.md) · [Hybrid vault](./docs/HYBRID_LOCK.md)
+**Live site:** [meshchain-sigma.vercel.app](https://meshchain-sigma.vercel.app) · [Docs](https://meshchain-sigma.vercel.app/docs/)
+
+[Meshtastic](https://meshtastic.org/) · [GitHub](https://github.com/krewdev/meshchain) · [Security](./docs/SECURITY_HARDENING.md) · [Hybrid vault](./docs/HYBRID_LOCK.md)
 
 ---
 
