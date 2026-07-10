@@ -6,9 +6,32 @@ MeshChain is an open-source **mesh-native ledger** and wallet toolkit. Everyday 
 
 > Built **for** the Meshtastic ecosystem. Not an official Meshtastic Foundation product — community software that runs **on** Meshtastic radios and channels.
 
-**Live site:** [meshchain-sigma.vercel.app](https://meshchain-sigma.vercel.app) · [Docs](https://meshchain-sigma.vercel.app/docs/)
+**Live site:** [meshchain-sigma.vercel.app](https://meshchain-sigma.vercel.app) · [Docs](https://meshchain-sigma.vercel.app/docs/) · [**Testnet**](https://meshchain-sigma.vercel.app/docs/?doc=TESTNET)
 
 [Meshtastic](https://meshtastic.org/) · [GitHub](https://github.com/krewdev/meshchain) · [Security](./docs/SECURITY_HARDENING.md) · [Hybrid vault](./docs/HYBRID_LOCK.md) · [Donate](./docs/DONATE.md)
+
+---
+
+## Public testnet (`meshchain-testnet-1`)
+
+**TESTNET ONLY — tMESH has no cash value. State may be wiped.**
+
+| Parameter | Value |
+|-----------|--------|
+| chain_id | `meshchain-testnet-1` |
+| Token | tMESH |
+| Channel | `MeshChain-Testnet-1` |
+| Solana | **devnet** for bridge experiments |
+| Params | [`testnet/network.json`](./testnet/network.json) |
+
+```bash
+cargo build -p mesh -p meshchain-node
+./target/debug/mesh testnet-setup
+./target/debug/mesh testnet-info
+./target/debug/mesh demo
+```
+
+Guide: [docs/TESTNET.md](./docs/TESTNET.md)
 
 ---
 

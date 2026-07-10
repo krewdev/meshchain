@@ -1,3 +1,14 @@
+.testnet-banner {
+  background: linear-gradient(90deg, #854d0e, #a16207);
+  color: #fffbeb;
+  text-align: center;
+  font-size: 0.9rem;
+  font-weight: 600;
+  padding: 0.55rem 1rem;
+  border-bottom: 1px solid rgba(251, 191, 36, 0.4);
+}
+.testnet-banner a { color: #fef3c7; text-decoration: underline; }
+
 :root {
   --bg: #070b12;
   --bg2: #0c1220;

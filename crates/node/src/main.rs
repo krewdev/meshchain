@@ -20,15 +20,21 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Generate genesis + N validator keypairs for local dev
+    /// Generate genesis + N validator keypairs for local dev or public testnet profile
     Init {
         #[arg(long, default_value = "./data")]
         data_dir: PathBuf,
         #[arg(long, default_value_t = 3)]
         validators: u8,
-        /// Faucet balance in whole MESH
+        /// Faucet balance in whole MESH / tMESH
         #[arg(long, default_value_t = 1_000_000)]
         faucet_mesh: u64,
+        /// Use public testnet profile (chain_id meshchain-testnet-1)
+        #[arg(long, default_value_t = false)]
+        testnet: bool,
+        /// Override chain id (default: meshchain-dev or meshchain-testnet-1)
+        #[arg(long)]
+        chain_id: Option<String>,
     },
     /// Run in-process multi-validator simulation (no radios)
     Sim {
@@ -59,20 +65,36 @@ fn main() -> Result<()> {
             data_dir,
             validators,
             faucet_mesh,
+            testnet,
+            chain_id,
         } => {
             fs::create_dir_all(&data_dir)?;
             let keys_dir = data_dir.join("keys");
             fs::create_dir_all(&keys_dir)?;
 
+            let chain = chain_id.unwrap_or_else(|| {
+                if testnet {
+                    "meshchain-testnet-1".into()
+                } else {
+                    "meshchain-dev".into()
+                }
+            });
+
+            if testnet {
+                println!("╔══════════════════════════════════════════════╗");
+                println!("║  MeshChain PUBLIC TESTNET                    ║");
+                println!("║  chain_id = meshchain-testnet-1              ║");
+                println!("║  tMESH has NO cash value — may be wiped      ║");
+                println!("╚══════════════════════════════════════════════╝");
+            }
+
             let mut validator_hex = Vec::new();
-            let mut validator_kps = Vec::new();
             for i in 0..validators {
                 let kp = Keypair::generate();
                 let file = kp.to_file();
                 let path = keys_dir.join(format!("validator-{i}.json"));
                 fs::write(&path, serde_json::to_string_pretty(&file)?)?;
                 validator_hex.push(file.public_hex.clone());
-                validator_kps.push(kp);
                 println!("validator-{i}: {}", file.public_hex);
             }
 
@@ -100,12 +122,12 @@ fn main() -> Result<()> {
             println!("bob:       {}", hex::encode(bob.public_key()));
 
             let genesis = GenesisConfig {
-                chain_id: "meshchain-dev".into(),
+                chain_id: chain.clone(),
                 validators: validator_hex,
                 block_reward: 100_000,
                 allocations: vec![
                     GenesisAccount {
-                        public_key_hex: faucet_file.public_hex,
+                        public_key_hex: faucet_file.public_hex.clone(),
                         balance: faucet_mesh.saturating_mul(ONE_MESH),
                     },
                     GenesisAccount {
@@ -118,15 +140,46 @@ fn main() -> Result<()> {
                     },
                 ],
                 minters: vec![], // validators auto-added as minters
-                slot_secs: 5,   // fast for sim
+                slot_secs: if testnet { 30 } else { 5 },
                 // Big moves need cold (quantum-safe) key. Small demo transfers stay simple.
                 pq_required_above: 100 * ONE_MESH,
             };
 
             let genesis_path = data_dir.join("genesis.json");
             fs::write(&genesis_path, serde_json::to_string_pretty(&genesis)?)?;
+
+            // Write testnet profile marker for CLI / site alignment
+            if testnet || chain == "meshchain-testnet-1" {
+                let profile = serde_json::json!({
+                    "is_testnet": true,
+                    "chain_id": chain,
+                    "token_symbol": "tMESH",
+                    "channel_name": "MeshChain-Testnet-1",
+                    "solana_cluster": "devnet",
+                    "warning": "TESTNET ONLY — no real value",
+                    "docs": "https://meshchain-sigma.vercel.app/docs/?doc=TESTNET",
+                    "network_json": "https://meshchain-sigma.vercel.app/testnet/network.json",
+                });
+                fs::write(
+                    data_dir.join("testnet_profile.json"),
+                    serde_json::to_string_pretty(&profile)?,
+                )?;
+                // Copy canonical network.json if present in repo
+                let canonical = PathBuf::from("testnet/network.json");
+                if canonical.exists() {
+                    let _ = fs::copy(&canonical, data_dir.join("network.json"));
+                }
+            }
+
             println!("wrote {}", genesis_path.display());
-            println!("init complete — run: meshchain-node sim --data-dir {}", data_dir.display());
+            println!("chain_id: {chain}");
+            if testnet {
+                println!("token: tMESH (test only)");
+                println!("channel: MeshChain-Testnet-1");
+                println!("next: mesh testnet-info   OR   mesh demo");
+            } else {
+                println!("init complete — run: meshchain-node sim --data-dir {}", data_dir.display());
+            }
         }
         Commands::Sim { data_dir, transfers } => {
             sim::run_sim(&data_dir, transfers, now_secs()).context("sim failed")?;

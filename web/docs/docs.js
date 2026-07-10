@@ -1,6 +1,7 @@
 /* MeshChain docs viewer — loads markdown from /content/ */
 (function () {
   const DOCS = [
+    { id: "TESTNET", title: "Public testnet" },
     { id: "GETTING_STARTED", title: "Getting started" },
     { id: "DONATE", title: "Donate" },
     { id: "HYBRID_LOCK", title: "Hybrid lock" },

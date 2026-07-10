@@ -28,7 +28,9 @@ use std::process::Command;
     about = "MeshChain — hold and move money on a private radio mesh (simple CLI)",
     long_about = "Simple commands. No app UI required.\n\n\
 Examples:\n  \
-  mesh setup              Create a local test network\n  \
+  mesh testnet-setup      Join MeshChain public testnet profile\n  \
+  mesh testnet-info       Show testnet parameters\n  \
+  mesh setup              Create a local dev network\n  \
   mesh new-wallet         Make a new spending wallet\n  \
   mesh balance            Show how much you have\n  \
   mesh send BOB 5         Send 5 MESH to Bob’s short address\n  \
@@ -46,7 +48,18 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Create a local test network (validators + sample wallets)
+    /// Set up the public TESTNET profile (tMESH — no real value)
+    #[command(name = "testnet-setup")]
+    TestnetSetup {
+        #[arg(long, default_value_t = 3)]
+        validators: u8,
+    },
+
+    /// Show public testnet parameters (chain id, channel, warnings)
+    #[command(name = "testnet-info")]
+    TestnetInfo,
+
+    /// Create a local DEV network (not the public testnet)
     Setup {
         /// How many validator computers (default 3)
         #[arg(long, default_value_t = 3)]
@@ -179,6 +192,54 @@ fn fmt_mesh(units: u64) -> String {
     format!("{:.6}", units as f64 / ONE_MESH as f64)
 }
 
+fn print_testnet_info(dir: &Path) -> Result<()> {
+    println!("╔══════════════════════════════════════════════════╗");
+    println!("║         MeshChain PUBLIC TESTNET                 ║");
+    println!("║         meshchain-testnet-1                      ║");
+    println!("╚══════════════════════════════════════════════════╝");
+    println!();
+    println!("Status:     active (software testnet)");
+    println!("Token:      tMESH — NO CASH VALUE");
+    println!("chain_id:   meshchain-testnet-1");
+    println!("Channel:    MeshChain-Testnet-1  (private Meshtastic)");
+    println!("Solana:     devnet only for bridge experiments");
+    println!("Docs:       https://meshchain-sigma.vercel.app/docs/?doc=TESTNET");
+    println!("Params:     https://meshchain-sigma.vercel.app/testnet/network.json");
+    println!();
+
+    let profile = dir.join("testnet_profile.json");
+    let genesis = dir.join("genesis.json");
+    if profile.exists() {
+        println!("Local profile: {}", profile.display());
+        if let Ok(s) = fs::read_to_string(&profile) {
+            println!("{s}");
+        }
+    } else if genesis.exists() {
+        if let Ok(s) = fs::read_to_string(&genesis) {
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&s) {
+                println!(
+                    "Local genesis chain_id: {}",
+                    v.get("chain_id").and_then(|c| c.as_str()).unwrap_or("?")
+                );
+            }
+        }
+        println!("(Run mesh testnet-setup for full testnet profile files.)");
+    } else {
+        println!("No local data yet. Run:");
+        println!("  mesh testnet-setup");
+    }
+
+    println!();
+    println!("Join steps:");
+    println!("  1. mesh testnet-setup");
+    println!("  2. mesh demo");
+    println!("  3. mesh new-wallet");
+    println!("  4. Optional: Meshtastic channel MeshChain-Testnet-1 with test peers");
+    println!();
+    println!("Never deposit mainnet funds into test software.");
+    Ok(())
+}
+
 fn run_external_node(args: &[&str]) -> Result<()> {
     // Prefer sibling binaries from same target dir
     let exe = std::env::current_exe().ok();
@@ -209,8 +270,31 @@ fn main() -> Result<()> {
     let dir = cli.dir;
 
     match cli.cmd {
+        Commands::TestnetSetup { validators } => {
+            println!("Setting up MeshChain PUBLIC TESTNET (meshchain-testnet-1)…");
+            println!("WARNING: tMESH has no cash value. Balances may be wiped.\n");
+            run_external_node(&[
+                "init",
+                "--data-dir",
+                dir.to_str().unwrap_or("./data"),
+                "--validators",
+                &validators.to_string(),
+                "--testnet",
+            ])?;
+            println!();
+            println!("Done. You are on the testnet profile.");
+            println!("  mesh testnet-info");
+            println!("  mesh demo");
+            println!("  mesh new-wallet");
+            println!("  Docs: https://meshchain-sigma.vercel.app/docs/?doc=TESTNET");
+        }
+
+        Commands::TestnetInfo => {
+            print_testnet_info(&dir)?;
+        }
+
         Commands::Setup { validators } => {
-            println!("Setting up a local MeshChain test network…");
+            println!("Setting up a local MeshChain DEV network (not public testnet)…");
             run_external_node(&[
                 "init",
                 "--data-dir",
@@ -223,6 +307,7 @@ fn main() -> Result<()> {
             println!("  mesh demo              # practice transfers");
             println!("  mesh new-wallet        # make your own wallet");
             println!("  mesh balance --wallet alice.json");
+            println!("  For the public testnet instead: mesh testnet-setup");
         }
 
         Commands::Demo { transfers } => {

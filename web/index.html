@@ -12,6 +12,11 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2338bdf8'/%3E%3C/svg%3E" />
 </head>
 <body>
+  <div class="testnet-banner">
+    PUBLIC TESTNET — <code style="font-weight:700">meshchain-testnet-1</code> · tMESH has no cash value ·
+    <a href="/docs/?doc=TESTNET">Testnet guide</a> ·
+    <a href="/testnet/network.json">network.json</a>
+  </div>
   <header class="nav">
     <div class="wrap nav-inner">
       <a class="brand" href="/">
@@ -21,6 +26,7 @@
       <nav class="nav-links">
         <a href="#features">Features</a>
         <a href="#wallets">Wallets</a>
+        <a href="#testnet">Testnet</a>
         <a href="#donate">Donate</a>
         <a href="/docs/">Docs</a>
         <a href="https://github.com/krewdev/meshchain" target="_blank" rel="noopener">GitHub</a>
@@ -33,7 +39,7 @@
     <section class="hero">
       <div class="wrap hero-grid">
         <div>
-          <div class="badge">Built for the Meshtastic network</div>
+          <div class="badge">Public testnet live · meshchain-testnet-1</div>
           <h1>Hold &amp; move value on mesh radio — even without the internet</h1>
           <p class="lead">
             Open-source mesh-native wallets and ledger for
@@ -101,10 +107,44 @@
       </div>
     </section>
 
+    <section id="testnet">
+      <div class="wrap">
+        <h2 class="section-title">Join the public testnet</h2>
+        <p class="section-sub">
+          Shared parameters for experimenters. tMESH is worthless. Solana bridge experiments use <strong>devnet</strong> only.
+        </p>
+        <div class="panel" style="margin-bottom:1.25rem">
+<pre><span class="cmt"># official testnet profile</span>
+<span class="prompt">$</span> <span class="cmd">git clone https://github.com/krewdev/meshchain.git && cd meshchain</span>
+<span class="prompt">$</span> <span class="cmd">cargo build -p mesh -p meshchain-node</span>
+<span class="prompt">$</span> <span class="cmd">./target/debug/mesh testnet-setup</span>
+<span class="prompt">$</span> <span class="cmd">./target/debug/mesh testnet-info</span>
+<span class="prompt">$</span> <span class="cmd">./target/debug/mesh demo</span></pre>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Parameter</th><th>Value</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>chain_id</td><td><code>meshchain-testnet-1</code></td></tr>
+              <tr><td>Token</td><td>tMESH (no cash value)</td></tr>
+              <tr><td>Meshtastic channel</td><td><code>MeshChain-Testnet-1</code></td></tr>
+              <tr><td>Solana bridge</td><td>devnet only</td></tr>
+              <tr><td>Params JSON</td><td><a href="/testnet/network.json">/testnet/network.json</a></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p style="margin-top:1.25rem">
+          <a class="btn btn-primary" href="/docs/?doc=TESTNET">Full testnet guide</a>
+        </p>
+      </div>
+    </section>
+
     <section id="wallets">
       <div class="wrap">
         <h2 class="section-title">Use our wallets &amp; service</h2>
-        <p class="section-sub">Clone the repo, build once, and use the CLI as your wallet interface.</p>
+        <p class="section-sub">Clone the repo, build once, and use the CLI as your wallet interface. Prefer <code class="inline-code">mesh testnet-setup</code> for the public testnet.</p>
         <div class="table-wrap">
           <table>
             <thead>
