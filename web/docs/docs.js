@@ -11,6 +11,7 @@
     { id: "QUANTUM_COLD_STORAGE", title: "Quantum cold storage" },
     { id: "PROTOCOL", title: "Protocol" },
     { id: "SOLANA_BRIDGE", title: "Solana bridge" },
+    { id: "SOLANA_DEVNET", title: "Solana devnet" },
     { id: "BTC_VAULT", title: "BTC vault design" },
     { id: "TRUTH_MODEL", title: "Truth model" },
     { id: "HARDWARE", title: "Hardware" },

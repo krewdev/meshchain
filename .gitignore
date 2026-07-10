@@ -32,3 +32,4 @@ programs-mesh-bridge/node_modules
 .env.*
 .vercel
 programs-mesh-bridge/target/
+programs-mesh-bridge/scripts/attestor2-devnet.json

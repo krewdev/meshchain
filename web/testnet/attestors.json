@@ -17,15 +17,31 @@
       "solana_pubkey": "55nmyJNDZD4jZKfcj6E6ypSLVsDRJYet4H3F9L4NXdcg",
       "role": "bootstrap",
       "status": "active",
-      "notes": "Bootstrap operator key (devnet). Rotate before any mainnet discussion."
+      "notes": "Bootstrap operator + authority (devnet)."
+    },
+    {
+      "name": "operator-bootstrap-1",
+      "solana_pubkey": "3kLHXo5t3CkkCeb92WybMqoKPPdaefJeWihyntJkRW29",
+      "role": "bootstrap",
+      "status": "active",
+      "notes": "Second hybrid co-signer for min_attestations=2 (devnet)."
     }
   ],
   "pending": [],
+  "on_chain": {
+    "config_pda": "8Q4noL3szKSVQwWyfyPP2ieAB2TTTXGmW42i7VT1ozV4",
+    "sol_vault_pda": "GqDGmwsz8Mw9RfzPXj42tWmscDdmNxcG5qxuaaGBjEGV",
+    "hybrid_enabled": true,
+    "min_attestations": 2,
+    "fee_bps": 30,
+    "initialize_tx": "4PugWNBwmmoqCy7PzzusqELCJDfLSdPqdvBNpUPK5WugzW2XKhSRt5azXKT5X9yKWstnjA5joSQzw9UaswbjhLy6",
+    "set_attestors_tx": "396kbHDFftFUY1VVEREGEksoEQw59uJ4mKqatspebstUW6rTJ2A3Bi9xLki6XwJxDvDKZepNpb7W6NNmTb11Ptyv"
+  },
   "program": {
     "cluster": "devnet",
     "program_id": "CBRQcjk5DLJh1HcW3XF5TmUxZsBumhiABJa6M15r3Vkx",
-    "status": "id_reserved_binary_built_onchain_deploy_pending_devnet_sol",
+    "status": "deployed",
     "idl": "programs-mesh-bridge",
-    "deploy_notes": "See testnet/SOLANA_DEVNET.md — need ~3.3 SOL rent; faucet may rate-limit"
+    "explorer": "https://explorer.solana.com/address/CBRQcjk5DLJh1HcW3XF5TmUxZsBumhiABJa6M15r3Vkx?cluster=devnet"
   }
 }

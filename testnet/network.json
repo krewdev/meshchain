@@ -41,8 +41,14 @@
   "solana_bridge": {
     "network": "devnet",
     "program_id": "CBRQcjk5DLJh1HcW3XF5TmUxZsBumhiABJa6M15r3Vkx",
-    "program_status": "built_id_reserved_deploy_pending_faucet",
-    "note": "Program binary built; on-chain deploy needs ~3.3 devnet SOL. See testnet/SOLANA_DEVNET.md",
+    "program_status": "deployed",
+    "config_pda": "8Q4noL3szKSVQwWyfyPP2ieAB2TTTXGmW42i7VT1ozV4",
+    "sol_vault_pda": "GqDGmwsz8Mw9RfzPXj42tWmscDdmNxcG5qxuaaGBjEGV",
+    "hybrid_enabled": true,
+    "min_attestations": 2,
+    "fee_bps": 30,
+    "explorer": "https://explorer.solana.com/address/CBRQcjk5DLJh1HcW3XF5TmUxZsBumhiABJa6M15r3Vkx?cluster=devnet",
+    "note": "Hybrid vault live on Solana devnet. TESTNET ONLY.",
     "idl_path": "programs-mesh-bridge"
   },
   "attestors": {
