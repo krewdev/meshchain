@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MeshChain — Wallets & ledger for Meshtastic</title>
+  <meta name="description" content="Hold and move value on Meshtastic. Offline mesh wallets, quantum-safe cold storage, hybrid Solana vaults. Open source." />
+  <meta property="og:title" content="MeshChain" />
+  <meta property="og:description" content="Mesh-native wallets for the Meshtastic network." />
+  <meta property="og:type" content="website" />
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2338bdf8'/%3E%3C/svg%3E" />
+</head>
+<body>
+  <header class="nav">
+    <div class="wrap nav-inner">
+      <a class="brand" href="/">
+        <span class="logo" aria-hidden="true"></span>
+        MeshChain
+      </a>
+      <nav class="nav-links">
+        <a href="#features">Features</a>
+        <a href="#wallets">Wallets</a>
+        <a href="/docs/">Docs</a>
+        <a href="https://github.com/krewdev/meshchain" target="_blank" rel="noopener">GitHub</a>
+        <a class="btn btn-primary" href="/docs/?doc=GETTING_STARTED">Get started</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="wrap hero-grid">
+        <div>
+          <div class="badge">Built for the Meshtastic network</div>
+          <h1>Hold &amp; move value on mesh radio — even without the internet</h1>
+          <p class="lead">
+            Open-source mesh-native wallets and ledger for
+            <a href="https://meshtastic.org/" target="_blank" rel="noopener">Meshtastic</a>.
+            Simple CLI, quantum-safe cold keys, and hybrid vaults that internet-only attackers cannot unlock alone.
+          </p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="/docs/?doc=GETTING_STARTED">Use wallets &amp; docs</a>
+            <a class="btn btn-ghost" href="https://github.com/krewdev/meshchain" target="_blank" rel="noopener">View on GitHub</a>
+          </div>
+          <p class="meta">
+            Community software for Meshtastic · Not an official Meshtastic Foundation product ·
+            <a href="https://meshtastic.org/">meshtastic.org</a>
+          </p>
+        </div>
+        <div class="panel" aria-label="CLI preview">
+<pre><span class="cmt"># plain-English wallet CLI — no app UI required</span>
+<span class="prompt">$</span> <span class="cmd">mesh setup</span>
+<span class="prompt">$</span> <span class="cmd">mesh new-wallet</span>
+<span class="prompt">$</span> <span class="cmd">mesh balance</span>
+<span class="prompt">$</span> <span class="cmd">mesh send aabbccdd11223344 5</span>
+<span class="prompt">$</span> <span class="cmd">mesh new-cold-key</span>
+<span class="cmt"># large / vault moves need cold key (ML-DSA-65)</span>
+<span class="prompt">$</span> <span class="cmd">mesh security</span></pre>
+        </div>
+      </div>
+    </section>
+
+    <section id="features">
+      <div class="wrap">
+        <h2 class="section-title">Why MeshChain</h2>
+        <p class="section-sub">Designed for off-grid hold/spend, extreme cold storage, and dual-control vaults.</p>
+        <div class="cards">
+          <article class="card">
+            <div class="icon">1</div>
+            <h3>Mesh-native money</h3>
+            <p>Balances live on a lightweight ledger that hops over LoRa Meshtastic — no cell tower required to hold or send MESH.</p>
+          </article>
+          <article class="card">
+            <div class="icon">2</div>
+            <h3>Simple wallets</h3>
+            <p>The <code class="inline-code">mesh</code> CLI is deliberately plain English so you can run a full service without a graphical UI.</p>
+          </article>
+          <article class="card">
+            <div class="icon">3</div>
+            <h3>Hybrid vault lock</h3>
+            <p>Lock SOL/stables on Solana bound to your mesh address. Unlock needs mesh burn + witnesses — not the internet alone.</p>
+          </article>
+          <article class="card">
+            <div class="icon">4</div>
+            <h3>Quantum-safe cold path</h3>
+            <p>Large and vault-linked actions use ML-DSA-65 (FIPS 204). Keys stay offline; radio can stay powered off while holding.</p>
+          </article>
+          <article class="card">
+            <div class="icon">5</div>
+            <h3>Privacy-minded</h3>
+            <p>Hashed redeem destinations, optional stealth receive tags, private funds channel — with honest limits of RF privacy.</p>
+          </article>
+          <article class="card">
+            <div class="icon">6</div>
+            <h3>Open source</h3>
+            <p>MIT licensed. Audit the ledger, vault program, and transport. Run your own validators and attestors.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="wallets">
+      <div class="wrap">
+        <h2 class="section-title">Use our wallets &amp; service</h2>
+        <p class="section-sub">Clone the repo, build once, and use the CLI as your wallet interface.</p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Command</th><th>What it does</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>mesh setup</code></td><td>Create a local test network</td></tr>
+              <tr><td><code>mesh demo</code></td><td>Practice transfers, mint/burn, safety checks</td></tr>
+              <tr><td><code>mesh new-wallet</code></td><td>Create a spending wallet file</td></tr>
+              <tr><td><code>mesh balance</code></td><td>Show MESH balance</td></tr>
+              <tr><td><code>mesh send &lt;addr&gt; &lt;amt&gt;</code></td><td>Sign a payment</td></tr>
+              <tr><td><code>mesh new-cold-key</code></td><td>Quantum-safe cold storage key</td></tr>
+              <tr><td><code>mesh how-cold-works</code></td><td>Hybrid cold storage explained</td></tr>
+              <tr><td><code>mesh security</code></td><td>Honest security posture</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p style="margin-top:1.25rem">
+          <a class="btn btn-primary" href="/docs/?doc=GETTING_STARTED">Full getting started guide</a>
+          <a class="btn btn-ghost" href="https://github.com/krewdev/meshchain" style="margin-left:0.5rem">Source code</a>
+        </p>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap">
+        <h2 class="section-title">Documentation</h2>
+        <p class="section-sub">Protocols, security model, hybrid vault, and hardware notes.</p>
+        <div class="cards">
+          <a class="card" href="/docs/?doc=GETTING_STARTED" style="color:inherit;text-decoration:none">
+            <h3>Getting started</h3>
+            <p>Install, wallets, radios.</p>
+          </a>
+          <a class="card" href="/docs/?doc=HYBRID_LOCK" style="color:inherit;text-decoration:none">
+            <h3>Hybrid lock</h3>
+            <p>Internet vault + Meshtastic identifiers.</p>
+          </a>
+          <a class="card" href="/docs/?doc=SECURITY_HARDENING" style="color:inherit;text-decoration:none">
+            <h3>Security hardening</h3>
+            <p>Threat model and residual risks.</p>
+          </a>
+          <a class="card" href="/docs/?doc=QUANTUM_COLD_STORAGE" style="color:inherit;text-decoration:none">
+            <h3>Quantum cold storage</h3>
+            <p>ML-DSA-65 offline custody.</p>
+          </a>
+          <a class="card" href="/docs/?doc=PROTOCOL" style="color:inherit;text-decoration:none">
+            <h3>Protocol</h3>
+            <p>Transactions, blocks, finality.</p>
+          </a>
+          <a class="card" href="/docs/?doc=SOLANA_BRIDGE" style="color:inherit;text-decoration:none">
+            <h3>Solana bridge</h3>
+            <p>Deposit, fee, withdraw flow.</p>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap">
+        <div class="notice">
+          <strong>Safety:</strong> Do not put significant real value on MeshChain without an independent audit.
+          We engineer for high rigor; we do not claim perfect anonymity or unbreakable security.
+          See <a href="/docs/?doc=SECURITY_HARDENING">Security hardening</a>.
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="wrap footer-inner">
+      <div>
+        <strong style="color:var(--text)">MeshChain</strong><br />
+        MIT · Community software for Meshtastic
+      </div>
+      <div>
+        <a href="https://github.com/krewdev/meshchain">GitHub</a> ·
+        <a href="https://meshtastic.org/">Meshtastic</a> ·
+        <a href="/docs/">Docs</a>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>
