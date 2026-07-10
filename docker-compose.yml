@@ -1,0 +1,79 @@
+# Always-on MeshChain testnet host (3 validators + faucet)
+# Usage:
+#   cargo build -p meshchain-node --release
+#   ./scripts/host_bootstrap.sh
+#   docker compose up -d   # optional if using containers
+# Or without Docker:
+#   ./scripts/start_testnet_host.sh
+
+services:
+  validator0:
+    image: debian:bookworm-slim
+    working_dir: /app
+    volumes:
+      - ./:/app
+      - ./data/host:/data
+    command: >
+      bash -c "apt-get update -qq && apt-get install -y -qq ca-certificates >/dev/null
+      && /app/target/release/meshchain-node run
+      --data-dir /data/v0 --validator-index 0
+      --listen 0.0.0.0:9100
+      --peer validator1:9100 --peer validator2:9100"
+    ports:
+      - "9100:9100"
+    restart: unless-stopped
+    networks: [meshnet]
+
+  validator1:
+    image: debian:bookworm-slim
+    working_dir: /app
+    volumes:
+      - ./:/app
+      - ./data/host:/data
+    command: >
+      bash -c "apt-get update -qq && apt-get install -y -qq ca-certificates >/dev/null
+      && /app/target/release/meshchain-node run
+      --data-dir /data/v1 --validator-index 1
+      --listen 0.0.0.0:9100
+      --peer validator0:9100 --peer validator2:9100"
+    restart: unless-stopped
+    networks: [meshnet]
+
+  validator2:
+    image: debian:bookworm-slim
+    working_dir: /app
+    volumes:
+      - ./:/app
+      - ./data/host:/data
+    command: >
+      bash -c "apt-get update -qq && apt-get install -y -qq ca-certificates >/dev/null
+      && /app/target/release/meshchain-node run
+      --data-dir /data/v2 --validator-index 2
+      --listen 0.0.0.0:9100
+      --peer validator0:9100 --peer validator1:9100"
+    restart: unless-stopped
+    networks: [meshnet]
+
+  faucet:
+    image: python:3.12-slim
+    working_dir: /app
+    volumes:
+      - ./:/app
+      - ./data/host:/data
+    environment:
+      MESHCHAIN_DATA: /data/v0
+      MESHCHAIN_BIN: /app/target/release/meshchain-node
+      FAUCET_PORT: "8787"
+      FAUCET_AMOUNT: "100000000"
+      FAUCET_COOLDOWN: "3600"
+      CORS_ORIGIN: "*"
+    command: python3 /app/services/faucet/faucet_server.py
+    ports:
+      - "8787:8787"
+    depends_on: [validator0]
+    restart: unless-stopped
+    networks: [meshnet]
+
+networks:
+  meshnet:
+    driver: bridge

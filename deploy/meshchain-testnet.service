@@ -1,0 +1,15 @@
+[Unit]
+Description=MeshChain testnet host (validators + faucet)
+After=network.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/meshchain
+ExecStart=/opt/meshchain/scripts/start_testnet_host.sh
+ExecStop=/opt/meshchain/scripts/stop_testnet_host.sh
+User=meshchain
+Group=meshchain
+
+[Install]
+WantedBy=multi-user.target

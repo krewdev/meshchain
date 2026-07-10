@@ -36,7 +36,8 @@
     "enabled": true,
     "asset": "tMESH",
     "typical_drip_mesh": 100,
-    "how": "mesh testnet-setup creates local faucet; operators may drip tMESH"
+    "how": "mesh testnet-setup creates local faucet; operators may drip tMESH",
+    "host_script": "scripts/start_testnet_host.sh"
   },
   "solana_bridge": {
     "network": "devnet",
@@ -67,7 +68,9 @@
     "github": "https://github.com/krewdev/meshchain",
     "network_json": "https://meshchain-sigma.vercel.app/testnet/network.json",
     "attestors_json": "https://meshchain-sigma.vercel.app/testnet/attestors.json",
-    "scanner_docs": "https://meshchain-sigma.vercel.app/docs/?doc=SCANNER"
+    "scanner_docs": "https://meshchain-sigma.vercel.app/docs/?doc=SCANNER",
+    "faucet_ui": "https://meshchain-sigma.vercel.app/faucet.html",
+    "faucet_api_local": "http://127.0.0.1:8787"
   },
   "how_to_join": [
     "Clone https://github.com/krewdev/meshchain",
