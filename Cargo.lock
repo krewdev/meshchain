@@ -413,6 +413,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "meshchain-scanner"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "hex",
+ "meshchain-ledger",
+ "meshchain-proto",
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
 name = "meshchain-transport"
 version = "0.1.0"
 dependencies = [

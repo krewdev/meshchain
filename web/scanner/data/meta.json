@@ -1,5 +1,5 @@
 {
-  "snapshot_unix": 1783678703,
+  "snapshot_unix": 1783678798,
   "source": "/Users/krewdev/projects/meshchain/data/host/v0/chain_state.json",
   "note": "Public testnet snapshot for Vercel. Re-run scripts/sync_scanner_snapshot.sh && deploy to refresh.",
   "auth": "open",
