@@ -8,7 +8,19 @@ MeshChain is an open-source **mesh-native ledger** and wallet toolkit. Everyday 
 
 **Live site:** [meshchain-sigma.vercel.app](https://meshchain-sigma.vercel.app) · [Docs](https://meshchain-sigma.vercel.app/docs/)
 
-[Meshtastic](https://meshtastic.org/) · [GitHub](https://github.com/krewdev/meshchain) · [Security](./docs/SECURITY_HARDENING.md) · [Hybrid vault](./docs/HYBRID_LOCK.md)
+[Meshtastic](https://meshtastic.org/) · [GitHub](https://github.com/krewdev/meshchain) · [Security](./docs/SECURITY_HARDENING.md) · [Hybrid vault](./docs/HYBRID_LOCK.md) · [Donate](./docs/DONATE.md)
+
+---
+
+## Donate
+
+Optional support for development:
+
+| Network | Address |
+|---------|---------|
+| **Solana** | `7EwBb1yboTkT3eZmUWw4zbWMMJC2a5e9rMeGV9EgkPJp` |
+| **Ethereum** | `0xCB2d3d03FC47aec6a6DBA7C91010c16a1b9A5ca2` |
+| **Bitcoin** | `bc1qzyfy2eqrxx0n2vugjhp4zkzkqcmhth7h5zhgle` |
 
 ---
 

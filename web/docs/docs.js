@@ -2,6 +2,7 @@
 (function () {
   const DOCS = [
     { id: "GETTING_STARTED", title: "Getting started" },
+    { id: "DONATE", title: "Donate" },
     { id: "HYBRID_LOCK", title: "Hybrid lock" },
     { id: "SECURITY_HARDENING", title: "Security hardening" },
     { id: "SECURITY", title: "Security summary" },
