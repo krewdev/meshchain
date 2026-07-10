@@ -27,6 +27,7 @@
         <a href="#features">Features</a>
         <a href="#wallets">Wallets</a>
         <a href="#testnet">Testnet</a>
+        <a href="#scanner">Scanner</a>
         <a href="#donate">Donate</a>
         <a href="/docs/">Docs</a>
         <a href="https://github.com/krewdev/meshchain" target="_blank" rel="noopener">GitHub</a>
@@ -138,6 +139,26 @@
         </div>
         <p style="margin-top:1.25rem">
           <a class="btn btn-primary" href="/docs/?doc=TESTNET">Full testnet guide</a>
+        </p>
+      </div>
+    </section>
+
+    <section id="scanner">
+      <div class="wrap">
+        <h2 class="section-title">Blockchain scanner</h2>
+        <p class="section-sub">
+          Internet-open explorer for testnet blocks, mesh names, and balances.
+          Later: require mesh 2FA (<code class="inline-code">--auth mesh2fa</code>).
+        </p>
+        <div class="panel" style="margin-bottom:1rem">
+<pre><span class="prompt">$</span> <span class="cmd">cargo build -p meshchain-scanner</span>
+<span class="prompt">$</span> <span class="cmd">./target/debug/meshchain-scanner --data-dir ./data --listen 0.0.0.0:8787 --auth open</span>
+<span class="cmt"># UI  → http://YOUR_IP:8787/</span>
+<span class="cmt"># API → http://YOUR_IP:8787/api/v1/status</span></pre>
+        </div>
+        <p class="meta">
+          Docs: <a href="/docs/?doc=SCANNER">Scanner guide</a> ·
+          Search mesh names like <code class="inline-code">M3SQRT-XTA1Y-ZJ6</code>
         </p>
       </div>
     </section>

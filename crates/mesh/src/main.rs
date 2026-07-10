@@ -144,6 +144,15 @@ enum Commands {
     /// Show published attestors / Solana devnet program id
     #[command(name = "testnet-attestors")]
     TestnetAttestors,
+
+    /// Start the blockchain scanner (internet explorer UI + API)
+    Scanner {
+        #[arg(long, default_value = "0.0.0.0:8787")]
+        listen: String,
+        /// open = public internet | mesh2fa = require mesh signature later
+        #[arg(long, default_value = "open")]
+        auth: String,
+    },
 }
 
 fn keys_dir(dir: &Path) -> PathBuf {
@@ -607,6 +616,48 @@ Read: docs/SECURITY_HARDENING.md  docs/HYBRID_LOCK.md
 
         Commands::TestnetAttestors => {
             print_attestors()?;
+        }
+
+        Commands::Scanner { listen, auth } => {
+            println!("Starting MeshChain scanner…");
+            println!("Auth mode: {auth} (use mesh2fa later for mesh identity gate)");
+            let status = Command::new("meshchain-scanner")
+                .args([
+                    "--data-dir",
+                    dir.to_str().unwrap_or("./data"),
+                    "--listen",
+                    &listen,
+                    "--auth",
+                    &auth,
+                ])
+                .status();
+            match status {
+                Ok(s) if s.success() => {}
+                Ok(_) => bail!("scanner exited with error"),
+                Err(_) => {
+                    // try same directory as mesh binary
+                    if let Ok(exe) = std::env::current_exe() {
+                        if let Some(parent) = exe.parent() {
+                            let bin = parent.join("meshchain-scanner");
+                            let st = Command::new(bin)
+                                .args([
+                                    "--data-dir",
+                                    dir.to_str().unwrap_or("./data"),
+                                    "--listen",
+                                    &listen,
+                                    "--auth",
+                                    &auth,
+                                ])
+                                .status()?;
+                            if !st.success() {
+                                bail!("scanner failed — build with: cargo build -p meshchain-scanner");
+                            }
+                            return Ok(());
+                        }
+                    }
+                    bail!("meshchain-scanner not found. cargo build -p meshchain-scanner");
+                }
+            }
         }
     }
     Ok(())

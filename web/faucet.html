@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>tMESH Faucet — MeshChain Testnet</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="testnet-banner">
+    TESTNET FAUCET — tMESH has <strong>no cash value</strong> ·
+    <a href="/docs/?doc=TESTNET">Testnet guide</a>
+  </div>
+  <header class="nav">
+    <div class="wrap nav-inner">
+      <a class="brand" href="/"><span class="logo"></span> MeshChain</a>
+      <nav class="nav-links">
+        <a href="/">Home</a>
+        <a href="/docs/">Docs</a>
+        <a class="active" href="/faucet.html">Faucet</a>
+        <a href="https://github.com/krewdev/meshchain">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap" style="padding:2.5rem 1.25rem 4rem; max-width:640px">
+    <h1 style="font-size:1.8rem;margin:0 0 0.5rem">tMESH Faucet</h1>
+    <p class="section-sub" style="margin-bottom:1.5rem">
+      Paste your mesh name (from <code class="inline-code">mesh new-wallet</code>).
+      Optional: include your public key hex if this is your first drip.
+    </p>
+
+    <div class="panel" style="padding:1.25rem">
+      <label style="display:block;color:var(--muted);font-size:0.85rem;margin-bottom:0.35rem">Mesh name</label>
+      <input id="name" placeholder="M3SQRT-XTA1Y-ZJ6" style="width:100%;padding:0.7rem 0.8rem;border-radius:10px;border:1px solid var(--border);background:#0a0f18;color:var(--text);font-family:var(--mono);margin-bottom:1rem" />
+
+      <label style="display:block;color:var(--muted);font-size:0.85rem;margin-bottom:0.35rem">Public key hex (optional, first time)</label>
+      <input id="pk" placeholder="64 hex chars from mesh address" style="width:100%;padding:0.7rem 0.8rem;border-radius:10px;border:1px solid var(--border);background:#0a0f18;color:var(--text);font-family:var(--mono);margin-bottom:1rem" />
+
+      <label style="display:block;color:var(--muted);font-size:0.85rem;margin-bottom:0.35rem">Faucet API URL</label>
+      <input id="api" value="http://127.0.0.1:8787" style="width:100%;padding:0.7rem 0.8rem;border-radius:10px;border:1px solid var(--border);background:#0a0f18;color:var(--text);font-family:var(--mono);margin-bottom:1.25rem" />
+
+      <button class="btn btn-primary" id="go" style="width:100%;border:none">Drip tMESH</button>
+      <pre id="out" style="margin-top:1rem;white-space:pre-wrap;color:var(--muted);font-size:0.85rem;min-height:4rem"></pre>
+    </div>
+
+    <p class="meta" style="margin-top:1.5rem">
+      Run the host locally: <code class="inline-code">./scripts/start_testnet_host.sh</code><br />
+      Default drip: 100 tMESH · cooldown applies · Solana vault is separate (devnet).
+    </p>
+  </main>
+
+  <script>
+    const out = document.getElementById("out");
+    document.getElementById("go").onclick = async () => {
+      const api = document.getElementById("api").value.replace(/\/$/, "");
+      const mesh_name = document.getElementById("name").value.trim();
+      const public_key_hex = document.getElementById("pk").value.trim() || undefined;
+      out.textContent = "Requesting…";
+      try {
+        const r = await fetch(api + "/drip", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mesh_name, public_key_hex }),
+        });
+        const j = await r.json();
+        out.textContent = JSON.stringify(j, null, 2);
+      } catch (e) {
+        out.textContent = "Error: " + e + "\n\nIs the faucet running?\n  ./scripts/start_testnet_host.sh";
+      }
+    };
+    // load info
+    (async () => {
+      try {
+        const api = document.getElementById("api").value.replace(/\/$/, "");
+        const r = await fetch(api + "/info");
+        const j = await r.json();
+        out.textContent = "Faucet online: " + JSON.stringify(j);
+      } catch {
+        out.textContent = "Faucet offline (start host to enable drips). You can still change the API URL.";
+      }
+    })();
+  </script>
+</body>
+</html>

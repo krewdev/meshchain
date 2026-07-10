@@ -1,0 +1,20 @@
+[package]
+name = "meshchain-scanner"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "MeshChain testnet blockchain scanner / explorer (HTTP)"
+
+[[bin]]
+name = "meshchain-scanner"
+path = "src/main.rs"
+
+[dependencies]
+meshchain-proto = { workspace = true }
+meshchain-ledger = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+hex = { workspace = true }
+anyhow = { workspace = true }
+clap = { workspace = true }
+sha2 = { workspace = true }
