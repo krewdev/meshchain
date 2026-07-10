@@ -1,0 +1,10 @@
+{
+  "name": "meshchain",
+  "version": "0.1.0",
+  "description": "MeshChain testnet helpers — wallets, scanner, hybrid vault, Meshtastic",
+  "author": {
+    "name": "MeshChain"
+  },
+  "repository": "https://github.com/krewdev/meshchain",
+  "keywords": ["meshtastic", "mesh", "solana", "testnet", "wallet", "scanner"]
+}
