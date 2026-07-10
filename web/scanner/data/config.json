@@ -1,11 +1,11 @@
 {
-  "live_api": "",
+  "live_api": "https://pdas-embedded-offline-renaissance.trycloudflare.com",
   "poll_secs": 15,
   "fallback_to_snapshot": true,
   "notes": [
-    "Set live_api to your always-on Rust scanner URL for real-time updates without redeploying Vercel.",
-    "Example: https://scanner.example.com  (no trailing slash)",
-    "Override anytime with ?api=https://host:8787",
-    "Or use GitHub Actions to auto-refresh the snapshot (see .github/workflows/scanner-snapshot.yml)"
-  ]
+    "live_api set by scripts/start_scanner_live.sh (Cloudflare tunnel)",
+    "Vercel UI polls this URL every poll_secs \u2014 no redeploy needed for chain changes",
+    "Tunnel URL changes on restart \u2014 re-run start_scanner_live.sh"
+  ],
+  "updated": "2026-07-10T10:18Z"
 }

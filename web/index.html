@@ -3,35 +3,39 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>MeshChain — Wallets & ledger for Meshtastic</title>
-  <meta name="description" content="Hold and move value on Meshtastic. Offline mesh wallets, quantum-safe cold storage, hybrid Solana vaults. Open source." />
+  <title>MeshChain — Off-grid private money on Meshtastic</title>
+  <meta name="description" content="Privacy-first, off-grid mesh ledger for Meshtastic. Quantum-safe cold storage, hybrid vaults, memorable wallet names. Testnet live." />
   <meta property="og:title" content="MeshChain" />
-  <meta property="og:description" content="Mesh-native wallets for the Meshtastic network." />
+  <meta property="og:description" content="Off-grid. Private. Mesh-native value on LoRa." />
   <meta property="og:type" content="website" />
+  <meta property="og:image" content="/assets/logo.jpg" />
   <link rel="stylesheet" href="/styles.css" />
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2338bdf8'/%3E%3C/svg%3E" />
+  <link rel="icon" href="/assets/logo.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/assets/logo.jpg" />
 </head>
 <body>
   <div class="testnet-banner">
-    PUBLIC TESTNET — <code style="font-weight:700">meshchain-testnet-1</code> · tMESH has no cash value ·
-    <a href="/docs/?doc=TESTNET">Testnet guide</a> ·
-    <a href="/testnet/network.json">network.json</a>
+    PUBLIC TESTNET · <code>meshchain-testnet-1</code> · tMESH has no cash value ·
+    <a href="/docs/?doc=TESTNET">Guide</a> ·
+    <a href="/faucet/">Faucet</a>
   </div>
+
   <header class="nav">
     <div class="wrap nav-inner">
       <a class="brand" href="/">
-        <span class="logo" aria-hidden="true"></span>
+        <img class="logo-img" src="/assets/logo.svg" width="36" height="36" alt="MeshChain" />
         MeshChain
       </a>
       <nav class="nav-links">
-        <a href="#features">Features</a>
+        <a href="#privacy">Privacy</a>
+        <a href="#features">Protocol</a>
         <a href="#wallets">Wallets</a>
         <a href="#testnet">Testnet</a>
         <a href="/scanner/">Scanner</a>
-        <a href="#donate">Donate</a>
+        <a href="/faucet/">Faucet</a>
         <a href="/docs/">Docs</a>
         <a href="https://github.com/krewdev/meshchain" target="_blank" rel="noopener">GitHub</a>
-        <a class="btn btn-primary" href="/docs/?doc=GETTING_STARTED">Get started</a>
+        <a class="btn btn-primary" href="/docs/?doc=GETTING_STARTED">Launch CLI</a>
       </nav>
     </div>
   </header>
@@ -40,70 +44,114 @@
     <section class="hero">
       <div class="wrap hero-grid">
         <div>
-          <div class="badge">Public testnet live · meshchain-testnet-1</div>
-          <h1>Hold &amp; move value on mesh radio — even without the internet</h1>
+          <div class="badge">Off-grid · Private · Testnet live</div>
+          <h1>Money that moves when the internet doesn’t.</h1>
           <p class="lead">
-            Open-source mesh-native wallets and ledger for
-            <a href="https://meshtastic.org/" target="_blank" rel="noopener">Meshtastic</a>.
-            Simple CLI, quantum-safe cold keys, and hybrid vaults that internet-only attackers cannot unlock alone.
+            MeshChain is a privacy-forward ledger for the
+            <a href="https://meshtastic.org/" target="_blank" rel="noopener">Meshtastic</a>
+            LoRa mesh. Hold and spend offline. Cold keys stay air-gapped.
+            Hybrid vaults refuse internet-only unlocks.
           </p>
           <div class="hero-actions">
-            <a class="btn btn-primary" href="/docs/?doc=GETTING_STARTED">Use wallets &amp; docs</a>
-            <a class="btn btn-ghost" href="https://github.com/krewdev/meshchain" target="_blank" rel="noopener">View on GitHub</a>
+            <a class="btn btn-primary" href="/docs/?doc=GETTING_STARTED">Get started</a>
+            <a class="btn btn-ghost" href="/docs/?doc=SECURITY_HARDENING">Security model</a>
+            <a class="btn btn-ghost" href="https://github.com/krewdev/meshchain" target="_blank" rel="noopener">Source</a>
           </div>
-          <p class="meta">
-            Community software for Meshtastic · Not an official Meshtastic Foundation product ·
-            <a href="https://meshtastic.org/">meshtastic.org</a>
+          <div class="privacy-strip">
+            <div><strong>No cell required</strong>Hold value with radio powered off</div>
+            <div><strong>Hybrid dual-control</strong>Vault unlock needs mesh proof</div>
+            <div><strong>Quantum-safe cold</strong>ML-DSA-65 for large moves</div>
+            <div><strong>Mesh names</strong>M3SQRT-XTA1Y-ZJ6 style IDs</div>
+          </div>
+          <p class="meta" style="margin-top:1.25rem">
+            Community software for Meshtastic · Not an official Meshtastic product
           </p>
         </div>
-        <div class="panel" aria-label="CLI preview">
-<pre><span class="cmt"># plain-English wallet CLI — no app UI required</span>
+
+        <div class="hero-visual">
+          <div class="hero-mark">
+            <img src="/assets/logo.jpg" alt="MeshChain logo — hexagonal mesh shield" />
+          </div>
+          <div class="token-row">
+            <img src="/assets/token-tmesh.jpg" alt="tMESH token" />
+            <div>
+              <strong>tMESH</strong>
+              <span>Testnet token · no cash value</span>
+            </div>
+          </div>
+          <div class="panel" aria-label="CLI preview" style="width:100%;max-width:340px">
+<pre><span class="cmt"># privacy-first wallet CLI</span>
 <span class="prompt">$</span> <span class="cmd">mesh testnet-setup</span>
 <span class="prompt">$</span> <span class="cmd">mesh new-wallet</span>
-<span class="cmt"># → Mesh name: M3SQRT-XTA1Y-ZJ6</span>
-<span class="prompt">$</span> <span class="cmd">mesh balance</span>
-<span class="prompt">$</span> <span class="cmd">mesh send M3SQRT-XTA1Y-ZJ6 5</span>
+<span class="cmt"># → M3SQRT-XTA1Y-ZJ6</span>
 <span class="prompt">$</span> <span class="cmd">mesh new-cold-key</span>
-<span class="cmt"># vault: deposit SOL on devnet → mint tMESH → burn → withdraw</span>
 <span class="prompt">$</span> <span class="cmd">mesh security</span></pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="privacy">
+      <div class="wrap">
+        <h2 class="section-title">Built for privacy &amp; the off-grid edge</h2>
+        <p class="section-sub">
+          When towers fail, borders jam, or you simply refuse always-on surveillance stacks —
+          MeshChain keeps a minimal, auditable value layer on long-range radio.
+        </p>
+        <div class="pillars">
+          <article class="pillar">
+            <span class="tag">Off-grid</span>
+            <h3>LoRa mesh as the settlement path</h3>
+            <p>No ISP. No SIM. Balances live on a mesh-native ledger that hops peer-to-peer across Meshtastic nodes.</p>
+          </article>
+          <article class="pillar">
+            <span class="tag">Privacy</span>
+            <h3>Pseudonyms, hashed redeems, cold keys</h3>
+            <p>Memorable mesh names, hashed unlock destinations, private funds channel. RF is not Tor — we say so honestly.</p>
+          </article>
+          <article class="pillar">
+            <span class="tag">Dual control</span>
+            <h3>Internet alone cannot free the vault</h3>
+            <p>SOL locked on Solana devnet needs matching mesh identity, burn proof, and multi-attestor co-sign.</p>
+          </article>
         </div>
       </div>
     </section>
 
     <section id="features">
       <div class="wrap">
-        <h2 class="section-title">Why MeshChain</h2>
-        <p class="section-sub">Designed for off-grid hold/spend, extreme cold storage, and dual-control vaults.</p>
+        <h2 class="section-title">Protocol capabilities</h2>
+        <p class="section-sub">Open-source stack: ledger, wallets, hybrid vault, multi-validator gossip.</p>
         <div class="cards">
           <article class="card">
-            <div class="icon">1</div>
-            <h3>Mesh-native money</h3>
-            <p>Balances live on a lightweight ledger that hops over LoRa Meshtastic — no cell tower required to hold or send MESH.</p>
+            <div class="icon">01</div>
+            <h3>Mesh-native ledger</h3>
+            <p>tMESH balances, nonces, PoA finality — engineered for LoRa airtime limits.</p>
           </article>
           <article class="card">
-            <div class="icon">2</div>
-            <h3>Simple wallets</h3>
-            <p>The <code class="inline-code">mesh</code> CLI is deliberately plain English so you can run a full service without a graphical UI.</p>
+            <div class="icon">02</div>
+            <h3>CLI wallets</h3>
+            <p>Plain-English <code class="inline-code">mesh</code> commands. No mandatory GUI. Mesh names included.</p>
           </article>
           <article class="card">
-            <div class="icon">3</div>
-            <h3>Hybrid vault lock</h3>
-            <p>Lock SOL/stables on Solana bound to your mesh address. Unlock needs mesh burn + witnesses — not the internet alone.</p>
+            <div class="icon">03</div>
+            <h3>Hybrid vault</h3>
+            <p>Devnet program live. Deposit SOL bound to mesh ID; unlock only with mesh + attestors.</p>
           </article>
           <article class="card">
-            <div class="icon">4</div>
+            <div class="icon">04</div>
             <h3>Quantum-safe cold path</h3>
-            <p>Large and vault-linked actions use ML-DSA-65 (FIPS 204). Keys stay offline; radio can stay powered off while holding.</p>
+            <p>ML-DSA-65 (FIPS 204) for large and vault-linked burns. Multi-packet FRAG on air.</p>
           </article>
           <article class="card">
-            <div class="icon">5</div>
-            <h3>Privacy-minded</h3>
-            <p>Hashed redeem destinations, optional stealth receive tags, private funds channel — with honest limits of RF privacy.</p>
+            <div class="icon">05</div>
+            <h3>Multi-validator host</h3>
+            <p>TCP gossip lab + optional radio relay for site-to-site multi-hop awareness.</p>
           </article>
           <article class="card">
-            <div class="icon">6</div>
-            <h3>Open source</h3>
-            <p>MIT licensed. Audit the ledger, vault program, and transport. Run your own validators and attestors.</p>
+            <div class="icon">06</div>
+            <h3>Open &amp; auditable</h3>
+            <p>MIT licensed. Threat model documented. Fail-secure by default.</p>
           </article>
         </div>
       </div>
@@ -111,18 +159,8 @@
 
     <section id="testnet">
       <div class="wrap">
-        <h2 class="section-title">Join the public testnet</h2>
-        <p class="section-sub">
-          Shared parameters for experimenters. tMESH is worthless. Solana bridge experiments use <strong>devnet</strong> only.
-        </p>
-        <div class="panel" style="margin-bottom:1.25rem">
-<pre><span class="cmt"># official testnet profile</span>
-<span class="prompt">$</span> <span class="cmd">git clone https://github.com/krewdev/meshchain.git && cd meshchain</span>
-<span class="prompt">$</span> <span class="cmd">cargo build -p mesh -p meshchain-node</span>
-<span class="prompt">$</span> <span class="cmd">./target/debug/mesh testnet-setup</span>
-<span class="prompt">$</span> <span class="cmd">./target/debug/mesh testnet-info</span>
-<span class="prompt">$</span> <span class="cmd">./target/debug/mesh demo</span></pre>
-        </div>
+        <h2 class="section-title">Public testnet</h2>
+        <p class="section-sub">Shared parameters. tMESH is worthless. Solana bridge uses <strong>devnet</strong> only.</p>
         <div class="table-wrap">
           <table>
             <thead>
@@ -132,100 +170,75 @@
               <tr><td>chain_id</td><td><code>meshchain-testnet-1</code></td></tr>
               <tr><td>Token</td><td>tMESH (no cash value)</td></tr>
               <tr><td>Meshtastic channel</td><td><code>MeshChain-Testnet-1</code></td></tr>
-              <tr><td>Solana bridge</td><td>devnet only</td></tr>
-              <tr><td>Params JSON</td><td><a href="/testnet/network.json">/testnet/network.json</a></td></tr>
+              <tr><td>Solana program</td><td><code>CBRQcjk5…3Vkx</code> (devnet)</td></tr>
+              <tr><td>Params</td><td><a href="/testnet/network.json">network.json</a></td></tr>
             </tbody>
           </table>
         </div>
-        <p style="margin-top:1.25rem">
-          <a class="btn btn-primary" href="/docs/?doc=TESTNET">Full testnet guide</a>
-          <a class="btn btn-ghost" href="/faucet.html" style="margin-left:0.5rem">tMESH Faucet</a>
-          <a class="btn btn-ghost" href="/docs/?doc=HOST_OPS" style="margin-left:0.5rem">Host ops</a>
-        </p>
-      </div>
-    </section>
-
-    <section id="scanner">
-      <div class="wrap">
-        <h2 class="section-title">Blockchain scanner</h2>
-        <p class="section-sub">
-          Internet-open explorer for testnet blocks, mesh names, and balances.
-          Later: require mesh 2FA (<code class="inline-code">--auth mesh2fa</code>).
-        </p>
-        <p style="margin-bottom:1rem">
-          <a class="btn btn-primary" href="/scanner/">Open public scanner</a>
-          <a class="btn btn-ghost" href="/scanner/data/chain_state.json" style="margin-left:.5rem">Raw chain JSON</a>
-        </p>
-        <div class="panel" style="margin-bottom:1rem">
-<pre><span class="cmt"># Public (Vercel): https://meshchain-sigma.vercel.app/scanner/</span>
-<span class="cmt"># Live operator API (optional self-host):</span>
-<span class="prompt">$</span> <span class="cmd">cargo build -p meshchain-scanner</span>
-<span class="prompt">$</span> <span class="cmd">./target/debug/meshchain-scanner --data-dir ./data --listen 0.0.0.0:8787 --auth open</span>
-<span class="cmt"># Then: /scanner/?api=https://YOUR_HOST:8787</span></pre>
+        <div class="panel" style="margin-top:1.25rem">
+<pre><span class="prompt">$</span> <span class="cmd">git clone https://github.com/krewdev/meshchain.git && cd meshchain</span>
+<span class="prompt">$</span> <span class="cmd">cargo build -p mesh -p meshchain-node</span>
+<span class="prompt">$</span> <span class="cmd">./target/debug/mesh testnet-setup && ./target/debug/mesh demo</span>
+<span class="prompt">$</span> <span class="cmd">./scripts/start_testnet_host.sh   # validators + faucet</span></pre>
         </div>
-        <p class="meta">
-          Docs: <a href="/docs/?doc=SCANNER">Scanner guide</a> ·
-          Snapshot refresh: <code class="inline-code">./scripts/sync_scanner_snapshot.sh && vercel --prod</code>
+        <p style="margin-top:1.25rem">
+          <a class="btn btn-primary" href="/docs/?doc=TESTNET">Testnet guide</a>
+          <a class="btn btn-ghost" href="/faucet/" style="margin-left:0.5rem">tMESH Faucet</a>
+          <a class="btn btn-ghost" href="/docs/?doc=E2E_TESTNET" style="margin-left:0.5rem">E2E results</a>
         </p>
       </div>
     </section>
 
     <section id="wallets">
       <div class="wrap">
-        <h2 class="section-title">Use our wallets &amp; service</h2>
-        <p class="section-sub">Clone the repo, build once, and use the CLI as your wallet interface. Prefer <code class="inline-code">mesh testnet-setup</code> for the public testnet.</p>
+        <h2 class="section-title">Wallets without the noise</h2>
+        <p class="section-sub">Memorable names. Optional cold keys. Full service from a terminal.</p>
         <div class="table-wrap">
           <table>
             <thead>
-              <tr><th>Command</th><th>What it does</th></tr>
+              <tr><th>Command</th><th>Action</th></tr>
             </thead>
             <tbody>
-              <tr><td><code>mesh setup</code></td><td>Create a local test network</td></tr>
-              <tr><td><code>mesh demo</code></td><td>Practice transfers, mint/burn, safety checks</td></tr>
-              <tr><td><code>mesh new-wallet</code></td><td>Create a spending wallet file</td></tr>
-              <tr><td><code>mesh balance</code></td><td>Show MESH balance</td></tr>
-              <tr><td><code>mesh send &lt;addr&gt; &lt;amt&gt;</code></td><td>Sign a payment</td></tr>
-              <tr><td><code>mesh new-cold-key</code></td><td>Quantum-safe cold storage key</td></tr>
-              <tr><td><code>mesh how-cold-works</code></td><td>Hybrid cold storage explained</td></tr>
+              <tr><td><code>mesh new-wallet</code></td><td>Create wallet → mesh name like <code>MVGQK7-82943-QJC</code></td></tr>
+              <tr><td><code>mesh address</code></td><td>Show name + hex id</td></tr>
+              <tr><td><code>mesh balance</code></td><td>Show tMESH balance</td></tr>
+              <tr><td><code>mesh send &lt;name&gt; 5</code></td><td>Sign a payment</td></tr>
+              <tr><td><code>mesh new-cold-key</code></td><td>Quantum-safe cold key</td></tr>
               <tr><td><code>mesh security</code></td><td>Honest security posture</td></tr>
             </tbody>
           </table>
         </div>
-        <p style="margin-top:1.25rem">
-          <a class="btn btn-primary" href="/docs/?doc=GETTING_STARTED">Full getting started guide</a>
-          <a class="btn btn-ghost" href="https://github.com/krewdev/meshchain" style="margin-left:0.5rem">Source code</a>
-        </p>
       </div>
     </section>
 
     <section>
       <div class="wrap">
         <h2 class="section-title">Documentation</h2>
-        <p class="section-sub">Protocols, security model, hybrid vault, and hardware notes.</p>
+        <p class="section-sub">Protocol, security, hybrid lock, host ops, VPS &amp; tunnel.</p>
         <div class="cards">
-          <a class="card" href="/docs/?doc=GETTING_STARTED" style="color:inherit;text-decoration:none">
+          <a class="card" href="/docs/?doc=GETTING_STARTED">
             <h3>Getting started</h3>
-            <p>Install, wallets, radios.</p>
+            <p>Install, wallets, mesh names.</p>
           </a>
-          <a class="card" href="/docs/?doc=HYBRID_LOCK" style="color:inherit;text-decoration:none">
-            <h3>Hybrid lock</h3>
-            <p>Internet vault + Meshtastic identifiers.</p>
-          </a>
-          <a class="card" href="/docs/?doc=SECURITY_HARDENING" style="color:inherit;text-decoration:none">
+          <a class="card" href="/docs/?doc=SECURITY_HARDENING">
             <h3>Security hardening</h3>
-            <p>Threat model and residual risks.</p>
+            <p>Threat model &amp; residual risk.</p>
           </a>
-          <a class="card" href="/docs/?doc=QUANTUM_COLD_STORAGE" style="color:inherit;text-decoration:none">
+          <a class="card" href="/docs/?doc=HYBRID_LOCK">
+            <h3>Hybrid lock</h3>
+            <p>Internet + mesh dual control.</p>
+          </a>
+          <a class="card" href="/docs/?doc=QUANTUM_COLD_STORAGE">
             <h3>Quantum cold storage</h3>
             <p>ML-DSA-65 offline custody.</p>
           </a>
-          <a class="card" href="/docs/?doc=PROTOCOL" style="color:inherit;text-decoration:none">
-            <h3>Protocol</h3>
-            <p>Transactions, blocks, finality.</p>
+          <a class="card" href="/docs/?doc=HOST_OPS">
+            <h3>Host ops</h3>
+            <p>Validators + faucet host.</p>
           </a>
-          <a class="card" href="/docs/?doc=SOLANA_BRIDGE" style="color:inherit;text-decoration:none">
-            <h3>Solana bridge</h3>
-            <p>Deposit, fee, withdraw flow.</p>
+          <a class="card" href="/docs/?doc=VPS_PUBLIC">
+            <h3>VPS &amp; tunnel</h3>
+            <p>Public endpoints &amp; radio relay.</p>
           </a>
         </div>
       </div>
@@ -234,7 +247,7 @@
     <section id="donate">
       <div class="wrap">
         <h2 class="section-title">Support development</h2>
-        <p class="section-sub">Optional donations help fund MeshChain wallets, docs, and mesh infrastructure. Thank you.</p>
+        <p class="section-sub">Optional donations fund mesh tooling and testnet ops.</p>
         <div class="table-wrap">
           <table>
             <thead>
@@ -242,32 +255,27 @@
             </thead>
             <tbody>
               <tr>
-                <td><strong>Solana (SOL)</strong></td>
+                <td><strong>Solana</strong></td>
                 <td><code class="inline-code" style="word-break:break-all">7EwBb1yboTkT3eZmUWw4zbWMMJC2a5e9rMeGV9EgkPJp</code></td>
               </tr>
               <tr>
-                <td><strong>Ethereum (ETH)</strong></td>
+                <td><strong>Ethereum</strong></td>
                 <td><code class="inline-code" style="word-break:break-all">0xCB2d3d03FC47aec6a6DBA7C91010c16a1b9A5ca2</code></td>
               </tr>
               <tr>
-                <td><strong>Bitcoin (BTC)</strong></td>
+                <td><strong>Bitcoin</strong></td>
                 <td><code class="inline-code" style="word-break:break-all">bc1qzyfy2eqrxx0n2vugjhp4zkzkqcmhth7h5zhgle</code></td>
               </tr>
             </tbody>
           </table>
         </div>
-        <p class="meta" style="margin-top:1rem">
-          Always double-check the address on
-          <a href="https://github.com/krewdev/meshchain">GitHub</a>
-          before sending.
-        </p>
       </div>
     </section>
 
     <section>
       <div class="wrap">
         <div class="notice">
-          <strong>Safety:</strong> Do not put significant real value on MeshChain without an independent audit.
+          <strong>Safety:</strong> Testnet only. Do not put significant real value on MeshChain without an independent audit.
           We engineer for high rigor; we do not claim perfect anonymity or unbreakable security.
           See <a href="/docs/?doc=SECURITY_HARDENING">Security hardening</a>.
         </div>
@@ -277,14 +285,18 @@
 
   <footer class="footer">
     <div class="wrap footer-inner">
-      <div>
-        <strong style="color:var(--text)">MeshChain</strong><br />
-        MIT · Community software for Meshtastic
+      <div class="footer-brand">
+        <img src="/assets/logo.svg" width="32" height="32" alt="" />
+        <div>
+          <strong style="color:var(--text)">MeshChain</strong><br />
+          MIT · Off-grid · Privacy-forward
+        </div>
       </div>
       <div>
         <a href="https://github.com/krewdev/meshchain">GitHub</a> ·
         <a href="https://meshtastic.org/">Meshtastic</a> ·
         <a href="/docs/">Docs</a> ·
+        <a href="/faucet/">Faucet</a> ·
         <a href="/#donate">Donate</a>
       </div>
     </div>
