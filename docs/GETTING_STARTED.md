@@ -20,13 +20,33 @@ cargo build -p mesh -p meshchain-node
 
 tMESH has **no cash value**. See [TESTNET.md](TESTNET.md).
 
+## Mesh names
+
+Each wallet gets a **memorable mesh name** derived from its key (unique, not pickable):
+
+```text
+MVGQK7-82943-QJC
+```
+
+- Starts with **`M`**
+- Crockford base32 (no confusing I / O / L)
+- 1:1 with the secure 8-byte short id
+- Hex id still works for power users
+
+```bash
+mesh new-wallet
+# → Mesh name: MVGQK7-82943-QJC
+
+mesh send MVGQK7-82943-QJC 5
+```
+
 ## Simple wallet CLI (no UI required)
 
 ```bash
 ./target/debug/mesh testnet-setup      # public testnet (preferred)
-# or: mesh setup                       # local dev only
 ./target/debug/mesh demo               # practice transfers
-./target/debug/mesh new-wallet         # create a wallet
+./target/debug/mesh new-wallet         # create a wallet + mesh name
+./target/debug/mesh address            # show mesh name
 ./target/debug/mesh balance --wallet alice.json
 ./target/debug/mesh new-cold-key       # quantum-safe cold key
 ./target/debug/mesh how-cold-works
@@ -37,10 +57,10 @@ tMESH has **no cash value**. See [TESTNET.md](TESTNET.md).
 
 | Command | What it does |
 |---------|----------------|
-| `mesh new-wallet` | Create a spending wallet |
-| `mesh address` | Show your short mesh address |
+| `mesh new-wallet` | Create a wallet + show mesh name |
+| `mesh address` | Show mesh name + hex id |
 | `mesh balance` | Show how much MESH you have |
-| `mesh send <addr> <amount>` | Sign a payment |
+| `mesh send <name> <amount>` | Pay a mesh name (or hex) |
 | `mesh status` | Network height & supply |
 | `mesh new-cold-key` | Long-term cold storage key |
 
