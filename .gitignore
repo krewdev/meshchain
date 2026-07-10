@@ -31,3 +31,4 @@ programs-mesh-bridge/node_modules
 .env
 .env.*
 .vercel
+programs-mesh-bridge/target/

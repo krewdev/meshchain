@@ -129,6 +129,21 @@ enum Commands {
     /// Show security & privacy posture (what is hardened, what is not)
     #[command(name = "security")]
     Security,
+
+    /// Run a testnet validator process (multi-machine TCP gossip)
+    #[command(name = "validator")]
+    Validator {
+        #[arg(long)]
+        index: u8,
+        #[arg(long, default_value = "0.0.0.0:9100")]
+        listen: String,
+        #[arg(long = "peer")]
+        peers: Vec<String>,
+    },
+
+    /// Show published attestors / Solana devnet program id
+    #[command(name = "testnet-attestors")]
+    TestnetAttestors,
 }
 
 fn keys_dir(dir: &Path) -> PathBuf {
@@ -558,6 +573,49 @@ Read: docs/SECURITY_HARDENING.md  docs/HYBRID_LOCK.md
 "#
             );
         }
+
+        Commands::Validator {
+            index,
+            listen,
+            peers,
+        } => {
+            println!("Starting testnet validator index={index} listen={listen}");
+            let mut args = vec![
+                "run".to_string(),
+                "--data-dir".into(),
+                dir.to_str().unwrap_or("./data").into(),
+                "--validator-index".into(),
+                index.to_string(),
+                "--listen".into(),
+                listen,
+            ];
+            for p in peers {
+                args.push("--peer".into());
+                args.push(p);
+            }
+            let args_ref: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+            run_external_node(&args_ref)?;
+        }
+
+        Commands::TestnetAttestors => {
+            print_attestors()?;
+        }
     }
+    Ok(())
+}
+
+fn print_attestors() -> Result<()> {
+    let paths = [
+        PathBuf::from("testnet/attestors.json"),
+        PathBuf::from("web/testnet/attestors.json"),
+    ];
+    for p in &paths {
+        if p.exists() {
+            println!("{}", fs::read_to_string(p)?);
+            return Ok(());
+        }
+    }
+    println!("No local attestors.json — fetch:");
+    println!("  https://meshchain-sigma.vercel.app/testnet/attestors.json");
     Ok(())
 }

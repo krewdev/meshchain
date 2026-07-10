@@ -13,7 +13,7 @@ use anchor_lang::prelude::*;
 use anchor_lang::system_program;
 use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
 
-declare_id!("BxyyUd2uYvvXYV5awQiLLu1uoB5HZw4L18yDDtQqSMrf");
+declare_id!("CBRQcjk5DLJh1HcW3XF5TmUxZsBumhiABJa6M15r3Vkx");
 
 pub const CONFIG_SEED: &[u8] = b"mesh-bridge-config";
 pub const VAULT_SEED: &[u8] = b"mesh-bridge-vault";
@@ -441,11 +441,14 @@ pub mod programs_mesh_bridge {
             .checked_add(amount)
             .ok_or(BridgeError::MathOverflow)?;
 
-        let att_count = if config.hybrid_enabled {
+        let hybrid = config.hybrid_enabled;
+        let att_count = if hybrid {
             count_attestor_signers(config, ctx.remaining_accounts)? as u8
         } else {
             0
         };
+        let deposit_seq = deposit.seq;
+        let mint_key = ctx.accounts.mint.key();
 
         let rec = &mut ctx.accounts.withdraw_record;
         rec.burn_txid = burn_txid;
@@ -455,15 +458,14 @@ pub mod programs_mesh_bridge {
         rec.fee = fee;
         rec.mesh_height = mesh_height;
         rec.mesh_short_id = mesh_short_id;
-        rec.deposit_seq = deposit.seq;
+        rec.deposit_seq = deposit_seq;
         rec.asset_flag = SPL_FLAG;
-        rec.mint = ctx.accounts.mint.key();
+        rec.mint = mint_key;
         rec.bump = ctx.bumps.withdraw_record;
         rec.attestation_count = att_count;
 
-        ctx.accounts.config.withdraw_count = ctx
-            .accounts
-            .config
+        let config = &mut ctx.accounts.config;
+        config.withdraw_count = config
             .withdraw_count
             .checked_add(1)
             .ok_or(BridgeError::MathOverflow)?;
@@ -476,10 +478,10 @@ pub mod programs_mesh_bridge {
             fee,
             mesh_height,
             mesh_short_id,
-            deposit_seq: rec.deposit_seq,
+            deposit_seq,
             asset_flag: SPL_FLAG,
-            mint: rec.mint,
-            hybrid: config.hybrid_enabled,
+            mint: mint_key,
+            hybrid,
             attestation_count: att_count,
         });
         Ok(())
@@ -487,11 +489,11 @@ pub mod programs_mesh_bridge {
 }
 
 fn mul_bps(amount: u64, bps: u16) -> Result<u64> {
-    amount
+    let n = amount
         .checked_mul(bps as u64)
-        .ok_or(BridgeError::MathOverflow.into())?
-        .checked_div(10_000)
-        .ok_or(BridgeError::MathOverflow.into())
+        .ok_or(error!(BridgeError::MathOverflow))?;
+    n.checked_div(10_000)
+        .ok_or_else(|| error!(BridgeError::MathOverflow))
 }
 
 fn hex8(id: &[u8; 8]) -> String {

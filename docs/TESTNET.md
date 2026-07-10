@@ -124,10 +124,22 @@ Assume **nothing persists**.
 ## Roadmap on testnet
 
 1. ✅ Publish chain_id + docs + CLI `testnet-*`  
-2. ⬜ Multi-machine validator gossip over Meshtastic bridge  
-3. ⬜ Published Solana **devnet** program id + faucet page  
-4. ⬜ Public attestor list for hybrid unlock experiments  
-5. ⬜ Only after audit + soak: discuss mainnet parameters  
+2. ✅ Multi-machine validator gossip (TCP) + lab script — [MULTI_VALIDATOR.md](./MULTI_VALIDATOR.md)  
+3. ✅ Solana **devnet** program id reserved + binary built — [SOLANA_DEVNET.md](../testnet/SOLANA_DEVNET.md)  
+4. ✅ Public attestor list — [attestors.json](../testnet/attestors.json)  
+5. ⬜ On-chain program deploy (needs ~3.3 devnet SOL when faucet allows)  
+6. ⬜ Only after audit + soak: discuss mainnet parameters  
+
+### Solana program (devnet)
+
+| | |
+|--|--|
+| **Program ID** | `CBRQcjk5DLJh1HcW3XF5TmUxZsBumhiABJa6M15r3Vkx` |
+| **Status** | Built & ID reserved; on-chain deploy pending faucet rent |
+
+### Attestors
+
+See https://meshchain-sigma.vercel.app/testnet/attestors.json  
 
 ---
 

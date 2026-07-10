@@ -1,6 +1,8 @@
 //! MeshChain node: PoA simulator and single-process multi-validator demo.
 
 mod consensus;
+mod net;
+mod run;
 mod sim;
 
 use anyhow::{Context, Result};
@@ -8,6 +10,7 @@ use clap::{Parser, Subcommand};
 use meshchain_ledger::genesis::{GenesisAccount, GenesisConfig, ONE_MESH};
 use meshchain_proto::crypto::Keypair;
 use std::fs;
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -48,6 +51,29 @@ enum Commands {
     PqColdDemo {
         #[arg(long, default_value = "./data")]
         data_dir: PathBuf,
+    },
+    /// Run a multi-machine validator (TCP gossip between hosts/processes)
+    Run {
+        #[arg(long, default_value = "./data")]
+        data_dir: PathBuf,
+        /// Index into genesis.validators (0..N-1)
+        #[arg(long)]
+        validator_index: u8,
+        /// Listen address, e.g. 0.0.0.0:9100
+        #[arg(long, default_value = "0.0.0.0:9100")]
+        listen: String,
+        /// Bootstrap peers host:port (repeatable)
+        #[arg(long = "peer")]
+        peers: Vec<String>,
+        #[arg(long, default_value_t = 100)]
+        slot_ms: u64,
+    },
+    /// Submit a signed payment JSON to a validator peer
+    SubmitTx {
+        #[arg(long)]
+        tx: PathBuf,
+        #[arg(long, default_value = "127.0.0.1:9100")]
+        peer: String,
     },
 }
 
@@ -186,6 +212,25 @@ fn main() -> Result<()> {
         }
         Commands::PqColdDemo { data_dir } => {
             sim::run_pq_cold_demo(&data_dir).context("pq cold demo failed")?;
+        }
+        Commands::Run {
+            data_dir,
+            validator_index,
+            listen,
+            peers,
+            slot_ms,
+        } => {
+            let listen: SocketAddr = listen.parse().context("bad --listen address")?;
+            run::run_validator(run::RunConfig {
+                data_dir,
+                validator_index,
+                listen,
+                peers,
+                slot_ms,
+            })?;
+        }
+        Commands::SubmitTx { tx, peer } => {
+            run::submit_tx_file(&tx, &peer)?;
         }
     }
     Ok(())

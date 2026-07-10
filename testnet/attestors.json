@@ -1,0 +1,31 @@
+{
+  "network": "meshchain-testnet-1",
+  "solana_cluster": "devnet",
+  "min_attestations": 2,
+  "hybrid_enabled": true,
+  "updated": "2026-07-10",
+  "description": "Public attestor list for hybrid vault unlock on Solana devnet. Attestors co-sign withdraw_hybrid_* so internet-only unlock is impossible.",
+  "how_to_join_as_attestor": [
+    "Generate a Solana keypair used only for attestation",
+    "Open a GitHub issue or PR adding your pubkey to this file",
+    "Run a mesh validator that can observe final Burns",
+    "Keep the key offline-ish; treat compromise as critical"
+  ],
+  "attestors": [
+    {
+      "name": "operator-bootstrap-0",
+      "solana_pubkey": "55nmyJNDZD4jZKfcj6E6ypSLVsDRJYet4H3F9L4NXdcg",
+      "role": "bootstrap",
+      "status": "active",
+      "notes": "Bootstrap operator key (devnet). Rotate before any mainnet discussion."
+    }
+  ],
+  "pending": [],
+  "program": {
+    "cluster": "devnet",
+    "program_id": "CBRQcjk5DLJh1HcW3XF5TmUxZsBumhiABJa6M15r3Vkx",
+    "status": "id_reserved_binary_built_onchain_deploy_pending_devnet_sol",
+    "idl": "programs-mesh-bridge",
+    "deploy_notes": "See testnet/SOLANA_DEVNET.md — need ~3.3 SOL rent; faucet may rate-limit"
+  }
+}

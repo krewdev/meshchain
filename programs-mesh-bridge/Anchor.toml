@@ -6,7 +6,7 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-programs_mesh_bridge = "BxyyUd2uYvvXYV5awQiLLu1uoB5HZw4L18yDDtQqSMrf"
+programs_mesh_bridge = "CBRQcjk5DLJh1HcW3XF5TmUxZsBumhiABJa6M15r3Vkx"
 
 [registry]
 url = "https://api.apr.dev"

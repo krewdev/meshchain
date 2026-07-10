@@ -1,7 +1,7 @@
 {
   "name": "MeshChain Public Testnet",
   "chain_id": "meshchain-testnet-1",
-  "version": 1,
+  "version": 2,
   "status": "active",
   "is_testnet": true,
   "warning": "TESTNET ONLY — no real value. Balances can be wiped. Do not send mainnet funds here.",
@@ -13,7 +13,7 @@
   },
   "mesh": {
     "channel_name": "MeshChain-Testnet-1",
-    "channel_purpose": "Private Meshtastic channel for testnet funds traffic (create locally; share PSK only with test participants)",
+    "channel_purpose": "Private Meshtastic channel for testnet funds traffic",
     "recommended_lora_region": "match your device region (US/EU/etc.)",
     "do_not_use": "Public LongFast / default chat for real balances",
     "frame_magic": "MC",
@@ -25,18 +25,30 @@
     "finality": "ceil(2N/3) validator ACKs",
     "block_interval_secs_hint": 30,
     "pq_required_above_mesh": 100,
-    "vault_burns_require_pq": true
+    "vault_burns_require_pq": true,
+    "gossip": "TCP line-JSON; see docs/MULTI_VALIDATOR.md"
+  },
+  "validators": {
+    "how_to_run": "mesh testnet-setup && mesh validator --index N --listen 0.0.0.0:9100 --peer host:port",
+    "lab_script": "scripts/run_local_validators.sh"
   },
   "faucet": {
     "enabled": true,
     "asset": "tMESH",
     "typical_drip_mesh": 100,
-    "how": "Run mesh testnet-setup (local faucet key) or ask a testnet operator. No mainnet SOL/ETH/BTC faucet."
+    "how": "mesh testnet-setup creates local faucet; operators may drip tMESH"
   },
   "solana_bridge": {
     "network": "devnet",
-    "note": "Hybrid vault program targets Solana devnet only on this testnet. Never mainnet until audit.",
-    "program_status": "source in programs-mesh-bridge — deploy to devnet separately"
+    "program_id": "CBRQcjk5DLJh1HcW3XF5TmUxZsBumhiABJa6M15r3Vkx",
+    "program_status": "built_id_reserved_deploy_pending_faucet",
+    "note": "Program binary built; on-chain deploy needs ~3.3 devnet SOL. See testnet/SOLANA_DEVNET.md",
+    "idl_path": "programs-mesh-bridge"
+  },
+  "attestors": {
+    "url": "https://meshchain-sigma.vercel.app/testnet/attestors.json",
+    "min_attestations": 2,
+    "file": "testnet/attestors.json"
   },
   "btc_bridge": {
     "status": "design-only on testnet-1",
@@ -44,17 +56,19 @@
   },
   "endpoints": {
     "docs": "https://meshchain-sigma.vercel.app/docs/?doc=TESTNET",
+    "multi_validator_docs": "https://meshchain-sigma.vercel.app/docs/?doc=MULTI_VALIDATOR",
     "site": "https://meshchain-sigma.vercel.app",
     "github": "https://github.com/krewdev/meshchain",
-    "network_json": "https://meshchain-sigma.vercel.app/testnet/network.json"
+    "network_json": "https://meshchain-sigma.vercel.app/testnet/network.json",
+    "attestors_json": "https://meshchain-sigma.vercel.app/testnet/attestors.json"
   },
   "how_to_join": [
     "Clone https://github.com/krewdev/meshchain",
     "cargo build -p mesh -p meshchain-node",
     "mesh testnet-setup",
     "mesh testnet-info",
-    "Optional: create Meshtastic channel MeshChain-Testnet-1 with trusted peers",
-    "mesh new-wallet && use faucet/demo funds only"
+    "Optional multi-validator: ./scripts/run_local_validators.sh",
+    "mesh new-wallet && mesh demo"
   ],
-  "reset_policy": "Operators may reset meshchain-testnet-1 state at any time. Export nothing of value."
+  "reset_policy": "Operators may reset meshchain-testnet-1 state at any time."
 }
