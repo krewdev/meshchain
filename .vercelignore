@@ -1,6 +1,8 @@
 target
 **/target
-data
+# Local validator data only (not web/scanner/data public snapshot)
+/data
+data/keys
 **/node_modules
 programs-mesh-bridge/node_modules
 programs-mesh-bridge/target
