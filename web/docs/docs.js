@@ -2,6 +2,7 @@
 (function () {
   const DOCS = [
     { id: "TESTNET", title: "Public testnet" },
+    { id: "E2E_TESTNET", title: "E2E results" },
     { id: "MULTI_VALIDATOR", title: "Multi-validator" },
     { id: "GETTING_STARTED", title: "Getting started" },
     { id: "DONATE", title: "Donate" },

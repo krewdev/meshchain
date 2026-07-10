@@ -10,11 +10,16 @@ Line protocol (stdin/stdout):
   OK              ready
 
 Usage:
-  python3 meshtastic_bridge.py --port /dev/cu.usbserial-0001
-  python3 meshtastic_bridge.py --port tcp:localhost:4403 --channel-index 0
-  python3 meshtastic_bridge.py --mock   # no radio; echo TX back as RX (dev)
+  python3 tools/meshtastic_bridge.py --port /dev/cu.usbserial-0001
+  python3 tools/meshtastic_bridge.py --port tcp:localhost:4403 --channel-index 0
+  python3 tools/meshtastic_bridge.py --mock   # no radio; echo TX back as RX (dev)
+
+Testnet channel name: MeshChain-Testnet-1 (create private channel; do not use LongFast for funds)
 
 Requires: pip install meshtastic  (not needed for --mock)
+
+With validators: run meshchain-node on TCP for finality; use this bridge when
+you want MC frames on LoRa as well (relay/tooling path).
 """
 
 from __future__ import annotations

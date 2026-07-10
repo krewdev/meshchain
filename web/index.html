@@ -57,12 +57,13 @@
         </div>
         <div class="panel" aria-label="CLI preview">
 <pre><span class="cmt"># plain-English wallet CLI — no app UI required</span>
-<span class="prompt">$</span> <span class="cmd">mesh setup</span>
+<span class="prompt">$</span> <span class="cmd">mesh testnet-setup</span>
 <span class="prompt">$</span> <span class="cmd">mesh new-wallet</span>
+<span class="cmt"># → Mesh name: M3SQRT-XTA1Y-ZJ6</span>
 <span class="prompt">$</span> <span class="cmd">mesh balance</span>
-<span class="prompt">$</span> <span class="cmd">mesh send aabbccdd11223344 5</span>
+<span class="prompt">$</span> <span class="cmd">mesh send M3SQRT-XTA1Y-ZJ6 5</span>
 <span class="prompt">$</span> <span class="cmd">mesh new-cold-key</span>
-<span class="cmt"># large / vault moves need cold key (ML-DSA-65)</span>
+<span class="cmt"># vault: deposit SOL on devnet → mint tMESH → burn → withdraw</span>
 <span class="prompt">$</span> <span class="cmd">mesh security</span></pre>
         </div>
       </div>
