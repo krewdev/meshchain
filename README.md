@@ -150,12 +150,19 @@ Keys are stored under `./data/keys/` by default. **Never commit key files.** Kee
 
 ## Meshtastic network use
 
-1. Flash devices with [Meshtastic firmware](https://meshtastic.org/docs/getting-started/).  
-2. Use a **private channel** for funds traffic (not the public LongFast chat channel for real value).  
-3. Run `tools/meshtastic_bridge.py` on a host with a USB/TCP-connected node.  
-4. Point MeshChain node/relayer at that bridge for TX/BLOCK frames.
+**Guide:** [docs/MESHTASTIC.md](./docs/MESHTASTIC.md) (air-first submit, tip gossip, relay)
 
-See [docs/HARDWARE.md](./docs/HARDWARE.md) and [docs/PROTOCOL.md](./docs/PROTOCOL.md).
+1. Flash devices with [Meshtastic firmware](https://meshtastic.org/docs/getting-started/).  
+2. Private channel **MeshChain-Testnet-1** (not public LongFast for funds).  
+3. Run local validator + relay, then air-submit:
+   ```bash
+   ./scripts/start_radio_relay.sh &          # mock unless MESH_RADIO_PORT set
+   mesh send <NAME> 1 --wallet me.json --air --relay 127.0.0.1:9199
+   ```
+4. Everyday spends use compact **MC Tx** frames; multi-tx blocks stay on TCP.  
+5. Faucet / scanner / Solana vault still need the internet.
+
+See also [docs/HARDWARE.md](./docs/HARDWARE.md) · [docs/PROTOCOL.md](./docs/PROTOCOL.md).
 
 ---
 

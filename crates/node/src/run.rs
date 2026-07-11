@@ -212,6 +212,67 @@ pub fn run_validator(cfg: RunConfig) -> Result<()> {
                         }
                     }
                 }
+                GossipMsg::TxAir { tx_bincode_hex } => {
+                    // Meshtastic air path: bincode Tx hex → mempool
+                    if let Ok(raw) = hex::decode(tx_bincode_hex.trim()) {
+                        match Tx::decode(&raw) {
+                            Ok(tx) if tx.verify().is_ok() && state.can_apply_tx(&tx) => {
+                                let id = tx.txid_hex();
+                                if !mempool.iter().any(|t| t.txid_hex() == id) {
+                                    println!("air: accepted Tx {} into mempool", &id[..16.min(id.len())]);
+                                    mempool.push_back(tx.clone());
+                                    let _ = hub.broadcast(&GossipMsg::Tx { tx });
+                                }
+                            }
+                            Ok(_) => eprintln!("air: tx rejected (verify/apply)"),
+                            Err(e) => eprintln!("air: bad tx bincode: {e}"),
+                        }
+                    }
+                }
+                GossipMsg::BlockAir { block_bincode_hex } => {
+                    if let Ok(raw) = hex::decode(block_bincode_hex.trim()) {
+                        match Block::decode(&raw) {
+                            Ok(block) => {
+                                // Air policy: at most 1 tx per block on this path
+                                if block.txs.len() > 1 {
+                                    eprintln!(
+                                        "air: reject multi-tx block ({} txs) — TCP only",
+                                        block.txs.len()
+                                    );
+                                } else {
+                                    on_block(
+                                        &mut state,
+                                        &mut finality,
+                                        &mut pending,
+                                        &mut seen_at_height,
+                                        &hub,
+                                        keypair.as_ref(),
+                                        &authorized,
+                                        block,
+                                        n,
+                                        &state_path,
+                                        &cfg.data_dir,
+                                    )?;
+                                }
+                            }
+                            Err(e) => eprintln!("air: bad block bincode: {e}"),
+                        }
+                    }
+                }
+                GossipMsg::Tip {
+                    chain_id,
+                    height,
+                    tip_hash_hex,
+                } => {
+                    if chain_id == state.chain_id && height > state.height {
+                        println!(
+                            "air tip: peer height={height} tip={} (local {})",
+                            &tip_hash_hex[..tip_hash_hex.len().min(16)],
+                            state.height
+                        );
+                        request_blocks_catchup(&hub, &state, &cfg.data_dir);
+                    }
+                }
                 GossipMsg::Block { block } => {
                     on_block(
                         &mut state,
@@ -761,5 +822,30 @@ pub fn submit_tx_file(tx_path: &Path, peer: &str) -> Result<()> {
     stream.write_all(line.as_bytes())?;
     stream.flush()?;
     println!("submitted tx to {peer}");
+    Ok(())
+}
+
+/// Submit via Meshtastic air path: send `tx_air` (bincode hex) + standard `tx` + MCHEX frame.
+pub fn submit_tx_air(tx_path: &Path, peer: &str) -> Result<()> {
+    let raw = fs::read_to_string(tx_path)?;
+    let tx: Tx = serde_json::from_str(&raw)?;
+    tx.verify().map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    let bin = tx
+        .encode()
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    let frame = meshchain_transport::encode_tx(&tx).map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    let line_air = serde_json::to_string(&GossipMsg::TxAir {
+        tx_bincode_hex: hex::encode(&bin),
+    })? + "\n";
+    let line_tx = serde_json::to_string(&GossipMsg::Tx { tx })? + "\n";
+    let mchex = format!("MCHEX {}\n", hex::encode(&frame));
+    let mut stream =
+        std::net::TcpStream::connect(peer).with_context(|| format!("connect {peer}"))?;
+    use std::io::Write;
+    stream.write_all(line_air.as_bytes())?;
+    stream.write_all(line_tx.as_bytes())?;
+    stream.write_all(mchex.as_bytes())?;
+    stream.flush()?;
+    println!("submitted air+tcp tx to {peer} ({}B MC frame)", frame.len());
     Ok(())
 }

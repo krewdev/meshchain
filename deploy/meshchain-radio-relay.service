@@ -1,0 +1,23 @@
+[Unit]
+Description=MeshChain Meshtastic radio relay (TCP gossip ↔ LoRa)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=meshchain
+Group=meshchain
+WorkingDirectory=/opt/meshchain
+EnvironmentFile=-/etc/meshchain/radio-relay.env
+Environment=MESH_RADIO_LISTEN=127.0.0.1:9199
+Environment=MESH_RADIO_TCP=127.0.0.1:9100
+Environment=MESH_RADIO_TIP_SECS=30
+# Set MESH_RADIO_PORT=/dev/ttyUSB0 in radio-relay.env for hardware; else mock.
+ExecStart=/opt/meshchain/scripts/start_radio_relay.sh
+Restart=always
+RestartSec=5
+StandardOutput=append:/var/log/meshchain/radio-relay.log
+StandardError=append:/var/log/meshchain/radio-relay.log
+
+[Install]
+WantedBy=multi-user.target

@@ -78,6 +78,9 @@ enum Commands {
         tx: PathBuf,
         #[arg(long, default_value = "127.0.0.1:9100")]
         peer: String,
+        /// Also send Meshtastic air frames (tx_air + MCHEX) for radio relay path
+        #[arg(long, default_value_t = false)]
+        air: bool,
     },
     /// Relayer helper: after Solana vault deposit, mint tMESH to a mesh pubkey
     MintForDeposit {
@@ -278,8 +281,12 @@ fn main() -> Result<()> {
                 slot_ms,
             })?;
         }
-        Commands::SubmitTx { tx, peer } => {
-            run::submit_tx_file(&tx, &peer)?;
+        Commands::SubmitTx { tx, peer, air } => {
+            if air {
+                run::submit_tx_air(&tx, &peer)?;
+            } else {
+                run::submit_tx_file(&tx, &peer)?;
+            }
         }
         Commands::MintForDeposit {
             data_dir,

@@ -34,6 +34,24 @@ pub enum GossipMsg {
     Tx {
         tx: Tx,
     },
+    /// Meshtastic path: bincode-encoded Tx as hex (from radio relay).
+    #[serde(rename = "tx_air")]
+    TxAir {
+        tx_bincode_hex: String,
+    },
+    /// Meshtastic path: bincode-encoded Block as hex (single-tx air blocks).
+    #[serde(rename = "block_air")]
+    BlockAir {
+        block_bincode_hex: String,
+    },
+    /// Mesh tip advertisement (from radio / tip gossip).
+    #[serde(rename = "tip")]
+    Tip {
+        chain_id: String,
+        height: u64,
+        #[serde(default)]
+        tip_hash_hex: String,
+    },
     Block {
         block: Block,
     },
@@ -259,6 +277,20 @@ fn read_peer(
             Ok(msg) => {
                 let id = match &msg {
                     GossipMsg::Tx { tx } => format!("tx:{}", tx.txid_hex()),
+                    GossipMsg::TxAir { tx_bincode_hex } => {
+                        format!("txair:{}", &tx_bincode_hex[..tx_bincode_hex.len().min(32)])
+                    }
+                    GossipMsg::BlockAir { block_bincode_hex } => {
+                        format!(
+                            "blkair:{}",
+                            &block_bincode_hex[..block_bincode_hex.len().min(32)]
+                        )
+                    }
+                    GossipMsg::Tip {
+                        chain_id,
+                        height,
+                        tip_hash_hex,
+                    } => format!("tip:{chain_id}:{height}:{tip_hash_hex}"),
                     GossipMsg::Block { block } => format!("blk:{}", block.hash_hex()),
                     GossipMsg::BlockAck {
                         block_hash_hex,

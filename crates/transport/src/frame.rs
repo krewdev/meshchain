@@ -2,6 +2,12 @@
 //!
 //! Wire: MAGIC[2] | ver[1] | msg_type[1] | len[u16 LE] | payload[len]
 //! Total header = 6 bytes.
+//!
+//! **Air policy (v1):**
+//! - Everyday `Tx` (ed25519 only) → single LoRa frame when ≤ MAX_PAYLOAD
+//! - Full multi-tx blocks stay on **TCP only**
+//! - Over air: `Tip` + optional single-tx `Block` + signed `BlockAck`
+//! - Internet still used for faucet / scanner / Solana vault
 
 use meshchain_proto::block::Block;
 use meshchain_proto::tx::Tx;
@@ -13,6 +19,8 @@ pub const FRAME_VERSION: u8 = 1;
 pub const HEADER_LEN: usize = 6;
 /// Conservative max payload under Meshtastic LoRa limits.
 pub const MAX_PAYLOAD: usize = 200;
+/// Max txs sealed into a block when that block is also offered over air.
+pub const AIR_MAX_TXS_PER_BLOCK: usize = 1;
 
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -24,8 +32,14 @@ pub enum MsgType {
     SyncResp = 5,
     /// Fragment of a large payload (PQ sig / PqSigned envelope).
     Frag = 6,
-    /// JSON control / bridge hint (relayer)
+    /// Chain tip advertisement (height + tip hash) — mesh gossip without full state.
+    Tip = 7,
+    /// Compact block hint (height + hash) when full block won't fit air.
+    BlockHint = 8,
+    /// JSON control / bridge hint (relayer legacy)
     Control = 10,
+    /// Legacy: full JSON gossip blob (radio relay MSG_GOSSIP=20)
+    GossipJson = 20,
 }
 
 impl MsgType {
@@ -37,7 +51,10 @@ impl MsgType {
             4 => Some(Self::SyncReq),
             5 => Some(Self::SyncResp),
             6 => Some(Self::Frag),
+            7 => Some(Self::Tip),
+            8 => Some(Self::BlockHint),
             10 => Some(Self::Control),
+            20 => Some(Self::GossipJson),
             _ => None,
         }
     }
@@ -133,12 +150,102 @@ pub struct BlockAckPayload {
     pub height: u64,
     pub block_hash_hex: String,
     pub validator_pubkey_hex: String,
+    /// ed25519 signature hex (optional for legacy frames)
+    #[serde(default)]
+    pub signature_hex: String,
+}
+
+/// Compact tip for LoRa: nodes learn height without a full SyncResponse.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TipPayload {
+    pub chain_id: String,
+    pub height: u64,
+    /// 32-byte tip hash as hex
+    pub tip_hash_hex: String,
+}
+
+/// When a full block exceeds air MTU — advertise tip only.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct BlockHintPayload {
+    pub height: u64,
+    pub hash_hex: String,
+    pub producer_index: u8,
+    pub tx_count: u8,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ControlMsg {
     pub kind: String,
     pub body: serde_json::Value,
+}
+
+pub fn encode_tip(tip: &TipPayload) -> Result<Vec<u8>, FrameError> {
+    let body = bincode::serialize(tip).map_err(|e| FrameError::Codec(e.to_string()))?;
+    encode_frame(MsgType::Tip, &body)
+}
+
+pub fn decode_tip(frame: &Frame) -> Result<TipPayload, FrameError> {
+    if frame.msg_type != MsgType::Tip {
+        return Err(FrameError::Codec("not a tip frame".into()));
+    }
+    bincode::deserialize(&frame.payload).map_err(|e| FrameError::Codec(e.to_string()))
+}
+
+pub fn encode_block_hint(hint: &BlockHintPayload) -> Result<Vec<u8>, FrameError> {
+    let body = bincode::serialize(hint).map_err(|e| FrameError::Codec(e.to_string()))?;
+    encode_frame(MsgType::BlockHint, &body)
+}
+
+pub fn decode_block_hint(frame: &Frame) -> Result<BlockHintPayload, FrameError> {
+    if frame.msg_type != MsgType::BlockHint {
+        return Err(FrameError::Codec("not a block_hint frame".into()));
+    }
+    bincode::deserialize(&frame.payload).map_err(|e| FrameError::Codec(e.to_string()))
+}
+
+/// True if this block is small enough to send as a full Block frame on air.
+pub fn block_fits_air(block: &Block) -> bool {
+    if block.txs.len() > AIR_MAX_TXS_PER_BLOCK {
+        return false;
+    }
+    match encode_block(block) {
+        Ok(b) => b.len() <= HEADER_LEN + MAX_PAYLOAD,
+        Err(_) => false,
+    }
+}
+
+/// Prefer full block on air if 0–1 tx and fits; else block hint.
+pub fn encode_block_for_air(block: &Block) -> Result<Vec<u8>, FrameError> {
+    if block_fits_air(block) {
+        encode_block(block)
+    } else {
+        encode_block_hint(&BlockHintPayload {
+            height: block.header.height,
+            hash_hex: block.hash_hex(),
+            producer_index: block.header.producer_index,
+            tx_count: block.header.tx_count,
+        })
+    }
+}
+
+pub fn encode_block_ack(ack: &BlockAckPayload) -> Result<Vec<u8>, FrameError> {
+    let body = bincode::serialize(ack).map_err(|e| FrameError::Codec(e.to_string()))?;
+    encode_frame(MsgType::BlockAck, &body)
+}
+
+pub fn decode_block_ack(frame: &Frame) -> Result<BlockAckPayload, FrameError> {
+    if frame.msg_type != MsgType::BlockAck {
+        return Err(FrameError::Codec("not a block_ack frame".into()));
+    }
+    bincode::deserialize(&frame.payload).map_err(|e| FrameError::Codec(e.to_string()))
+}
+
+/// Everyday transfer without PQ usually fits one air frame.
+pub fn tx_fits_air(tx: &Tx) -> bool {
+    match encode_tx(tx) {
+        Ok(b) => b.len() <= HEADER_LEN + MAX_PAYLOAD,
+        Err(_) => false,
+    }
 }
 
 #[cfg(test)]
@@ -166,8 +273,22 @@ mod tests {
         .unwrap();
         let bytes = encode_tx(&tx).unwrap();
         assert!(bytes.len() < 220);
+        assert!(tx_fits_air(&tx));
         let frame = decode_frame(&bytes).unwrap();
         let tx2 = decode_tx(&frame).unwrap();
         assert_eq!(tx.txid(), tx2.txid());
+    }
+
+    #[test]
+    fn roundtrip_tip_frame() {
+        let tip = TipPayload {
+            chain_id: "meshchain-testnet-1".into(),
+            height: 42,
+            tip_hash_hex: "ab".repeat(32),
+        };
+        let bytes = encode_tip(&tip).unwrap();
+        assert!(bytes.len() < 120);
+        let frame = decode_frame(&bytes).unwrap();
+        assert_eq!(decode_tip(&frame).unwrap(), tip);
     }
 }

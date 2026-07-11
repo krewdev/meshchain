@@ -55,6 +55,11 @@ jobs:
           chmod +x scripts/e2e_multi_node.sh
           bash scripts/e2e_multi_node.sh
 
+      - name: Air path e2e (mock Meshtastic)
+        run: |
+          chmod +x scripts/e2e_air_path.sh scripts/start_radio_relay.sh
+          bash scripts/e2e_air_path.sh
+
       - name: Public seed HTTP smoke (best-effort)
         continue-on-error: true
         run: |

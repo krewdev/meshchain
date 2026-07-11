@@ -54,11 +54,13 @@ sudo EXTRA_PEERS=35.192.20.103:9100 /opt/meshchain/deploy/remote-bind-public.sh
 ## Known limitations
 
 1. **PoA, not open consensus** — seats are coordinator-approved; restack may wipe state.  
-2. **TCP gossip first** — Meshtastic path is sidecar/framing; finality is internet PoA today.  
-3. **Faucet is a hot minter** — capped, not a treasury; testnet only.  
-4. **Solana hybrid vault** — experimental on devnet; not mainnet-ready.  
+2. **Public finality is TCP PoA** — Meshtastic air path is first-class for **submit + tip + relay**; cloud seed still finalizes on TCP. Full LoRa-only validator set is next.  
+3. **Faucet is a hot minter** — capped, not a treasury; testnet only (**needs internet**).  
+4. **Solana hybrid vault** — experimental on devnet; not mainnet-ready (**needs internet**).  
 5. **Short ids are 8 bytes** — full pubkey always bound on register.  
-6. **No on-chain validator governance** — `mesh genesis-extend` + restack for set changes.
+6. **No on-chain validator governance** — `mesh genesis-extend` + restack for set changes.  
+
+**Meshtastic:** [docs/MESHTASTIC.md](MESHTASTIC.md) · `mesh send … --air` · `tools/mesh_radio_relay.py` · `scripts/e2e_air_path.sh`
 
 ## Operator quick paths
 

@@ -176,6 +176,26 @@ enum Commands {
         /// After --submit, wait and refresh local chain_state from data/v0
         #[arg(long, default_value_t = true)]
         wait: bool,
+        /// Meshtastic air path: submit via MC frame (tx_air + MCHEX) to peer or radio relay
+        #[arg(long, default_value_t = false)]
+        air: bool,
+        /// Radio relay inject address (default: submit peer or 127.0.0.1:9199)
+        #[arg(long, default_value = "")]
+        relay: String,
+    },
+
+    /// Submit last_payment.json over Meshtastic air path (MC frame → relay/validator)
+    #[command(name = "air-submit")]
+    AirSubmit {
+        /// Signed tx JSON (default data/last_payment.json)
+        #[arg(long, default_value = "")]
+        tx: String,
+        /// Validator or radio-relay host:port
+        #[arg(long, default_value = "")]
+        peer: String,
+        /// Alias for --peer (radio relay listen, default 127.0.0.1:9199)
+        #[arg(long, default_value = "")]
+        relay: String,
     },
 
     /// Show network height and total MESH
@@ -1013,6 +1033,43 @@ fn main() -> Result<()> {
             }
         }
 
+        Commands::AirSubmit { tx, peer, relay } => {
+            let tx_path = if tx.is_empty() {
+                dir.join("last_payment.json")
+            } else {
+                let p = PathBuf::from(&tx);
+                if p.is_absolute() || tx.contains('/') {
+                    p
+                } else {
+                    dir.join(tx)
+                }
+            };
+            if !tx_path.exists() {
+                bail!(
+                    "No signed tx at {}. First: mesh send …  then air-submit",
+                    tx_path.display()
+                );
+            }
+            let target = if !relay.is_empty() {
+                relay
+            } else if !peer.is_empty() {
+                peer
+            } else {
+                std::env::var("MESH_RADIO_RELAY").unwrap_or_else(|_| "127.0.0.1:9199".into())
+            };
+            println!("Air-submit {} → {target}", tx_path.display());
+            run_external_node(&[
+                "submit-tx",
+                "--tx",
+                tx_path.to_str().unwrap_or("last_payment.json"),
+                "--peer",
+                &target,
+                "--air",
+            ])?;
+            println!("Sent MC frame path (tx_air + MCHEX). Needs local validator + optional mesh_radio_relay.");
+            println!("Docs: docs/MESHTASTIC.md");
+        }
+
         Commands::Send {
             to,
             amount,
@@ -1022,6 +1079,8 @@ fn main() -> Result<()> {
             out,
             submit,
             wait,
+            air,
+            relay,
         } => {
             promote_v0_snapshot(&dir);
             let state_path = best_chain_state_path(&dir);
@@ -1109,7 +1168,37 @@ fn main() -> Result<()> {
             } else {
                 println!("  Radio:  one small packet (everyday send)");
             }
-            if let Some(peer) = submit {
+            if air {
+                let target = if !relay.is_empty() {
+                    relay
+                } else if let Some(ref p) = submit {
+                    p.clone()
+                } else {
+                    std::env::var("MESH_RADIO_RELAY").unwrap_or_else(|_| "127.0.0.1:9199".into())
+                };
+                println!("Air path → {target} (MC frame + mempool inject)");
+                run_external_node(&[
+                    "submit-tx",
+                    "--tx",
+                    out_path.to_str().unwrap_or("last_payment.json"),
+                    "--peer",
+                    &target,
+                    "--air",
+                ])?;
+                if wait {
+                    println!("Waiting for inclusion…");
+                    // Prefer TCP seed for state refresh if known
+                    let seed = submit.unwrap_or_else(|| default_submit_peer(&dir));
+                    refresh_after_submit(&dir, &seed);
+                    if let Ok(st2) = ChainState::load_json(&best_chain_state_path(&dir)) {
+                        println!(
+                            "Network now block #{} · your balance {} MESH",
+                            st2.height,
+                            fmt_mesh(st2.balance_of(&sid))
+                        );
+                    }
+                }
+            } else if let Some(peer) = submit {
                 submit_tx_to_peer(&out_path, &peer)?;
                 println!("Submitted to {peer}");
                 if wait {
@@ -1129,6 +1218,10 @@ fn main() -> Result<()> {
                 println!("Signed only. Submit with:");
                 println!(
                     "  mesh send {to} {amount} --wallet {wallet} --submit {peer}"
+                );
+                println!("  # or Meshtastic air path:");
+                println!(
+                    "  mesh send {to} {amount} --wallet {wallet} --air --relay 127.0.0.1:9199"
                 );
             }
         }

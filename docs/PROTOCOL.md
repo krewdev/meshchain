@@ -58,7 +58,9 @@ Source of truth for MESH balances is the mesh chain — internet is not required
 
 - Each block with `height > 0` mints `block_reward` to producer (inflation)
 
-## Transport (future)
+## Transport
 
-- Meshtastic private channel, framed packets  
-- Sim transport = in-process memory (current)
+- **TCP gossip** — multi-tx blocks, catch-up, public seed finality  
+- **Meshtastic air** — `MC` frames: Tx (1), Tip (7), BlockHint (8), ≤1-tx Block (2); see [MESHTASTIC.md](MESHTASTIC.md)  
+- Max air payload 200B; FRAG for PQ / large envelopes  
+- Sim transport = in-process memory (lab)
