@@ -69,3 +69,21 @@ export MESH_MINT_PEER=127.0.0.1:9100
 systemctl restart meshchain-testnet   # or host equivalent
 ./scripts/status_public_seed.sh
 ```
+
+## Ops: live smoke / observer / archive
+
+```bash
+# 1) Public e2e (join → wallet → faucet → balance)
+./scripts/test_public_e2e.sh
+
+# 2) External observer (any machine)
+mesh join-public
+meshchain-node run --data-dir ./data --observer \
+  --listen 0.0.0.0:9110 --peer 34.172.103.125:9100
+
+# 3) Merge block archives + tip checkpoint (on seed host data dir)
+./scripts/backfill_block_archive.sh /opt/meshchain/data/host
+# → data/.../blocks/MANIFEST.json + checkpoints/tip.json
+# Full blocks only exist from archive_first (post-integrity deploy).
+# Earlier heights: applied[] hashes only; observers use SyncResponse.
+```
