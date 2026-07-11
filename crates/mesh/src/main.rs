@@ -76,9 +76,19 @@ enum Commands {
     /// Pull chain_state.json from a scanner (light client sync)
     #[command(name = "sync-state")]
     SyncState {
-        /// Scanner base, e.g. http://34.172.103.125:8788
-        #[arg(long)]
+        /// Scanner base (default: seeds.json scanner_https / MESH_SCANNER)
+        #[arg(long, default_value = "")]
         scanner: String,
+    },
+
+    /// Request tMESH from the public faucet (testnet only)
+    #[command(name = "faucet-drip")]
+    FaucetDrip {
+        #[arg(long, default_value = "wallet.json")]
+        wallet: String,
+        /// Faucet base URL (default: seeds.json faucet_https)
+        #[arg(long, default_value = "")]
+        faucet: String,
     },
 
     /// Create a local DEV network (not the public testnet)
@@ -328,16 +338,67 @@ fn default_scanner_url(dir: &Path) -> Option<String> {
     ] {
         if let Ok(s) = fs::read_to_string(&seeds_path) {
             if let Ok(v) = serde_json::from_str::<serde_json::Value>(&s) {
-                if let Some(u) = v
-                    .pointer("/http/scanner")
-                    .and_then(|x| x.as_str())
-                {
-                    return Some(u.to_string());
+                // Prefer HTTPS when published
+                for key in ["/http/scanner_https", "/http/scanner"] {
+                    if let Some(u) = v.pointer(key).and_then(|x| x.as_str()) {
+                        if !u.is_empty() {
+                            return Some(u.to_string());
+                        }
+                    }
                 }
             }
         }
     }
     None
+}
+
+fn default_faucet_url(dir: &Path) -> Option<String> {
+    if let Ok(p) = std::env::var("MESH_FAUCET") {
+        if !p.is_empty() {
+            return Some(p);
+        }
+    }
+    for seeds_path in [
+        dir.join("seeds.json"),
+        PathBuf::from("testnet/seeds.json"),
+        PathBuf::from("testnet/published/seeds.json"),
+    ] {
+        if let Ok(s) = fs::read_to_string(&seeds_path) {
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&s) {
+                for key in ["/http/faucet_https", "/http/faucet"] {
+                    if let Some(u) = v.pointer(key).and_then(|x| x.as_str()) {
+                        if !u.is_empty() {
+                            return Some(u.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+fn http_post_json(url: &str, body: &str) -> Result<String> {
+    let out = Command::new("curl")
+        .args([
+            "-fsSL",
+            "--max-time",
+            "60",
+            "-H",
+            "Content-Type: application/json",
+            "-d",
+            body,
+            url,
+        ])
+        .output()
+        .context("curl failed")?;
+    if !out.status.success() {
+        bail!(
+            "HTTP POST failed ({url}): {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+    String::from_utf8(out.stdout).context("response not utf-8")
 }
 
 fn sync_state_from_scanner(dir: &Path, scanner_base: &str) -> Result<ChainState> {
@@ -546,13 +607,26 @@ fn print_testnet_info(dir: &Path) -> Result<()> {
     println!("║         meshchain-testnet-1                      ║");
     println!("╚══════════════════════════════════════════════════╝");
     println!();
-    println!("Status:     active (software testnet)");
+    println!("Status:     active (public seed live)");
     println!("Token:      tMESH — NO CASH VALUE");
     println!("chain_id:   meshchain-testnet-1");
     println!("Channel:    MeshChain-Testnet-1  (private Meshtastic)");
     println!("Solana:     devnet only for bridge experiments");
     println!("Docs:       https://meshchain-sigma.vercel.app/docs/?doc=TESTNET");
+    println!("Run a node: https://meshchain-sigma.vercel.app/docs/?doc=RUN_A_NODE");
     println!("Params:     https://meshchain-sigma.vercel.app/testnet/network.json");
+    println!("Seeds:      https://meshchain-sigma.vercel.app/testnet/seeds.json");
+    println!("Submit:     {}", default_submit_peer(dir));
+    if let Some(s) = default_scanner_url(dir) {
+        println!("Scanner:    {s}");
+    }
+    if let Some(f) = default_faucet_url(dir) {
+        println!("Faucet:     {f}");
+    }
+    println!();
+    println!("Join:       mesh join-public");
+    println!("Wallet:     mesh new-wallet --name me.json --publish");
+    println!("Drip:       mesh faucet-drip --wallet me.json");
     println!();
 
     let profile = dir.join("testnet_profile.json");
@@ -656,26 +730,78 @@ fn main() -> Result<()> {
                     }
                 }
             }
+            let faucet = default_faucet_url(&dir);
             println!();
             println!("Done. Public seed peer: {peer}");
             println!("Next:");
-            println!("  mesh new-wallet --name me.json");
-            println!("  mesh register --wallet data/keys/me.json --submit {peer}");
-            if let Some(sc) = scanner {
-                println!("  mesh sync-state --scanner {sc}");
-                println!("  Faucet/scanner: see {sc}");
+            println!("  mesh new-wallet --name me.json --publish");
+            println!("  mesh faucet-drip --wallet me.json");
+            println!("  mesh balance --wallet me.json");
+            if let Some(sc) = &scanner {
+                println!("  Scanner: {sc}");
+            }
+            if let Some(f) = faucet {
+                println!("  Faucet:  {f}");
             }
             println!("  Docs: docs/RUN_A_NODE.md");
         }
 
         Commands::SyncState { scanner } => {
-            let st = sync_state_from_scanner(&dir, &scanner)?;
+            let sc = if scanner.is_empty() {
+                default_scanner_url(&dir).context(
+                    "No scanner URL. Pass --scanner http://HOST:8788 or set MESH_SCANNER / join-public first.",
+                )?
+            } else {
+                scanner
+            };
+            let st = sync_state_from_scanner(&dir, &sc)?;
             println!(
                 "Network {} · block #{} · supply {}",
                 st.chain_id,
                 st.height,
                 fmt_mesh(st.total_supply)
             );
+        }
+
+        Commands::FaucetDrip { wallet, faucet } => {
+            let wpath = wallet_path(&dir, &wallet);
+            let kp = load_wallet(&wpath)?;
+            let pub_hex = hex::encode(kp.public_key());
+            let sid = short_id(&kp.public_key());
+            let name = mesh_name(&sid);
+            let faucet_base = if faucet.is_empty() {
+                default_faucet_url(&dir).context(
+                    "No faucet URL. Pass --faucet https://… or set MESH_FAUCET / join-public first.",
+                )?
+            } else {
+                faucet
+            };
+            let faucet_base = faucet_base.trim_end_matches('/');
+            // Allow either base or base/info
+            let drip_url = if faucet_base.ends_with("/drip") {
+                faucet_base.to_string()
+            } else {
+                format!("{faucet_base}/drip")
+            };
+            let body = serde_json::json!({
+                "mesh_name": name,
+                "public_key_hex": pub_hex,
+            });
+            println!("Requesting faucet drip for {name} …");
+            println!("  POST {drip_url}");
+            let resp = http_post_json(&drip_url, &serde_json::to_string(&body)?)?;
+            println!("{resp}");
+            if let Some(sc) = default_scanner_url(&dir) {
+                thread::sleep(Duration::from_secs(3));
+                let _ = sync_state_from_scanner(&dir, &sc);
+                if let Ok(st) = ChainState::load_json(&dir.join("chain_state.json")) {
+                    println!(
+                        "Balance now: {} tMESH (block #{})",
+                        fmt_mesh(st.balance_of(&sid)),
+                        st.height
+                    );
+                }
+            }
         }
 
         Commands::Setup { validators } => {

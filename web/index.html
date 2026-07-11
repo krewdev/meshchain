@@ -178,14 +178,15 @@
         <div class="panel" style="margin-top:1.25rem">
 <pre><span class="prompt">$</span> <span class="cmd">git clone https://github.com/krewdev/meshchain.git && cd meshchain</span>
 <span class="prompt">$</span> <span class="cmd">cargo build -p mesh -p meshchain-node</span>
-<span class="prompt">$</span> <span class="cmd">./target/debug/mesh testnet-setup && ./target/debug/mesh demo</span>
-<span class="prompt">$</span> <span class="cmd">./scripts/start_testnet_host.sh   # validators + faucet</span></pre>
+<span class="prompt">$</span> <span class="cmd">./target/debug/mesh join-public</span>
+<span class="prompt">$</span> <span class="cmd">./target/debug/mesh new-wallet --name me.json --publish</span>
+<span class="prompt">$</span> <span class="cmd">./target/debug/mesh faucet-drip --wallet me.json</span></pre>
         </div>
         <p style="margin-top:1.25rem">
           <a class="btn btn-primary" href="/docs/?doc=RUN_A_NODE">Run a node</a>
+          <a class="btn btn-ghost" href="https://34.172.103.125.sslip.io/" style="margin-left:0.5rem">Live scanner</a>
+          <a class="btn btn-ghost" href="https://faucet.34.172.103.125.sslip.io/info" style="margin-left:0.5rem">Live faucet</a>
           <a class="btn btn-ghost" href="/docs/?doc=TESTNET" style="margin-left:0.5rem">Testnet guide</a>
-          <a class="btn btn-ghost" href="/faucet/" style="margin-left:0.5rem">tMESH Faucet</a>
-          <a class="btn btn-ghost" href="/docs/?doc=E2E_TESTNET" style="margin-left:0.5rem">E2E results</a>
         </p>
       </div>
     </section>

@@ -22,16 +22,32 @@ MeshChain is an open-source **mesh-native ledger** and wallet toolkit. Everyday 
 | Token | tMESH |
 | Channel | `MeshChain-Testnet-1` |
 | Solana | **devnet** for bridge experiments |
-| Params | [`testnet/network.json`](./testnet/network.json) |
+| Seed peer | `34.172.103.125:9100` |
+| Scanner | https://34.172.103.125.sslip.io/ |
+| Faucet | https://faucet.34.172.103.125.sslip.io/info |
+| Params | [`testnet/network.json`](./testnet/network.json) · [`seeds.json`](./testnet/seeds.json) |
+
+### Join the **shared** public seed (recommended)
 
 ```bash
+git clone https://github.com/krewdev/meshchain.git && cd meshchain
 cargo build -p mesh -p meshchain-node
-./target/debug/mesh testnet-setup
-./target/debug/mesh testnet-info
-./target/debug/mesh demo
+
+./target/debug/mesh join-public
+./target/debug/mesh new-wallet --name me.json --publish
+./target/debug/mesh faucet-drip --wallet me.json
+./target/debug/mesh balance --wallet me.json
 ```
 
-Guide: [docs/TESTNET.md](./docs/TESTNET.md) · **[Run a node](./docs/RUN_A_NODE.md)** (wallets, observers, validators)
+### Local-only lab (your own chain)
+
+```bash
+./target/debug/mesh testnet-setup
+./target/debug/mesh demo
+./scripts/start_testnet_host.sh   # optional local validators + faucet
+```
+
+Guide: [docs/TESTNET.md](./docs/TESTNET.md) · **[Run a node](./docs/RUN_A_NODE.md)** · [Cloud](./docs/CLOUD.md)
 
 ---
 
