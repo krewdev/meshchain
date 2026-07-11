@@ -473,4 +473,176 @@ mod tests {
         // supply unchanged by fee transfer
         assert_eq!(st.total_supply, 100 * ONE_MESH);
     }
+
+    fn setup_two_party() -> (ChainState, Keypair, Keypair, Keypair) {
+        let alice = Keypair::generate();
+        let bob = Keypair::generate();
+        let producer = Keypair::generate();
+        let genesis = GenesisConfig {
+            chain_id: "test".into(),
+            validators: vec![hex::encode(producer.public_key())],
+            block_reward: 0,
+            allocations: vec![
+                GenesisAccount {
+                    public_key_hex: hex::encode(alice.public_key()),
+                    balance: 50 * ONE_MESH,
+                },
+                GenesisAccount {
+                    public_key_hex: hex::encode(bob.public_key()),
+                    balance: 0,
+                },
+            ],
+            minters: vec![],
+            slot_secs: 1,
+            pq_required_above: 1000 * ONE_MESH,
+        };
+        let mut st = ChainState::from_genesis(&genesis).unwrap();
+        let gblock =
+            meshchain_proto::block::Block::new(0, [0u8; 32], 1, 0, &producer, vec![]).unwrap();
+        st.apply_block(&gblock).unwrap();
+        (st, alice, bob, producer)
+    }
+
+    #[test]
+    fn rejects_double_spend_same_nonce() {
+        let (mut st, alice, bob, producer) = setup_two_party();
+        let from = short_id(&alice.public_key());
+        let to = short_id(&bob.public_key());
+        let body = TxBody::Transfer {
+            nonce: 0,
+            from,
+            to,
+            amount: ONE_MESH,
+            fee: 0,
+        };
+        let tx1 = Tx::sign(body.clone(), &alice).unwrap();
+        let block1 =
+            meshchain_proto::block::Block::new(1, st.tip_hash, 2, 0, &producer, vec![tx1])
+                .unwrap();
+        st.apply_block(&block1).unwrap();
+
+        let tx2 = Tx::sign(body, &alice).unwrap(); // same nonce 0
+        let block2 =
+            meshchain_proto::block::Block::new(2, st.tip_hash, 3, 0, &producer, vec![tx2])
+                .unwrap();
+        let err = st.apply_block(&block2).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("nonce") || msg.contains("invalid"),
+            "expected nonce error, got {msg}"
+        );
+    }
+
+    #[test]
+    fn rejects_overspend() {
+        let (mut st, alice, bob, producer) = setup_two_party();
+        let from = short_id(&alice.public_key());
+        let to = short_id(&bob.public_key());
+        let body = TxBody::Transfer {
+            nonce: 0,
+            from,
+            to,
+            amount: 51 * ONE_MESH,
+            fee: 0,
+        };
+        let tx = Tx::sign(body, &alice).unwrap();
+        let block =
+            meshchain_proto::block::Block::new(1, st.tip_hash, 2, 0, &producer, vec![tx]).unwrap();
+        let err = st.apply_block(&block).unwrap_err();
+        assert!(
+            err.to_string().to_lowercase().contains("balance")
+                || err.to_string().to_lowercase().contains("insufficient"),
+            "got {}",
+            err
+        );
+    }
+
+    #[test]
+    fn rejects_unauthorized_mint() {
+        let (mut st, _alice, bob, producer) = setup_two_party();
+        let stranger = Keypair::generate();
+        let to = short_id(&bob.public_key());
+        // Ensure stranger has an account for minter nonce bookkeeping path
+        st.ensure_account(&stranger.public_key());
+        let body = TxBody::Mint {
+            nonce: 0,
+            to,
+            amount: ONE_MESH,
+            external_ref: [1u8; 16],
+        };
+        let tx = Tx::sign(body, &stranger).unwrap();
+        let block =
+            meshchain_proto::block::Block::new(1, st.tip_hash, 2, 0, &producer, vec![tx]).unwrap();
+        let err = st.apply_block(&block).unwrap_err();
+        assert!(
+            err.to_string().to_lowercase().contains("mint")
+                || err.to_string().to_lowercase().contains("unauthor"),
+            "got {}",
+            err
+        );
+    }
+
+    #[test]
+    fn authorized_validator_can_mint() {
+        let (mut st, _alice, bob, producer) = setup_two_party();
+        let to = short_id(&bob.public_key());
+        let minter_sid = short_id(&producer.public_key());
+        let nonce = st.account(&minter_sid).map(|a| a.nonce).unwrap_or(0);
+        let body = TxBody::Mint {
+            nonce,
+            to,
+            amount: 5 * ONE_MESH,
+            external_ref: [2u8; 16],
+        };
+        let tx = Tx::sign(body, &producer).unwrap();
+        let block =
+            meshchain_proto::block::Block::new(1, st.tip_hash, 2, 0, &producer, vec![tx]).unwrap();
+        st.apply_block(&block).unwrap();
+        assert_eq!(st.balance_of(&to), 5 * ONE_MESH);
+        assert_eq!(st.total_supply, 55 * ONE_MESH);
+    }
+
+    #[test]
+    fn rejects_unknown_recipient() {
+        let (mut st, alice, _bob, producer) = setup_two_party();
+        let ghost = Keypair::generate();
+        let from = short_id(&alice.public_key());
+        let to = short_id(&ghost.public_key());
+        let body = TxBody::Transfer {
+            nonce: 0,
+            from,
+            to,
+            amount: ONE_MESH,
+            fee: 0,
+        };
+        let tx = Tx::sign(body, &alice).unwrap();
+        let block =
+            meshchain_proto::block::Block::new(1, st.tip_hash, 2, 0, &producer, vec![tx]).unwrap();
+        let err = st.apply_block(&block).unwrap_err();
+        assert!(
+            err.to_string().to_lowercase().contains("account")
+                || err.to_string().to_lowercase().contains("not found"),
+            "got {}",
+            err
+        );
+    }
+
+    #[test]
+    fn fee_plus_amount_cannot_exceed_balance() {
+        let (mut st, alice, bob, producer) = setup_two_party();
+        let from = short_id(&alice.public_key());
+        let to = short_id(&bob.public_key());
+        // 50 MESH total, try 49.9 + 0.2 fee
+        let body = TxBody::Transfer {
+            nonce: 0,
+            from,
+            to,
+            amount: 49 * ONE_MESH + ONE_MESH * 9 / 10,
+            fee: ONE_MESH / 5,
+        };
+        let tx = Tx::sign(body, &alice).unwrap();
+        let block =
+            meshchain_proto::block::Block::new(1, st.tip_hash, 2, 0, &producer, vec![tx]).unwrap();
+        assert!(st.apply_block(&block).is_err());
+    }
 }

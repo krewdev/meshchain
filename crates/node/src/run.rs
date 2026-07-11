@@ -210,38 +210,37 @@ pub fn run_validator(cfg: RunConfig) -> Result<()> {
                 } => {
                     if chain_id == state.chain_id && state.height > have_height {
                         if let Ok(state_json) = serde_json::to_string(&state) {
-                            let _ = hub.broadcast(&GossipMsg::SyncResponse {
-                                chain_id: state.chain_id.clone(),
-                                height: state.height,
-                                state_json,
-                            });
-                            println!(
-                                "sync: served snapshot height={} to peer (they had {have_height})",
-                                state.height
-                            );
+                            if state_json.len() <= crate::sync_validate::MAX_SYNC_JSON_BYTES {
+                                let _ = hub.broadcast(&GossipMsg::SyncResponse {
+                                    chain_id: state.chain_id.clone(),
+                                    height: state.height,
+                                    tip_hash_hex: hex::encode(state.tip_hash),
+                                    state_json,
+                                });
+                                println!(
+                                    "sync: served snapshot height={} to peer (they had {have_height})",
+                                    state.height
+                                );
+                            } else {
+                                eprintln!("sync: local state too large to serve");
+                            }
                         }
                     }
                 }
                 GossipMsg::SyncResponse {
                     chain_id,
                     height,
+                    tip_hash_hex,
                     state_json,
                 } => {
-                    if chain_id != state.chain_id {
-                        continue;
-                    }
-                    if height <= state.height {
-                        continue;
-                    }
-                    match serde_json::from_str::<ChainState>(&state_json) {
+                    match crate::sync_validate::accept_sync_snapshot(
+                        &state,
+                        &chain_id,
+                        height,
+                        &tip_hash_hex,
+                        &state_json,
+                    ) {
                         Ok(incoming) => {
-                            if incoming.chain_id != state.chain_id {
-                                continue;
-                            }
-                            if incoming.validators != state.validators {
-                                eprintln!("sync: reject snapshot (validator set mismatch)");
-                                continue;
-                            }
                             println!(
                                 "sync: applying snapshot {} → {} (catch-up)",
                                 state.height, incoming.height
@@ -253,7 +252,12 @@ pub fn run_validator(cfg: RunConfig) -> Result<()> {
                                 eprintln!("sync: save failed: {e}");
                             }
                         }
-                        Err(e) => eprintln!("sync: bad snapshot: {e}"),
+                        Err(e) => {
+                            // common when not lagging — keep quiet for "not ahead"
+                            if e != "not ahead of local height" {
+                                eprintln!("sync: reject snapshot: {e}");
+                            }
+                        }
                     }
                 }
                 GossipMsg::Ping | GossipMsg::Pong => {}

@@ -4,6 +4,7 @@ mod consensus;
 mod net;
 mod run;
 mod sim;
+mod sync_validate;
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};

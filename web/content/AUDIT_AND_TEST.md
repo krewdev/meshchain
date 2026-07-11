@@ -193,6 +193,7 @@ Deliverables: findings severity list, PoC for criticals, retest after fixes.
 ```bash
 # Unit
 cargo test --workspace
+cargo test -p meshchain-node   # sync snapshot validation
 
 # Local integration
 ./target/debug/mesh testnet-setup && ./target/debug/mesh demo
@@ -204,3 +205,8 @@ cargo test --workspace
 # Security posture printout
 ./target/debug/mesh security
 ```
+
+### Scheduled CI
+
+- **CI** on every PR/push: unit tests + join-public dry-run  
+- **Public seed health** every 6h: `seed-health.yml` → status + full public e2e

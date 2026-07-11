@@ -26,7 +26,9 @@ jobs:
         run: cargo build -p meshchain-proto -p meshchain-ledger -p meshchain-node -p mesh -p meshchain-scanner -p meshchain-transport
 
       - name: Unit tests
-        run: cargo test -p meshchain-proto -p meshchain-ledger -p meshchain-transport -- --nocapture
+        run: |
+          cargo test -p meshchain-proto -p meshchain-ledger -p meshchain-transport -- --nocapture
+          cargo test -p meshchain-node -- --nocapture
 
       - name: CLI help smoke
         run: |

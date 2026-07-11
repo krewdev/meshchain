@@ -42,6 +42,9 @@ pub enum GossipMsg {
     SyncResponse {
         chain_id: String,
         height: u64,
+        /// Must equal hex(state.tip_hash) — rejects tampered payloads.
+        #[serde(default)]
+        tip_hash_hex: String,
         state_json: String,
     },
     Ping,
@@ -198,8 +201,9 @@ fn read_peer(stream: TcpStream, tx: Sender<GossipMsg>, seen: Arc<Mutex<HashSet<S
                     GossipMsg::SyncResponse {
                         chain_id,
                         height,
+                        tip_hash_hex,
                         ..
-                    } => format!("syncres:{chain_id}:{height}"),
+                    } => format!("syncres:{chain_id}:{height}:{tip_hash_hex}"),
                     GossipMsg::Ping => continue,
                     GossipMsg::Pong => continue,
                 };
