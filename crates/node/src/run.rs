@@ -1,17 +1,19 @@
 //! Multi-machine validator run loop (TCP gossip + Meshtastic-ready framing notes).
 
-use crate::consensus::{leader_index, produce_block, FinalityTracker};
+use crate::consensus::{
+    leader_index, produce_block, sign_block_ack, verify_block_ack, FinalityTracker,
+};
 use crate::net::{GossipHub, GossipMsg};
 use anyhow::{bail, Context, Result};
 use meshchain_ledger::genesis::GenesisConfig;
 use meshchain_ledger::state::ChainState;
-use meshchain_proto::block::Block;
+use meshchain_proto::block::{Block, MAX_TXS_PER_BLOCK};
 use meshchain_proto::crypto::{Keypair, PublicKey};
 use meshchain_proto::tx::Tx;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs;
 use std::net::SocketAddr;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -47,6 +49,37 @@ fn genesis_validator_set(genesis: &GenesisConfig) -> Result<HashSet<PublicKey>> 
     Ok(set)
 }
 
+fn blocks_dir(data_dir: &Path) -> PathBuf {
+    data_dir.join("blocks")
+}
+
+fn save_finalized_block(data_dir: &Path, block: &Block) -> Result<()> {
+    let dir = blocks_dir(data_dir);
+    fs::create_dir_all(&dir)?;
+    let path = dir.join(format!("{}.json", block.header.height));
+    let tmp = path.with_extension("json.tmp");
+    fs::write(&tmp, serde_json::to_string(block)?)?;
+    fs::rename(tmp, path)?;
+    Ok(())
+}
+
+fn load_finalized_blocks(data_dir: &Path, from_height: u64, max_blocks: u32) -> Vec<Block> {
+    let dir = blocks_dir(data_dir);
+    let mut out = Vec::new();
+    let max = max_blocks.clamp(1, 128) as u64;
+    for h in from_height..from_height.saturating_add(max) {
+        let path = dir.join(format!("{h}.json"));
+        if !path.exists() {
+            break;
+        }
+        match fs::read_to_string(&path).ok().and_then(|s| serde_json::from_str(&s).ok()) {
+            Some(b) => out.push(b),
+            None => break,
+        }
+    }
+    out
+}
+
 pub fn run_validator(cfg: RunConfig) -> Result<()> {
     let genesis_path = cfg.data_dir.join("genesis.json");
     let genesis: GenesisConfig = serde_json::from_str(
@@ -55,6 +88,7 @@ pub fn run_validator(cfg: RunConfig) -> Result<()> {
     )?;
     let n = genesis.validators.len();
     let authorized = genesis_validator_set(&genesis)?;
+    let protocol_version = genesis.protocol_version;
 
     let observer = cfg.observer;
     let (keypair, my_index): (Option<Keypair>, Option<u8>) = if observer {
@@ -99,10 +133,12 @@ pub fn run_validator(cfg: RunConfig) -> Result<()> {
     let mut finality = FinalityTracker::new();
     let mut mempool: VecDeque<Tx> = VecDeque::new();
     let mut pending: HashMap<String, Block> = HashMap::new();
+    /// height -> first seen block hash (equivocation detect)
+    let mut seen_at_height: HashMap<u64, String> = HashMap::new();
 
     if observer {
         println!(
-            "observer online chain={} listen={} peers={:?} height={}",
+            "observer online chain={} listen={} peers={:?} height={} proto={protocol_version}",
             genesis.chain_id, cfg.listen, cfg.peers, state.height
         );
         println!("role: full node (relay only — not in PoA set)");
@@ -110,12 +146,12 @@ pub fn run_validator(cfg: RunConfig) -> Result<()> {
         let idx = my_index.unwrap();
         let kp = keypair.as_ref().unwrap();
         println!(
-            "validator {idx} online chain={} listen={} peers={:?} height={}",
+            "validator {idx} online chain={} listen={} peers={:?} height={} proto={protocol_version}",
             genesis.chain_id, cfg.listen, cfg.peers, state.height
         );
         println!("pubkey {}", hex::encode(kp.public_key()));
     }
-    println!("gossip: TCP line-JSON (Tx / Block / BlockAck / Sync*)");
+    println!("gossip: TCP line-JSON (Tx / Block / BlockAck / Sync* / Blocks*)");
     println!("docs: docs/RUN_A_NODE.md");
 
     let _ = hub.broadcast(&GossipMsg::Hello {
@@ -126,17 +162,49 @@ pub fn run_validator(cfg: RunConfig) -> Result<()> {
             .unwrap_or_else(|| "observer".into()),
         chain_id: genesis.chain_id.clone(),
         height: state.height,
+        protocol_version,
     });
-    // Delay first SyncRequest so bootstrap dials can finish (empty peer list race).
-    let mut last_slot = now_secs();
-    let mut last_sync_req = now_secs().saturating_sub(55); // first request ~5s after start
+    let mut last_slot = now_secs().saturating_sub(slot_clock_init(&genesis));
+    let mut last_sync_req = now_secs().saturating_sub(55);
+    let mut last_blocks_req = now_secs().saturating_sub(50);
     let slot_secs = genesis.slot_secs.max(1);
+
+    // Seal genesis (height 0) immediately if we are leader and chain is empty.
+    if !observer && state.applied.is_empty() {
+        let my_idx = my_index.unwrap();
+        if leader_index(0, n) == my_idx {
+            if let Some(kp) = keypair.as_ref() {
+                match produce_block(&state, kp, my_idx, now_secs(), vec![]) {
+                    Ok(block) => {
+                        println!("propose height=0 (genesis seal)");
+                        let _ = hub.broadcast(&GossipMsg::Block {
+                            block: block.clone(),
+                        });
+                        on_block(
+                            &mut state,
+                            &mut finality,
+                            &mut pending,
+                            &mut seen_at_height,
+                            &hub,
+                            Some(kp),
+                            &authorized,
+                            block,
+                            n,
+                            &state_path,
+                            &cfg.data_dir,
+                        )?;
+                    }
+                    Err(e) => eprintln!("genesis produce error: {e}"),
+                }
+            }
+        }
+    }
 
     loop {
         while let Some(msg) = hub.try_recv() {
             match msg {
                 GossipMsg::Tx { tx } => {
-                    if tx.verify().is_ok() {
+                    if tx.verify().is_ok() && state.can_apply_tx(&tx) {
                         let id = tx.txid_hex();
                         if !mempool.iter().any(|t| t.txid_hex() == id) {
                             mempool.push_back(tx.clone());
@@ -149,25 +217,29 @@ pub fn run_validator(cfg: RunConfig) -> Result<()> {
                         &mut state,
                         &mut finality,
                         &mut pending,
+                        &mut seen_at_height,
                         &hub,
                         keypair.as_ref(),
                         &authorized,
                         block,
                         n,
                         &state_path,
+                        &cfg.data_dir,
                     )?;
                 }
                 GossipMsg::BlockAck {
                     block_hash_hex,
                     validator_pubkey_hex,
+                    signature_hex,
                     ..
                 } => {
-                    // Only genesis validators count toward finality (ignore observer noise).
                     if let Ok(pk_bytes) = hex::decode(&validator_pubkey_hex) {
                         if pk_bytes.len() == 32 {
                             let mut pk = [0u8; 32];
                             pk.copy_from_slice(&pk_bytes);
-                            if authorized.contains(&pk) {
+                            if authorized.contains(&pk)
+                                && verify_block_ack(&pk, &block_hash_hex, &signature_hex)
+                            {
                                 finality.ack(&block_hash_hex, pk);
                             }
                         }
@@ -179,24 +251,34 @@ pub fn run_validator(cfg: RunConfig) -> Result<()> {
                         &block_hash_hex,
                         n,
                         &state_path,
+                        &cfg.data_dir,
                     )?;
                 }
                 GossipMsg::Hello {
                     validator_index,
                     height,
                     chain_id,
+                    protocol_version: peer_proto,
                     ..
                 } => {
+                    if peer_proto != 0 && peer_proto != protocol_version {
+                        eprintln!(
+                            "peer hello v{validator_index} protocol_version={peer_proto} (local {protocol_version}) — may be incompatible"
+                        );
+                    }
                     println!(
                         "peer hello v{validator_index} height={height} chain={chain_id} peers={}",
                         hub.peer_count()
                     );
-                    // Catch-up if peer is ahead
                     if chain_id == state.chain_id && height > state.height {
-                        let _ = hub.broadcast(&GossipMsg::SyncRequest {
-                            chain_id: state.chain_id.clone(),
-                            have_height: state.height,
-                        });
+                        request_blocks_catchup(&hub, &state, &cfg.data_dir);
+                        last_blocks_req = now_secs();
+                        if observer {
+                            let _ = hub.broadcast(&GossipMsg::SyncRequest {
+                                chain_id: state.chain_id.clone(),
+                                have_height: state.height,
+                            });
+                        }
                     }
                 }
                 GossipMsg::SyncRequest {
@@ -204,6 +286,16 @@ pub fn run_validator(cfg: RunConfig) -> Result<()> {
                     have_height,
                 } => {
                     if chain_id == state.chain_id && state.height > have_height {
+                        // Prefer block-range catch-up (safe for producers to re-apply).
+                        let blocks =
+                            load_finalized_blocks(&cfg.data_dir, have_height.saturating_add(1), 64);
+                        if !blocks.is_empty() {
+                            let _ = hub.broadcast(&GossipMsg::BlocksResponse {
+                                chain_id: state.chain_id.clone(),
+                                blocks,
+                            });
+                        }
+                        // Also serve snapshot for observers (apply path is observer-only).
                         if let Ok(state_json) = serde_json::to_string(&state) {
                             if state_json.len() <= crate::sync_validate::MAX_SYNC_JSON_BYTES {
                                 let _ = hub.broadcast(&GossipMsg::SyncResponse {
@@ -212,12 +304,6 @@ pub fn run_validator(cfg: RunConfig) -> Result<()> {
                                     tip_hash_hex: hex::encode(state.tip_hash),
                                     state_json,
                                 });
-                                println!(
-                                    "sync: served snapshot height={} to peer (they had {have_height})",
-                                    state.height
-                                );
-                            } else {
-                                eprintln!("sync: local state too large to serve");
                             }
                         }
                     }
@@ -228,6 +314,10 @@ pub fn run_validator(cfg: RunConfig) -> Result<()> {
                     tip_hash_hex,
                     state_json,
                 } => {
+                    // Producers never replace live state from gossip snapshots.
+                    if !observer {
+                        continue;
+                    }
                     match crate::sync_validate::accept_sync_snapshot(
                         &state,
                         &chain_id,
@@ -243,26 +333,113 @@ pub fn run_validator(cfg: RunConfig) -> Result<()> {
                             state = incoming;
                             pending.clear();
                             finality = FinalityTracker::new();
+                            seen_at_height.clear();
                             if let Err(e) = state.save_json(&state_path) {
                                 eprintln!("sync: save failed: {e}");
                             }
                         }
                         Err(e) => {
-                            // common when not lagging — keep quiet for "not ahead"
                             if e != "not ahead of local height" {
                                 eprintln!("sync: reject snapshot: {e}");
                             }
                         }
                     }
                 }
+                GossipMsg::BlocksRequest {
+                    chain_id,
+                    from_height,
+                    max_blocks,
+                } => {
+                    if chain_id == state.chain_id {
+                        let blocks =
+                            load_finalized_blocks(&cfg.data_dir, from_height, max_blocks);
+                        if !blocks.is_empty() {
+                            println!(
+                                "blocks: serve {} from height {} (req max={max_blocks})",
+                                blocks.len(),
+                                from_height
+                            );
+                            let _ = hub.broadcast(&GossipMsg::BlocksResponse {
+                                chain_id: state.chain_id.clone(),
+                                blocks,
+                            });
+                        }
+                    }
+                }
+                GossipMsg::BlocksResponse { chain_id, blocks } => {
+                    if chain_id != state.chain_id || blocks.is_empty() {
+                        continue;
+                    }
+                    let mut applied_n = 0u32;
+                    for block in blocks {
+                        let expected = if state.applied.is_empty() {
+                            0
+                        } else {
+                            state.height + 1
+                        };
+                        if block.header.height < expected {
+                            continue;
+                        }
+                        if block.header.height > expected {
+                            // Gap — stop; will re-request from expected later.
+                            break;
+                        }
+                        if block.verify_producer_sig().is_err() {
+                            eprintln!(
+                                "blocks: reject height {} bad producer sig",
+                                block.header.height
+                            );
+                            break;
+                        }
+                        if !authorized.contains(&block.header.producer) {
+                            eprintln!(
+                                "blocks: reject height {} unknown producer",
+                                block.header.height
+                            );
+                            break;
+                        }
+                        match state.apply_block(&block) {
+                            Ok(()) => {
+                                let _ = save_finalized_block(&cfg.data_dir, &block);
+                                applied_n += 1;
+                            }
+                            Err(e) => {
+                                eprintln!(
+                                    "blocks: apply height {} failed: {e}",
+                                    block.header.height
+                                );
+                                break;
+                            }
+                        }
+                    }
+                    if applied_n > 0 {
+                        if let Err(e) = state.save_json(&state_path) {
+                            eprintln!("blocks: save state failed: {e}");
+                        }
+                        println!(
+                            "blocks: catch-up applied {applied_n} → height={}",
+                            state.height
+                        );
+                        // Clear mempool txs that no longer apply.
+                        mempool.retain(|t| state.can_apply_tx(t));
+                    }
+                }
                 GossipMsg::Ping | GossipMsg::Pong => {}
-                // Future: block_hint from radio relay ignored
             }
         }
 
         let now = now_secs();
-        // Observers / lagging nodes re-request sync periodically (and soon after boot).
-        if now.saturating_sub(last_sync_req) >= 60 || (observer && now.saturating_sub(last_sync_req) >= 5 && hub.peer_count() > 0 && state.height == 0) {
+        // Periodic catch-up for lagging producers and observers.
+        if now.saturating_sub(last_blocks_req) >= 15 && hub.peer_count() > 0 {
+            last_blocks_req = now;
+            request_blocks_catchup(&hub, &state, &cfg.data_dir);
+        }
+        if now.saturating_sub(last_sync_req) >= 60
+            || (observer
+                && now.saturating_sub(last_sync_req) >= 5
+                && hub.peer_count() > 0
+                && state.height == 0)
+        {
             last_sync_req = now;
             if hub.peer_count() > 0 {
                 let _ = hub.broadcast(&GossipMsg::SyncRequest {
@@ -278,9 +455,16 @@ pub fn run_validator(cfg: RunConfig) -> Result<()> {
                 }
             }
         }
+
+        // Drop stale mempool entries that no longer apply.
+        if mempool.len() > 256 {
+            mempool.retain(|t| state.can_apply_tx(t));
+            while mempool.len() > 256 {
+                mempool.pop_front();
+            }
+        }
+
         let slot_due = now >= last_slot + slot_secs;
-        // Fast path: any pending tx can be proposed without waiting full slot_secs.
-        // Higher fees still win ordering (MEV-style tip auction).
         let mempool_boost = !mempool.is_empty();
         let best_fee = mempool
             .iter()
@@ -303,21 +487,20 @@ pub fn run_validator(cfg: RunConfig) -> Result<()> {
                 if !already_applied && !already_pending {
                     let mut txs = vec![];
                     if next_height > 0 {
-                        // Highest priority fee first (then txid for deterministic tie-break).
-                        if let Some(tx) = take_highest_fee_tx(&mut mempool) {
-                            if tx.priority_fee() > 0 {
+                        // Pack highest-fee txs that still apply (multi-tx blocks).
+                        txs = take_applicable_fee_txs(&mut mempool, &state, MAX_TXS_PER_BLOCK);
+                        if !txs.is_empty() {
+                            let fees: u64 = txs.iter().map(|t| t.priority_fee()).sum();
+                            if fees > 0 {
                                 println!(
-                                    "priority include fee={} base units (tip → producer)",
-                                    tx.priority_fee()
+                                    "priority include {} tx(s) total_fee={fees} base units",
+                                    txs.len()
                                 );
                             } else if !slot_due {
-                                println!("fast include (mempool non-empty, fee=0)");
+                                println!("fast include {} tx(s) (mempool non-empty)", txs.len());
                             }
-                            txs.push(tx);
                         }
                     }
-                    // Skip empty blocks when idle (stops block-reward inflation spam).
-                    // Still produce empty block at height 0 (genesis seal) if needed.
                     let should_produce = !txs.is_empty() || next_height == 0;
                     if should_produce {
                         last_slot = now;
@@ -336,76 +519,134 @@ pub fn run_validator(cfg: RunConfig) -> Result<()> {
                                     &mut state,
                                     &mut finality,
                                     &mut pending,
+                                    &mut seen_at_height,
                                     &hub,
                                     Some(kp),
                                     &authorized,
                                     block,
                                     n,
                                     &state_path,
+                                    &cfg.data_dir,
                                 )?;
                             }
                             Err(e) => eprintln!("produce error: {e}"),
                         }
                     } else if slot_due {
-                        // Idle tick: advance clock without minting empty blocks.
                         last_slot = now;
                     }
                 }
             } else if slot_due {
-                // Non-leaders still advance their local slot clock so they don't spin.
                 last_slot = now;
             }
         } else if observer && slot_due {
             last_slot = now;
         }
 
+        // Bound finality + equivocation maps
+        finality.prune_if_oversized(2_000);
+        if seen_at_height.len() > 2_000 {
+            let cutoff = state.height.saturating_sub(500);
+            seen_at_height.retain(|h, _| *h >= cutoff);
+        }
+
         thread::sleep(Duration::from_millis(cfg.slot_ms.clamp(50, 500)));
     }
 }
 
-/// Pop the highest-fee tx (MEV priority auction). Ties broken by txid hex (stable).
-fn take_highest_fee_tx(mempool: &mut VecDeque<Tx>) -> Option<Tx> {
-    if mempool.is_empty() {
-        return None;
-    }
-    let mut best_i = 0usize;
-    let mut best_fee = mempool[0].priority_fee();
-    let mut best_id = mempool[0].txid_hex();
-    for (i, tx) in mempool.iter().enumerate().skip(1) {
-        let fee = tx.priority_fee();
-        let id = tx.txid_hex();
-        if fee > best_fee || (fee == best_fee && id < best_id) {
-            best_i = i;
-            best_fee = fee;
-            best_id = id;
+/// Pretend last slot was long enough ago that the first real slot is due soon (1s grace).
+fn slot_clock_init(genesis: &GenesisConfig) -> u64 {
+    genesis.slot_secs.saturating_sub(1).max(0)
+}
+
+fn request_blocks_catchup(hub: &GossipHub, state: &ChainState, _data_dir: &Path) {
+    let from = if state.applied.is_empty() {
+        0
+    } else {
+        state.height.saturating_add(1)
+    };
+    let _ = hub.broadcast(&GossipMsg::BlocksRequest {
+        chain_id: state.chain_id.clone(),
+        from_height: from,
+        max_blocks: 64,
+    });
+}
+
+/// Pop highest-fee applicable txs up to `max`, simulating sequential apply order.
+fn take_applicable_fee_txs(
+    mempool: &mut VecDeque<Tx>,
+    state: &ChainState,
+    max: usize,
+) -> Vec<Tx> {
+    let mut trial = state.clone();
+    let mut picked = Vec::new();
+    while picked.len() < max && !mempool.is_empty() {
+        let mut best_i: Option<usize> = None;
+        let mut best_fee = 0u64;
+        let mut best_id = String::new();
+        for (i, tx) in mempool.iter().enumerate() {
+            if !trial.can_apply_tx(tx) {
+                continue;
+            }
+            let fee = tx.priority_fee();
+            let id = tx.txid_hex();
+            if best_i.is_none()
+                || fee > best_fee
+                || (fee == best_fee && id < best_id)
+            {
+                best_i = Some(i);
+                best_fee = fee;
+                best_id = id;
+            }
         }
+        let Some(i) = best_i else {
+            break;
+        };
+        let tx = mempool.remove(i).unwrap();
+        let _ = trial.apply_tx(&tx);
+        // Fee to producer not needed for dry sequencing of next nonces.
+        picked.push(tx);
     }
-    mempool.remove(best_i)
+    // Drop permanently invalid head spam occasionally
+    mempool.retain(|t| state.can_apply_tx(t) || trial.can_apply_tx(t));
+    picked
 }
 
 fn on_block(
     state: &mut ChainState,
     finality: &mut FinalityTracker,
     pending: &mut HashMap<String, Block>,
+    seen_at_height: &mut HashMap<u64, String>,
     hub: &GossipHub,
     me: Option<&Keypair>,
     authorized: &HashSet<PublicKey>,
     block: Block,
     n_validators: usize,
     state_path: &Path,
+    data_dir: &Path,
 ) -> Result<()> {
     if block.verify_producer_sig().is_err() {
         return Ok(());
     }
-    // Producer must be a genesis validator.
     if !authorized.contains(&block.header.producer) {
         return Ok(());
     }
     let hash_hex = block.hash_hex();
-    if pending.contains_key(&hash_hex)
-        || state.applied.iter().any(|a| a.hash_hex == hash_hex)
-    {
-        // still ack if we haven't
+    let h = block.header.height;
+
+    // Equivocation: two different blocks at same height from the schedule.
+    if let Some(prev) = seen_at_height.get(&h) {
+        if prev != &hash_hex {
+            eprintln!(
+                "EQUIVOCATION height={h}: already saw {prev}, now {hash_hex} — ignoring second"
+            );
+            return Ok(());
+        }
+    } else {
+        seen_at_height.insert(h, hash_hex.clone());
+    }
+
+    if pending.contains_key(&hash_hex) || state.applied.iter().any(|a| a.hash_hex == hash_hex) {
+        // still ack below
     } else {
         pending.insert(hash_hex.clone(), block.clone());
         let _ = hub.broadcast(&GossipMsg::Block {
@@ -413,7 +654,7 @@ fn on_block(
         });
     }
 
-    // Producer ACK counts; only genesis validators emit BlockAck.
+    // Producer signature on the block counts as their ACK (documented).
     if authorized.contains(&block.header.producer) {
         finality.ack(&hash_hex, block.header.producer);
     }
@@ -424,11 +665,20 @@ fn on_block(
                 height: block.header.height,
                 block_hash_hex: hash_hex.clone(),
                 validator_pubkey_hex: hex::encode(kp.public_key()),
+                signature_hex: sign_block_ack(kp, &hash_hex),
             });
         }
     }
 
-    try_finalize(state, finality, pending, &hash_hex, n_validators, state_path)
+    try_finalize(
+        state,
+        finality,
+        pending,
+        &hash_hex,
+        n_validators,
+        state_path,
+        data_dir,
+    )
 }
 
 fn try_finalize(
@@ -438,11 +688,12 @@ fn try_finalize(
     hash_hex: &str,
     n_validators: usize,
     state_path: &Path,
+    data_dir: &Path,
 ) -> Result<()> {
     if !finality.is_final(hash_hex, n_validators) {
         return Ok(());
     }
-    let Some(block) = pending.remove(hash_hex) else {
+    let Some(block) = pending.get(hash_hex).cloned() else {
         return Ok(());
     };
     let expected = if state.applied.is_empty() {
@@ -451,16 +702,46 @@ fn try_finalize(
         state.height + 1
     };
     if block.header.height != expected {
-        // put back if future? drop for simplicity
+        // Keep in pending for when we catch up — do NOT drop.
+        if block.header.height > expected {
+            // Future block: leave pending; block catch-up fills the gap.
+            return Ok(());
+        }
+        // Stale: drop
+        pending.remove(hash_hex);
         return Ok(());
     }
+    let block = pending.remove(hash_hex).unwrap();
     match state.apply_block(&block) {
         Ok(()) => {
+            let _ = save_finalized_block(data_dir, &block);
             state.save_json(state_path).ok();
             println!(
                 "finalized height={} acks>=threshold supply={}",
                 state.height, state.total_supply
             );
+            // Prune finality entries for this hash; try next pending at tip+1.
+            finality.retain_hashes(|h| h != hash_hex);
+            // Attempt finalize any pending that is now next.
+            let next_candidates: Vec<String> = pending
+                .iter()
+                .filter(|(_, b)| {
+                    let exp = state.height + 1;
+                    b.header.height == exp
+                })
+                .map(|(h, _)| h.clone())
+                .collect();
+            for h in next_candidates {
+                try_finalize(
+                    state,
+                    finality,
+                    pending,
+                    &h,
+                    n_validators,
+                    state_path,
+                    data_dir,
+                )?;
+            }
         }
         Err(e) => eprintln!("apply_block failed: {e}"),
     }

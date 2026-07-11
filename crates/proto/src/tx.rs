@@ -72,6 +72,10 @@ pub enum TxBody {
         amount: u64,
         /// Optional external ref (e.g. Solana tx sig hash trunc 16).
         external_ref: [u8; 16],
+        /// If recipient is unknown, minter may attach full pubkey (must hash to `to`)
+        /// so gossip/peer mints can create the account without a prior Register.
+        #[serde(default)]
+        to_pubkey: Option<PublicKey>,
     },
     /// Holder burns MESH; bridge watches for off-ramp unlock.
     Burn {

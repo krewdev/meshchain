@@ -32,7 +32,8 @@ Source of truth for MESH balances is the mesh chain — internet is not required
 ### Mint (bridge on-ramp hook)
 
 - `nonce` (minter account), `to`, `amount`, `external_ref` [16]  
-- `external_ref` = truncated hash of Solana deposit tx (or vault event)  
+- optional `to_pubkey` — if recipient unknown, creates the account (must hash to `to`)  
+- `external_ref` = truncated hash of Solana deposit tx (or vault event); **unique** on-chain  
 - Only keys in genesis `minters` ∪ validators
 
 ### Burn (bridge off-ramp hook)
@@ -41,13 +42,17 @@ Source of truth for MESH balances is the mesh chain — internet is not required
 - `redeem_hint` carries destination info for the bridge (e.g. Solana pubkey hash)  
 - Mesh does not verify Solana; bridge watches final burns
 
-## Blocks (v1)
+## Blocks (v1.1)
 
-- At most **1 tx** per block  
+- At most **16 txs** per block (`MAX_TXS_PER_BLOCK`)  
+- `tx_root` = SHA-256-trunc16 of concatenated 32-byte txids (empty → zeros)  
 - Header: height, prev_hash, slot_time, producer_index, producer, tx_count, tx_root  
 - Producer signs header  
 - Round-robin leader: `height % N_validators`  
-- **Finality:** ≥ `ceil(2N/3)` validator ACKs (sim: all honest validators ACK)
+- **Finality:** ≥ `ceil(2N/3)` **signed** validator BlockAcks  
+- Producer header signature counts as that validator’s ACK  
+- Catch-up: finalized blocks archived and served via `BlocksRequest` / `BlocksResponse`  
+- Genesis field `protocol_version` (currently `1`) advertised in gossip Hello
 
 ## Block rewards
 

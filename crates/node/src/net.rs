@@ -5,13 +5,20 @@ use anyhow::{Context, Result};
 use meshchain_proto::block::Block;
 use meshchain_proto::tx::Tx;
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, BufReader, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
+
+/// Reject oversized gossip lines (DoS).
+pub const MAX_GOSSIP_LINE_BYTES: usize = 512 * 1024;
+/// Soft cap on dedup cache entries.
+const MAX_SEEN_ENTRIES: usize = 50_000;
+/// Per-peer messages accepted per rolling second.
+const PEER_MSG_RATE_PER_SEC: u32 = 200;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -21,6 +28,8 @@ pub enum GossipMsg {
         pubkey_hex: String,
         chain_id: String,
         height: u64,
+        #[serde(default = "default_protocol_version")]
+        protocol_version: u32,
     },
     Tx {
         tx: Tx,
@@ -32,8 +41,11 @@ pub enum GossipMsg {
         height: u64,
         block_hash_hex: String,
         validator_pubkey_hex: String,
+        /// ed25519 signature hex over ack_message(block_hash_hex)
+        #[serde(default)]
+        signature_hex: String,
     },
-    /// Catch-up: ask peer for full chain_state if we are behind.
+    /// Catch-up: ask peer for full chain_state if we are behind (observers).
     SyncRequest {
         chain_id: String,
         have_height: u64,
@@ -47,8 +59,28 @@ pub enum GossipMsg {
         tip_hash_hex: String,
         state_json: String,
     },
+    /// Producer-safe catch-up: request finalized blocks from height (inclusive).
+    BlocksRequest {
+        chain_id: String,
+        from_height: u64,
+        #[serde(default = "default_max_blocks")]
+        max_blocks: u32,
+    },
+    /// Finalized blocks in height order (cryptographically verifiable via apply_block).
+    BlocksResponse {
+        chain_id: String,
+        blocks: Vec<Block>,
+    },
     Ping,
     Pong,
+}
+
+fn default_protocol_version() -> u32 {
+    1
+}
+
+fn default_max_blocks() -> u32 {
+    64
 }
 
 pub struct GossipHub {
@@ -68,11 +100,13 @@ impl GossipHub {
         let (inbound_tx, inbound) = mpsc::channel();
         let peers = Arc::new(Mutex::new(Vec::new()));
         let seen = Arc::new(Mutex::new(HashSet::new()));
+        let rate = Arc::new(Mutex::new(HashMap::<String, (Instant, u32)>::new()));
 
         // Accept loop
         let peers_acc = peers.clone();
         let tx_acc = inbound_tx.clone();
         let seen_acc = seen.clone();
+        let rate_acc = rate.clone();
         thread::spawn(move || {
             let listener = match TcpListener::bind(listen) {
                 Ok(l) => l,
@@ -96,7 +130,9 @@ impl GossipHub {
                 }
                 let tx = tx_acc.clone();
                 let seen = seen_acc.clone();
-                thread::spawn(move || read_peer(stream, tx, seen));
+                let rate = rate_acc.clone();
+                let rate_key = peer_addr.clone();
+                thread::spawn(move || read_peer(stream, tx, seen, rate, rate_key));
             }
         });
 
@@ -104,6 +140,7 @@ impl GossipHub {
         let peers_dial = peers.clone();
         let tx_dial = inbound_tx.clone();
         let seen_dial = seen.clone();
+        let rate_dial = rate.clone();
         thread::spawn(move || {
             for peer in bootstrap_peers {
                 for attempt in 0..30 {
@@ -118,7 +155,9 @@ impl GossipHub {
                             }
                             let tx = tx_dial.clone();
                             let seen = seen_dial.clone();
-                            thread::spawn(move || read_peer(stream, tx, seen));
+                            let rate = rate_dial.clone();
+                            let rate_key = peer.clone();
+                            thread::spawn(move || read_peer(stream, tx, seen, rate, rate_key));
                             eprintln!("gossip connected to {peer}");
                             break;
                         }
@@ -147,6 +186,9 @@ impl GossipHub {
 
     pub fn broadcast(&self, msg: &GossipMsg) -> Result<()> {
         let line = serde_json::to_string(msg)? + "\n";
+        if line.len() > MAX_GOSSIP_LINE_BYTES {
+            anyhow::bail!("gossip message too large ({} bytes)", line.len());
+        }
         let bytes = line.as_bytes();
         let mut dead = Vec::new();
         let mut peers = self.peers.lock().unwrap();
@@ -158,7 +200,6 @@ impl GossipHub {
         for i in dead.into_iter().rev() {
             peers.remove(i);
         }
-        // Also inject locally so single-node still "hears" own messages if needed — no, avoid loops
         let _ = &self.inbound_tx;
         Ok(())
     }
@@ -168,15 +209,50 @@ impl GossipHub {
     }
 
     pub fn mark_seen(&self, id: &str) -> bool {
-        self.seen.lock().unwrap().insert(id.to_string())
+        let mut seen = self.seen.lock().unwrap();
+        if seen.len() > MAX_SEEN_ENTRIES {
+            seen.clear();
+        }
+        seen.insert(id.to_string())
     }
 }
 
-fn read_peer(stream: TcpStream, tx: Sender<GossipMsg>, seen: Arc<Mutex<HashSet<String>>>) {
+fn rate_allow(rate: &Mutex<HashMap<String, (Instant, u32)>>, key: &str) -> bool {
+    let mut map = match rate.lock() {
+        Ok(m) => m,
+        Err(_) => return true,
+    };
+    let now = Instant::now();
+    let entry = map.entry(key.to_string()).or_insert((now, 0));
+    if now.duration_since(entry.0) >= Duration::from_secs(1) {
+        *entry = (now, 1);
+        return true;
+    }
+    if entry.1 >= PEER_MSG_RATE_PER_SEC {
+        return false;
+    }
+    entry.1 += 1;
+    true
+}
+
+fn read_peer(
+    stream: TcpStream,
+    tx: Sender<GossipMsg>,
+    seen: Arc<Mutex<HashSet<String>>>,
+    rate: Arc<Mutex<HashMap<String, (Instant, u32)>>>,
+    rate_key: String,
+) {
     let reader = BufReader::new(stream);
     for line in reader.lines().flatten() {
         let line = line.trim();
         if line.is_empty() {
+            continue;
+        }
+        if line.len() > MAX_GOSSIP_LINE_BYTES {
+            eprintln!("gossip: drop oversized line ({} bytes) from {rate_key}", line.len());
+            continue;
+        }
+        if !rate_allow(&rate, &rate_key) {
             continue;
         }
         match serde_json::from_str::<GossipMsg>(line) {
@@ -187,8 +263,9 @@ fn read_peer(stream: TcpStream, tx: Sender<GossipMsg>, seen: Arc<Mutex<HashSet<S
                     GossipMsg::BlockAck {
                         block_hash_hex,
                         validator_pubkey_hex,
+                        signature_hex,
                         ..
-                    } => format!("ack:{block_hash_hex}:{validator_pubkey_hex}"),
+                    } => format!("ack:{block_hash_hex}:{validator_pubkey_hex}:{signature_hex}"),
                     GossipMsg::Hello {
                         pubkey_hex,
                         height,
@@ -204,10 +281,27 @@ fn read_peer(stream: TcpStream, tx: Sender<GossipMsg>, seen: Arc<Mutex<HashSet<S
                         tip_hash_hex,
                         ..
                     } => format!("syncres:{chain_id}:{height}:{tip_hash_hex}"),
+                    GossipMsg::BlocksRequest {
+                        chain_id,
+                        from_height,
+                        max_blocks,
+                    } => format!("blksreq:{chain_id}:{from_height}:{max_blocks}"),
+                    GossipMsg::BlocksResponse { chain_id, blocks } => {
+                        let tip = blocks
+                            .last()
+                            .map(|b| b.header.height)
+                            .unwrap_or(0);
+                        format!("blksres:{chain_id}:{tip}:{}", blocks.len())
+                    }
                     GossipMsg::Ping => continue,
                     GossipMsg::Pong => continue,
                 };
-                if seen.lock().unwrap().insert(id) {
+                let mut seen_g = seen.lock().unwrap();
+                if seen_g.len() > MAX_SEEN_ENTRIES {
+                    seen_g.clear();
+                }
+                if seen_g.insert(id) {
+                    drop(seen_g);
                     let _ = tx.send(msg);
                 }
             }
@@ -218,7 +312,6 @@ fn read_peer(stream: TcpStream, tx: Sender<GossipMsg>, seen: Arc<Mutex<HashSet<S
 
 /// Spawn meshtastic_bridge.py and forward TXHEX/RXHEX as raw frame bytes callbacks.
 pub struct MeshRadioBridge {
-    // kept for future bidirectional frame path
     pub _marker: (),
 }
 

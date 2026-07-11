@@ -178,6 +178,7 @@ pub fn run_sim(data_dir: &Path, n_transfers: u32, mut slot_time: u64) -> Result<
             to: bob_sid,
             amount: mint_amount,
             external_ref: [7u8; 16], // stands in for Solana vault deposit tx hash
+            to_pubkey: Some(bob.public_key()),
         };
         let tx = Tx::sign(body, minter).map_err(|e| anyhow::anyhow!(e.to_string()))?;
         let next_height = state.height + 1;

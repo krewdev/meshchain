@@ -1,0 +1,71 @@
+# MeshChain status (operator truth)
+
+**Updated:** 2026-07-11  
+**Network:** `meshchain-testnet-1` (public testnet — **no cash value**, state may wipe)
+
+## Live endpoints
+
+| Service | URL / addr |
+|---------|------------|
+| Seed peer (TCP gossip) | `34.172.103.125:9100` |
+| Scanner | https://34.172.103.125.sslip.io/ |
+| Faucet | https://faucet.34.172.103.125.sslip.io/info |
+| Site | https://meshchain-sigma.vercel.app |
+
+Params: [`testnet/network.json`](../testnet/network.json) · [`testnet/seeds.json`](../testnet/seeds.json)
+
+## Integrity posture (Track A+)
+
+| Control | Status |
+|---------|--------|
+| Signed BlockAcks (ed25519) | yes |
+| Leader schedule `height % N` on apply | yes |
+| Mint `external_ref` uniqueness | yes |
+| Faucet mints via gossip `--peer` | yes (set `MESH_MINT_PEER`) |
+| Producers reject untrusted SyncResponse | yes |
+| Block-by-block catch-up (`BlocksRequest`) | yes |
+| Atomic `chain_state.json` writes | yes |
+| Append-only block archive `data/blocks/{h}.json` | yes |
+| Equivocation detect (same height, two hashes) | yes |
+| Mempool dry-run against state | yes |
+| Gossip line size + per-peer rate limit | yes |
+| Multi-tx blocks (≤16) | yes |
+| `protocol_version` in genesis / Hello | yes (v1) |
+| Faucet daily + global rate caps | yes |
+
+## Known limitations
+
+1. **PoA, not open consensus** — seats are coordinator-approved; restack may wipe state.  
+2. **TCP gossip first** — Meshtastic path is sidecar/framing; finality is internet PoA today.  
+3. **Faucet is a hot minter** — capped, not a treasury; testnet only.  
+4. **Solana hybrid vault** — experimental on devnet; not mainnet-ready.  
+5. **Short ids are 8 bytes** — full pubkey always bound on register.  
+6. **No on-chain validator governance** — `mesh genesis-extend` + restack for set changes.
+
+## Operator quick paths
+
+```bash
+# User
+mesh join-public && mesh new-wallet --name me.json --publish
+mesh faucet-drip --wallet me.json && mesh balance --wallet me.json
+
+# Observer
+mesh observer --peer 34.172.103.125:9100
+
+# Producer (after approval)
+meshchain-node run --data-dir ./data --validator-index N \
+  --listen 0.0.0.0:9100 --peer 34.172.103.125:9100
+```
+
+Docs: [RUN_A_NODE](RUN_A_NODE.md) · [MULTI_OPERATOR](MULTI_OPERATOR.md) · [AUDIT_AND_TEST](AUDIT_AND_TEST.md) · [SECURITY_HARDENING](SECURITY_HARDENING.md)
+
+## Deploy checklist (seed)
+
+```bash
+cargo build -p mesh -p meshchain-node --release
+# install binary + faucet_server.py on host
+export MESH_MINT_PEER=127.0.0.1:9100
+# unset MESH_ALLOW_OFFLINE_MINT on public hosts
+systemctl restart meshchain-testnet   # or host equivalent
+./scripts/status_public_seed.sh
+```

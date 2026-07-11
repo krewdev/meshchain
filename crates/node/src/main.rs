@@ -94,6 +94,12 @@ enum Commands {
         external_ref_hex: String,
         #[arg(long, default_value_t = 0)]
         validator_index: u8,
+        /// Submit Mint tx to a live peer (required for multi-validator hosts)
+        #[arg(long, default_value = "")]
+        peer: String,
+        /// Offline local finality (LAB ONLY — can fork multi-process hosts)
+        #[arg(long, default_value_t = false)]
+        offline: bool,
     },
     /// Burn vault-linked tMESH (needs cold PQ key); prints burn txid for Solana withdraw
     BurnForWithdraw {
@@ -205,7 +211,8 @@ fn main() -> Result<()> {
                 minters: vec![], // validators auto-added as minters
                 slot_secs: if testnet { 30 } else { 5 },
                 // Big moves need cold (quantum-safe) key. Small demo transfers stay simple.
-                pq_required_above: 100 * ONE_MESH,
+                protocol_version: 1,
+            pq_required_above: 100 * ONE_MESH,
             };
 
             let genesis_path = data_dir.join("genesis.json");
@@ -280,6 +287,8 @@ fn main() -> Result<()> {
             amount,
             external_ref_hex,
             validator_index,
+            peer,
+            offline,
         } => {
             mint_for_deposit(
                 &data_dir,
@@ -287,6 +296,8 @@ fn main() -> Result<()> {
                 amount,
                 &external_ref_hex,
                 validator_index,
+                &peer,
+                offline,
             )?;
         }
         Commands::BurnForWithdraw {
@@ -309,6 +320,8 @@ fn mint_for_deposit(
     amount: u64,
     external_ref_hex: &str,
     validator_index: u8,
+    peer: &str,
+    offline: bool,
 ) -> Result<()> {
     use meshchain_ledger::state::ChainState;
     use meshchain_proto::address::{short_id, short_id_hex};
@@ -319,11 +332,9 @@ fn mint_for_deposit(
         data_dir.join("genesis.json"),
     )?)?;
     let state_path = data_dir.join("chain_state.json");
-    // Always rebuild from current genesis so validator keys match (avoids stale demo state).
     let mut state =
         ChainState::from_genesis(&genesis).map_err(|e| anyhow::anyhow!(e.to_string()))?;
     if state_path.exists() {
-        // Preserve balances from prior state when chain_id + validators match
         if let Ok(prev) = ChainState::load_json(&state_path) {
             if prev.chain_id == state.chain_id && prev.validators == state.validators {
                 state = prev;
@@ -340,7 +351,6 @@ fn mint_for_deposit(
     let mut to_pk = [0u8; 32];
     to_pk.copy_from_slice(&to_bytes);
     let to_sid = short_id(&to_pk);
-    // Ensure recipient account exists
     state.ensure_account(&to_pk);
 
     let ref_bytes = hex::decode(external_ref_hex.trim())?;
@@ -349,6 +359,10 @@ fn mint_for_deposit(
     }
     let mut external_ref = [0u8; 16];
     external_ref.copy_from_slice(&ref_bytes);
+    let ref_hex = hex::encode(external_ref);
+    if state.used_external_refs.contains(&ref_hex) {
+        anyhow::bail!("duplicate external_ref (already minted)");
+    }
 
     let key_path = data_dir
         .join("keys")
@@ -368,11 +382,39 @@ fn mint_for_deposit(
         to: to_sid,
         amount,
         external_ref,
+        to_pubkey: Some(to_pk),
     };
     let tx = Tx::sign(body, &minter).map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    tx.verify().map_err(|e| anyhow::anyhow!(e.to_string()))?;
 
+    // Preferred path: submit to live gossip so all validators share state.
+    let peer = if peer.is_empty() {
+        std::env::var("MESH_MINT_PEER").unwrap_or_default()
+    } else {
+        peer.to_string()
+    };
+    if !peer.is_empty() && !offline {
+        let tx_path = data_dir.join("last_mint.json");
+        fs::write(&tx_path, serde_json::to_string_pretty(&tx)?)?;
+        run::submit_tx_file(&tx_path, &peer)?;
+        println!(
+            "submitted mint {amount} base units → {} via {peer}",
+            short_id_hex(&to_sid)
+        );
+        println!("txid: {}", tx.txid_hex());
+        println!("await finality on live validators (poll scanner / chain_state)");
+        return Ok(());
+    }
+
+    if !offline && std::env::var("MESH_ALLOW_OFFLINE_MINT").ok().as_deref() != Some("1") {
+        anyhow::bail!(
+            "refusing offline mint on multi-validator hosts. Pass --peer 127.0.0.1:9100 \
+             or --offline with MESH_ALLOW_OFFLINE_MINT=1 (lab only)"
+        );
+    }
+
+    eprintln!("WARN: offline mint finality (lab only) — can diverge multi-process nodes");
     let n = state.validators.len();
-    // Apply genesis if needed
     if state.applied.is_empty() {
         let idx = leader_index(0, n);
         let vkey_path = data_dir.join("keys").join(format!("validator-{idx}.json"));
@@ -395,7 +437,6 @@ fn mint_for_deposit(
     let block = produce_block(&state, &producer, idx as u8, now_secs(), vec![tx])
         .map_err(|e| anyhow::anyhow!(e.to_string()))?;
 
-    // Local finality: all validators ACK
     let mut finality = FinalityTracker::new();
     let hash = block.hash_hex();
     for i in 0..n {

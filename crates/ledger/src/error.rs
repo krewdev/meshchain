@@ -24,6 +24,10 @@ pub enum LedgerError {
     BadPrevHash,
     #[error("unknown producer")]
     UnknownProducer,
+    #[error("wrong leader for height (expected producer_index {expected})")]
+    WrongLeader { expected: u8 },
+    #[error("duplicate mint external_ref")]
+    DuplicateExternalRef,
     #[error("proto: {0}")]
     Proto(String),
     #[error("io: {0}")]

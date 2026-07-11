@@ -74,6 +74,7 @@ mod tests {
             minters: vec![],
             slot_secs: 1,
             pq_required_above: 1000 * ONE_MESH,
+            protocol_version: 1,
         };
         let mut st = ChainState::from_genesis(&genesis).unwrap();
         let gblock =

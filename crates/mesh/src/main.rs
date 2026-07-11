@@ -201,6 +201,20 @@ enum Commands {
         name: String,
     },
 
+    /// Extend genesis with new validator public keys (coordinator tool; testnet restack)
+    #[command(name = "genesis-extend")]
+    GenesisExtend {
+        /// Existing genesis.json
+        #[arg(long)]
+        genesis: PathBuf,
+        /// New validator public_hex (repeatable)
+        #[arg(long = "add")]
+        add: Vec<String>,
+        /// Output path
+        #[arg(long)]
+        out: PathBuf,
+    },
+
     /// Coordinator: append public_hex validators to a genesis file (PoA set change)
     #[command(name = "genesis-add")]
     GenesisAdd {
@@ -965,10 +979,14 @@ fn main() -> Result<()> {
         Commands::Balance { wallet } => {
             let path = wallet_path(&dir, &wallet);
             promote_v0_snapshot(&dir);
+            // Prefer live scanner/seed tip so faucet-mint lag is less confusing.
+            if let Some(sc) = default_scanner_url(&dir) {
+                let _ = sync_state_from_scanner(&dir, &sc);
+            }
             let state_path = best_chain_state_path(&dir);
             if !state_path.exists() {
                 bail!(
-                    "No network state yet. Run:\n  mesh testnet-setup\n  mesh demo\n  # or start validators"
+                    "No network state yet. Run:\n  mesh join-public\n  # or mesh testnet-setup + demo"
                 );
             }
             let kp = load_wallet(&path)?;
@@ -983,7 +1001,7 @@ fn main() -> Result<()> {
             println!("Sends:     {nonce} completed from this wallet");
             println!("Network:   block #{} ({})", st.height, state_path.display());
             if !on_chain {
-                println!("On-chain:  NO — run: mesh register --wallet {wallet} --submit 127.0.0.1:9100");
+                println!("On-chain:  NO — run: mesh register --wallet {wallet} --submit <seed:9100>");
             }
             if cold {
                 println!("Cold key:  locked to this account (large sends use it)");
@@ -1240,11 +1258,17 @@ Read: docs/SECURITY_HARDENING.md  docs/HYBRID_LOCK.md
             println!("Template: testnet/operator_application.example.json");
         }
 
-        Commands::GenesisAdd {
+        Commands::GenesisExtend {
+            genesis,
+            add,
+            out,
+        }
+        | Commands::GenesisAdd {
             genesis,
             out,
             add,
         } => {
+            // genesis-extend is an alias of genesis-add (coordinator restack tool).
             if add.is_empty() {
                 bail!("provide at least one --add <public_hex>");
             }

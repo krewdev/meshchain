@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 
 pub const BLOCK_HASH_LEN: usize = 32;
 pub const AIR_HASH_LEN: usize = 16;
+/// Max transactions sealed into one block (v1.1; was 1 in early v1).
+pub const MAX_TXS_PER_BLOCK: usize = 16;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct BlockHeader {
@@ -22,8 +24,20 @@ pub struct BlockHeader {
 pub struct Block {
     pub header: BlockHeader,
     pub producer_sig: SignatureBytes,
-    /// v1: 0 or 1 transaction.
+    /// 0..=MAX_TXS_PER_BLOCK transactions.
     pub txs: Vec<Tx>,
+}
+
+/// Deterministic multi-tx root: hash of concatenated 32-byte txids (empty → zeros).
+pub fn compute_tx_root(txs: &[Tx]) -> [u8; AIR_HASH_LEN] {
+    if txs.is_empty() {
+        return [0u8; AIR_HASH_LEN];
+    }
+    let mut buf = Vec::with_capacity(txs.len() * 32);
+    for tx in txs {
+        buf.extend_from_slice(&tx.txid());
+    }
+    hash_trunc16(&buf)
 }
 
 impl BlockHeader {
@@ -54,14 +68,12 @@ impl Block {
         producer: &Keypair,
         txs: Vec<Tx>,
     ) -> Result<Self, ProtoError> {
-        if txs.len() > 1 {
-            return Err(ProtoError::InvalidBlock("v1 allows at most 1 tx per block".into()));
+        if txs.len() > MAX_TXS_PER_BLOCK {
+            return Err(ProtoError::InvalidBlock(format!(
+                "at most {MAX_TXS_PER_BLOCK} txs per block"
+            )));
         }
-        let tx_root = if txs.is_empty() {
-            [0u8; AIR_HASH_LEN]
-        } else {
-            hash_trunc16(&txs[0].txid())
-        };
+        let tx_root = compute_tx_root(&txs);
         let header = BlockHeader {
             height,
             prev_hash,
@@ -99,14 +111,16 @@ impl Block {
         if self.txs.len() as u8 != self.header.tx_count {
             return Err(ProtoError::InvalidBlock("tx_count mismatch".into()));
         }
-        if self.txs.len() > 1 {
-            return Err(ProtoError::InvalidBlock("v1 max 1 tx".into()));
+        if self.txs.len() > MAX_TXS_PER_BLOCK {
+            return Err(ProtoError::InvalidBlock(format!(
+                "max {MAX_TXS_PER_BLOCK} txs"
+            )));
         }
-        if let Some(tx) = self.txs.first() {
-            let root = hash_trunc16(&tx.txid());
-            if root != self.header.tx_root {
-                return Err(ProtoError::InvalidBlock("tx_root mismatch".into()));
-            }
+        let root = compute_tx_root(&self.txs);
+        if root != self.header.tx_root {
+            return Err(ProtoError::InvalidBlock("tx_root mismatch".into()));
+        }
+        for tx in &self.txs {
             tx.verify()?;
         }
         Ok(())

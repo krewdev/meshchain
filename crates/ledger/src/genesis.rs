@@ -29,10 +29,17 @@ pub struct GenesisConfig {
     /// Default: 100 MESH. Set 0 to require PQ on all spends (strict cold mode).
     #[serde(default = "default_pq_threshold")]
     pub pq_required_above: u64,
+    /// Wire/protocol version — nodes refuse peers with mismatched major expectations.
+    #[serde(default = "default_protocol_version")]
+    pub protocol_version: u32,
 }
 
 fn default_pq_threshold() -> u64 {
     100 * ONE_MESH
+}
+
+fn default_protocol_version() -> u32 {
+    1
 }
 
 impl Default for GenesisConfig {
@@ -45,6 +52,7 @@ impl Default for GenesisConfig {
             minters: vec![],
             slot_secs: 30,
             pq_required_above: default_pq_threshold(),
+            protocol_version: default_protocol_version(),
         }
     }
 }

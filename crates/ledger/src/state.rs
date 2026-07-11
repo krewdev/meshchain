@@ -41,6 +41,9 @@ pub struct ChainState {
     /// Amounts at or above this require PQ signatures on Transfer/Burn.
     #[serde(default = "default_pq_threshold_state")]
     pub pq_required_above: u64,
+    /// Hex-encoded mint external_ref values already consumed (bridge deposit uniqueness).
+    #[serde(default)]
+    pub used_external_refs: HashSet<String>,
 }
 
 fn default_pq_threshold_state() -> u64 {
@@ -99,6 +102,7 @@ impl ChainState {
             total_supply,
             applied: vec![],
             pq_required_above: genesis.pq_required_above,
+            used_external_refs: HashSet::new(),
         })
     }
 
@@ -249,10 +253,15 @@ impl ChainState {
                 nonce,
                 to,
                 amount,
-                ..
+                external_ref,
+                to_pubkey,
             } => {
                 if !self.minters.contains(&tx.signer) {
                     return Err(LedgerError::UnauthorizedMinter);
+                }
+                let ref_hex = hex::encode(external_ref);
+                if self.used_external_refs.contains(&ref_hex) {
+                    return Err(LedgerError::DuplicateExternalRef);
                 }
                 // Minter nonce on minter account
                 let minter_sid = short_id(&tx.signer);
@@ -270,11 +279,29 @@ impl ChainState {
                 }
                 let to_key = short_id_hex(to);
                 if !self.accounts.contains_key(&to_key) {
-                    return Err(LedgerError::AccountNotFound(to_key));
+                    // Peer-path faucet/bridge mints may create the recipient.
+                    match to_pubkey {
+                        Some(pk) if short_id(pk) == *to => {
+                            self.ensure_account(pk);
+                        }
+                        Some(_) => {
+                            return Err(LedgerError::State(
+                                "mint to_pubkey does not match short id".into(),
+                            ));
+                        }
+                        None => return Err(LedgerError::AccountNotFound(to_key)),
+                    }
+                } else if let Some(pk) = to_pubkey {
+                    // Existing account: reject pubkey mismatch
+                    let acc = self.accounts.get(&to_key).unwrap();
+                    if acc.pubkey != *pk {
+                        return Err(LedgerError::ShortIdCollision);
+                    }
                 }
                 let to_acc = self.accounts.get_mut(&to_key).unwrap();
                 to_acc.balance = to_acc.balance.saturating_add(*amount);
                 self.total_supply = self.total_supply.saturating_add(*amount);
+                self.used_external_refs.insert(ref_hex);
             }
             TxBody::Burn {
                 nonce,
@@ -352,6 +379,16 @@ impl ChainState {
         if prod_idx != block.header.producer_index {
             return Err(LedgerError::UnknownProducer);
         }
+        // Enforce round-robin leader schedule: seat = height % N
+        let n = self.validators.len();
+        if n > 0 {
+            let expected_leader = (block.header.height as usize % n) as u8;
+            if block.header.producer_index != expected_leader {
+                return Err(LedgerError::WrongLeader {
+                    expected: expected_leader,
+                });
+            }
+        }
 
         for tx in &block.txs {
             self.apply_tx(tx)?;
@@ -386,12 +423,21 @@ impl ChainState {
         Ok(())
     }
 
+    /// Dry-run: would this tx apply against current state? (sig + economic checks)
+    pub fn can_apply_tx(&self, tx: &Tx) -> bool {
+        let mut trial = self.clone();
+        trial.apply_tx(tx).is_ok()
+    }
+
+    /// Atomic write: temp file in same dir then rename (crash-safe on POSIX).
     pub fn save_json(&self, path: &Path) -> Result<(), LedgerError> {
         let s = serde_json::to_string_pretty(self).map_err(|e| LedgerError::Io(e.to_string()))?;
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).map_err(|e| LedgerError::Io(e.to_string()))?;
         }
-        fs::write(path, s).map_err(|e| LedgerError::Io(e.to_string()))
+        let tmp = path.with_extension("json.tmp");
+        fs::write(&tmp, s.as_bytes()).map_err(|e| LedgerError::Io(e.to_string()))?;
+        fs::rename(&tmp, path).map_err(|e| LedgerError::Io(e.to_string()))
     }
 
     pub fn load_json(path: &Path) -> Result<Self, LedgerError> {
@@ -429,6 +475,7 @@ mod tests {
             minters: vec![],
             slot_secs: 1,
             pq_required_above: 1000 * ONE_MESH,
+            protocol_version: 1,
         };
         let mut st = ChainState::from_genesis(&genesis).unwrap();
         // genesis block height 0
@@ -495,6 +542,7 @@ mod tests {
             minters: vec![],
             slot_secs: 1,
             pq_required_above: 1000 * ONE_MESH,
+            protocol_version: 1,
         };
         let mut st = ChainState::from_genesis(&genesis).unwrap();
         let gblock =
@@ -569,6 +617,7 @@ mod tests {
             to,
             amount: ONE_MESH,
             external_ref: [1u8; 16],
+            to_pubkey: None,
         };
         let tx = Tx::sign(body, &stranger).unwrap();
         let block =
@@ -593,6 +642,7 @@ mod tests {
             to,
             amount: 5 * ONE_MESH,
             external_ref: [2u8; 16],
+            to_pubkey: None,
         };
         let tx = Tx::sign(body, &producer).unwrap();
         let block =
@@ -644,5 +694,94 @@ mod tests {
         let block =
             meshchain_proto::block::Block::new(1, st.tip_hash, 2, 0, &producer, vec![tx]).unwrap();
         assert!(st.apply_block(&block).is_err());
+    }
+
+    #[test]
+    fn rejects_wrong_leader_schedule() {
+        let (_st, alice, bob, producer) = setup_two_party();
+        // Only one validator in setup_two_party so height%1 == 0 always.
+        // Build 2-validator genesis for this test.
+        let v0 = producer;
+        let v1 = Keypair::generate();
+        let genesis = GenesisConfig {
+            chain_id: "test".into(),
+            validators: vec![
+                hex::encode(v0.public_key()),
+                hex::encode(v1.public_key()),
+            ],
+            block_reward: 0,
+            allocations: vec![
+                GenesisAccount {
+                    public_key_hex: hex::encode(alice.public_key()),
+                    balance: 50 * ONE_MESH,
+                },
+                GenesisAccount {
+                    public_key_hex: hex::encode(bob.public_key()),
+                    balance: 0,
+                },
+            ],
+            minters: vec![],
+            slot_secs: 1,
+            pq_required_above: 1000 * ONE_MESH,
+            protocol_version: 1,
+        };
+        let mut st = ChainState::from_genesis(&genesis).unwrap();
+        let gblock =
+            meshchain_proto::block::Block::new(0, [0u8; 32], 1, 0, &v0, vec![]).unwrap();
+        st.apply_block(&gblock).unwrap();
+        // height 1 expects leader 1 % 2 = 1, but produce with v0 index 0
+        let from = short_id(&alice.public_key());
+        let to = short_id(&bob.public_key());
+        let body = TxBody::Transfer {
+            nonce: 0,
+            from,
+            to,
+            amount: ONE_MESH,
+            fee: 0,
+        };
+        let tx = Tx::sign(body, &alice).unwrap();
+        let bad = meshchain_proto::block::Block::new(1, st.tip_hash, 2, 0, &v0, vec![tx]).unwrap();
+        let err = st.apply_block(&bad).unwrap_err();
+        assert!(
+            err.to_string().contains("leader") || err.to_string().contains("Wrong"),
+            "got {err}"
+        );
+    }
+
+    #[test]
+    fn rejects_duplicate_mint_external_ref() {
+        let (mut st, _alice, bob, producer) = setup_two_party();
+        let to = short_id(&bob.public_key());
+        let minter_sid = short_id(&producer.public_key());
+        let nonce = st.account(&minter_sid).map(|a| a.nonce).unwrap_or(0);
+        let ext = [9u8; 16];
+        let body = TxBody::Mint {
+            nonce,
+            to,
+            amount: ONE_MESH,
+            external_ref: ext,
+            to_pubkey: None,
+        };
+        let tx = Tx::sign(body, &producer).unwrap();
+        let b1 =
+            meshchain_proto::block::Block::new(1, st.tip_hash, 2, 0, &producer, vec![tx]).unwrap();
+        st.apply_block(&b1).unwrap();
+        let nonce2 = st.account(&minter_sid).map(|a| a.nonce).unwrap_or(0);
+        let body2 = TxBody::Mint {
+            nonce: nonce2,
+            to,
+            amount: ONE_MESH,
+            external_ref: ext, // same ref
+            to_pubkey: None,
+        };
+        let tx2 = Tx::sign(body2, &producer).unwrap();
+        let b2 =
+            meshchain_proto::block::Block::new(2, st.tip_hash, 3, 0, &producer, vec![tx2]).unwrap();
+        let err = st.apply_block(&b2).unwrap_err();
+        assert!(
+            err.to_string().to_lowercase().contains("duplicate")
+                || err.to_string().to_lowercase().contains("external"),
+            "got {err}"
+        );
     }
 }
