@@ -242,3 +242,8 @@ Roadmap: keep PoA for testnet-1; expand set via applications; later consider on-
 - [TESTNET.md](./TESTNET.md) — parameters  
 - [CLOUD.md](./CLOUD.md) — VPS / GCE host  
 - [validator-automation](../validator-automation/README.md) — local ops package  
+
+## Multi-operator
+
+See [MULTI_OPERATOR.md](./MULTI_OPERATOR.md) for observers on other machines and adding producers.
+

@@ -201,6 +201,20 @@ enum Commands {
         name: String,
     },
 
+    /// Coordinator: append public_hex validators to a genesis file (PoA set change)
+    #[command(name = "genesis-add")]
+    GenesisAdd {
+        /// Input genesis.json
+        #[arg(long)]
+        genesis: PathBuf,
+        /// Output path for new genesis
+        #[arg(long)]
+        out: PathBuf,
+        /// public_hex to add (repeatable)
+        #[arg(long = "add")]
+        add: Vec<String>,
+    },
+
     /// Run a testnet validator (must be listed in shared genesis)
     #[command(name = "validator")]
     Validator {
@@ -1222,8 +1236,52 @@ Read: docs/SECURITY_HARDENING.md  docs/HYBRID_LOCK.md
                 }))?
             );
             println!();
-            println!("Docs: docs/RUN_A_NODE.md");
+            println!("Docs: docs/RUN_A_NODE.md · docs/MULTI_OPERATOR.md");
             println!("Template: testnet/operator_application.example.json");
+        }
+
+        Commands::GenesisAdd {
+            genesis,
+            out,
+            add,
+        } => {
+            if add.is_empty() {
+                bail!("provide at least one --add <public_hex>");
+            }
+            let raw = fs::read_to_string(&genesis)
+                .with_context(|| format!("read {}", genesis.display()))?;
+            let mut g: serde_json::Value =
+                serde_json::from_str(&raw).context("invalid genesis JSON")?;
+            let vals = g
+                .get_mut("validators")
+                .and_then(|v| v.as_array_mut())
+                .context("genesis.validators missing")?;
+            let before = vals.len();
+            for a in &add {
+                let h = a.trim().trim_start_matches("0x").to_lowercase();
+                if h.len() != 64 || hex::decode(&h).map(|b| b.len() != 32).unwrap_or(true) {
+                    bail!("invalid public_hex (need 32 bytes hex): {a}");
+                }
+                let exists = vals.iter().any(|v| v.as_str() == Some(h.as_str()));
+                if exists {
+                    println!("skip duplicate {h}");
+                    continue;
+                }
+                vals.push(serde_json::Value::String(h.clone()));
+                println!("added index {}: {h}", vals.len() - 1);
+            }
+            let after = vals.len();
+            if let Some(parent) = out.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            fs::write(&out, serde_json::to_string_pretty(&g)? + "\n")?;
+            println!(
+                "wrote {}  validators {before} → {after}  finality≥{}",
+                out.display(),
+                (2 * after).div_ceil(3)
+            );
+            println!("Restack: ASSUME_YES=1 ./scripts/restack_public_seed.sh {}", out.display());
+            println!("Docs: docs/MULTI_OPERATOR.md");
         }
 
         Commands::Validator {

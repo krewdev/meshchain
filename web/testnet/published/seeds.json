@@ -1,7 +1,7 @@
 {
   "chain_id": "meshchain-testnet-1",
-  "updated": "2026-07-10",
-  "note": "Public seed on GCE. Validator keys stay on server only. HTTP + HTTPS endpoints.",
+  "updated": "2026-07-11",
+  "note": "Public seed + community observer. Validator keys stay on servers only.",
   "seeds": [
     {
       "id": "gce-seed-0",
@@ -34,6 +34,18 @@
       ],
       "operator": "meshchain-lab",
       "region": "us-central1"
+    },
+    {
+      "id": "gce-observer-1",
+      "host": "35.192.20.103",
+      "port": 9100,
+      "roles": [
+        "observer",
+        "seed"
+      ],
+      "operator": "meshchain-lab",
+      "region": "us-central1",
+      "note": "Phase B multi-host observer"
     }
   ],
   "http": {
@@ -43,9 +55,8 @@
     "scanner_https": "https://34.172.103.125.sslip.io"
   },
   "how_to_use": [
-    "Observer: mesh observer --peer 34.172.103.125:9100",
-    "Wallet: mesh join-public && mesh register --submit 34.172.103.125:9100",
-    "Faucet: https://faucet.34.172.103.125.sslip.io/info  (or http://34.172.103.125:8787/info)",
-    "Scanner: https://34.172.103.125.sslip.io/  (or http://34.172.103.125:8788/)"
+    "Observer: mesh observer --peer 34.172.103.125:9100 --peer 35.192.20.103:9100",
+    "Wallet: mesh join-public && mesh new-wallet --name me.json --publish && mesh faucet-drip --wallet me.json",
+    "Apply as producer: mesh validator-keygen + docs/MULTI_OPERATOR.md"
   ]
 }

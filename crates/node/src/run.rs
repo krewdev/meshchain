@@ -127,14 +127,9 @@ pub fn run_validator(cfg: RunConfig) -> Result<()> {
         chain_id: genesis.chain_id.clone(),
         height: state.height,
     });
-    // Ask seeds for catch-up immediately (observers and lagging producers).
-    let _ = hub.broadcast(&GossipMsg::SyncRequest {
-        chain_id: genesis.chain_id.clone(),
-        have_height: state.height,
-    });
-
+    // Delay first SyncRequest so bootstrap dials can finish (empty peer list race).
     let mut last_slot = now_secs();
-    let mut last_sync_req = now_secs();
+    let mut last_sync_req = now_secs().saturating_sub(55); // first request ~5s after start
     let slot_secs = genesis.slot_secs.max(1);
 
     loop {
@@ -266,13 +261,22 @@ pub fn run_validator(cfg: RunConfig) -> Result<()> {
         }
 
         let now = now_secs();
-        // Observers / lagging nodes re-request sync every 60s if still alone-ish
-        if now.saturating_sub(last_sync_req) >= 60 {
+        // Observers / lagging nodes re-request sync periodically (and soon after boot).
+        if now.saturating_sub(last_sync_req) >= 60 || (observer && now.saturating_sub(last_sync_req) >= 5 && hub.peer_count() > 0 && state.height == 0) {
             last_sync_req = now;
-            let _ = hub.broadcast(&GossipMsg::SyncRequest {
-                chain_id: state.chain_id.clone(),
-                have_height: state.height,
-            });
+            if hub.peer_count() > 0 {
+                let _ = hub.broadcast(&GossipMsg::SyncRequest {
+                    chain_id: state.chain_id.clone(),
+                    have_height: state.height,
+                });
+                if observer {
+                    println!(
+                        "sync: requested snapshot (local height={}, peers={})",
+                        state.height,
+                        hub.peer_count()
+                    );
+                }
+            }
         }
         let slot_due = now >= last_slot + slot_secs;
         // Fast path: any pending tx can be proposed without waiting full slot_secs.

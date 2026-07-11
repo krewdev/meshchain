@@ -47,7 +47,7 @@ cargo build -p mesh -p meshchain-node
 ./scripts/start_testnet_host.sh   # optional local validators + faucet
 ```
 
-Guide: [docs/TESTNET.md](./docs/TESTNET.md) · [Multi-operator](./docs/MULTI_OPERATOR.md) · (./docs/TESTNET.md) · **[Run a node](./docs/RUN_A_NODE.md)** · [Cloud](./docs/CLOUD.md)
+Guide: [docs/TESTNET.md](./docs/TESTNET.md) · **[Run a node](./docs/RUN_A_NODE.md)** · [Cloud](./docs/CLOUD.md)
 
 ---
 
