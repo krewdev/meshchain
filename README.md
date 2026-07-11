@@ -49,6 +49,8 @@ cargo build -p mesh -p meshchain-node
 
 Guide: [docs/TESTNET.md](./docs/TESTNET.md) · **[Run a node](./docs/RUN_A_NODE.md)** · [Multi-operator](./docs/MULTI_OPERATOR.md) · [**Status**](./docs/STATUS.md) · [Cloud](./docs/CLOUD.md)
 
+**Live multi-host:** seed `34.172.103.125:9100` · remote observer `35.192.20.103:9100`
+
 ---
 
 ## Donate

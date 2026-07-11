@@ -23,6 +23,13 @@ Params: [`testnet/network.json`](../testnet/network.json) · [`testnet/seeds.jso
 ```bash
 # Dial both seed and remote observer
 mesh observer --peer 34.172.103.125:9100 --peer 35.192.20.103:9100
+
+# Recreate / upgrade remote observer VM
+ASSUME_YES=1 ./deploy/gce-observer-setup.sh
+
+# Seed host: dial remote observer (bi-directional gossip)
+# EXTRA_PEERS is defaulted in deploy/remote-bind-public.sh
+sudo EXTRA_PEERS=35.192.20.103:9100 /opt/meshchain/deploy/remote-bind-public.sh
 ```
 
 ## Integrity posture (Track A+)

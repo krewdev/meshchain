@@ -30,6 +30,14 @@ PIDFILE="$HOST_DATA/host.pids"
 
 # LISTEN_HOST=0.0.0.0 for public seed; default 127.0.0.1 for local-only lab
 LISTEN_HOST="${LISTEN_HOST:-127.0.0.1}"
+# Optional remote peers: EXTRA_PEERS="host:port host2:port"
+EXTRA_PEERS="${EXTRA_PEERS:-}"
+# shellcheck disable=SC2206
+EXTRA_ARR=($EXTRA_PEERS)
+EXTRA_FLAGS=()
+for p in "${EXTRA_ARR[@]}"; do
+  [[ -n "$p" ]] && EXTRA_FLAGS+=(--peer "$p")
+done
 
 start_one() {
   local idx=$1 port=$2
@@ -39,6 +47,7 @@ start_one() {
     1) peers=(--peer 127.0.0.1:9100 --peer 127.0.0.1:9102) ;;
     2) peers=(--peer 127.0.0.1:9100 --peer 127.0.0.1:9101) ;;
   esac
+  peers+=("${EXTRA_FLAGS[@]}")
   echo "starting validator $idx on ${LISTEN_HOST}:$port"
   nohup "$NODE" run \
     --data-dir "$HOST_DATA/v$idx" \

@@ -50,9 +50,17 @@ jobs:
           ./target/debug/mesh --dir /tmp/mesh-ci-join address --wallet ci.json
           ./target/debug/mesh --dir /tmp/mesh-ci-join validator-keygen --name ci-val.json
 
+      - name: Multi-node e2e (local PoA)
+        run: |
+          chmod +x scripts/e2e_multi_node.sh
+          bash scripts/e2e_multi_node.sh
+
       - name: Public seed HTTP smoke (best-effort)
         continue-on-error: true
         run: |
           # Live seed may be offline; don't fail the PR
           curl -fsS --max-time 10 http://34.172.103.125:8787/info || exit 0
           curl -fsS --max-time 10 http://34.172.103.125:8788/api/v1/status || exit 0
+          curl -fsS --max-time 10 http://35.192.20.103:9100 && true || true
+          # TCP probe observer (nc may not exist)
+          timeout 3 bash -c 'echo >/dev/tcp/35.192.20.103/9100' 2>/dev/null && echo "observer :9100 open" || echo "observer probe skipped"
