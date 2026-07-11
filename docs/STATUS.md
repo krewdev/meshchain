@@ -7,12 +7,23 @@
 
 | Service | URL / addr |
 |---------|------------|
-| Seed peer (TCP gossip) | `34.172.103.125:9100` |
+| Seed peer (TCP gossip) | `34.172.103.125:9100` (+ `:9101`, `:9102`) |
+| **Remote observer** (GCE) | `35.192.20.103:9100` — non-PoA full node |
 | Scanner | https://34.172.103.125.sslip.io/ |
 | Faucet | https://faucet.34.172.103.125.sslip.io/info |
 | Site | https://meshchain-sigma.vercel.app |
 
+| Host | Role | Instance |
+|------|------|----------|
+| `34.172.103.125` | 3× PoA validators + faucet + scanner | `meshchain-testnet` |
+| `35.192.20.103` | observer / relay seed | `meshchain-observer` |
+
 Params: [`testnet/network.json`](../testnet/network.json) · [`testnet/seeds.json`](../testnet/seeds.json)
+
+```bash
+# Dial both seed and remote observer
+mesh observer --peer 34.172.103.125:9100 --peer 35.192.20.103:9100
+```
 
 ## Integrity posture (Track A+)
 
