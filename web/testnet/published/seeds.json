@@ -1,22 +1,27 @@
 {
   "chain_id": "meshchain-testnet-1",
   "updated": "2026-07-10",
-  "note": "Public seed host on Google Cloud. Validator keys stay on the server only.",
+  "note": "Public seed on GCE. Validator keys stay on server only. HTTP + HTTPS endpoints.",
   "seeds": [
     {
       "id": "gce-seed-0",
       "host": "34.172.103.125",
       "port": 9100,
-      "roles": ["validator", "submit", "seed"],
+      "roles": [
+        "validator",
+        "submit",
+        "seed"
+      ],
       "operator": "meshchain-lab",
-      "region": "us-central1",
-      "instance": "meshchain-testnet"
+      "region": "us-central1"
     },
     {
       "id": "gce-seed-1",
       "host": "34.172.103.125",
       "port": 9101,
-      "roles": ["validator"],
+      "roles": [
+        "validator"
+      ],
       "operator": "meshchain-lab",
       "region": "us-central1"
     },
@@ -24,20 +29,23 @@
       "id": "gce-seed-2",
       "host": "34.172.103.125",
       "port": 9102,
-      "roles": ["validator"],
+      "roles": [
+        "validator"
+      ],
       "operator": "meshchain-lab",
       "region": "us-central1"
     }
   ],
   "http": {
     "faucet": "http://34.172.103.125:8787",
-    "scanner": "http://34.172.103.125:8788"
+    "scanner": "http://34.172.103.125:8788",
+    "faucet_https": "https://faucet.34.172.103.125.sslip.io",
+    "scanner_https": "https://34.172.103.125.sslip.io"
   },
   "how_to_use": [
-    "Observer: meshchain-node run --observer --peer 34.172.103.125:9100 --listen 0.0.0.0:9100",
-    "Wallet: mesh register --submit 34.172.103.125:9100",
-    "Send: mesh send NAME 1 --submit 34.172.103.125:9100",
-    "Faucet: curl -s http://34.172.103.125:8787/info",
-    "Scanner: http://34.172.103.125:8788/"
+    "Observer: mesh observer --peer 34.172.103.125:9100",
+    "Wallet: mesh join-public && mesh register --submit 34.172.103.125:9100",
+    "Faucet: https://faucet.34.172.103.125.sslip.io/info  (or http://34.172.103.125:8787/info)",
+    "Scanner: https://34.172.103.125.sslip.io/  (or http://34.172.103.125:8788/)"
   ]
 }

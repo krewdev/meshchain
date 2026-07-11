@@ -33,6 +33,17 @@ pub enum GossipMsg {
         block_hash_hex: String,
         validator_pubkey_hex: String,
     },
+    /// Catch-up: ask peer for full chain_state if we are behind.
+    SyncRequest {
+        chain_id: String,
+        have_height: u64,
+    },
+    /// Full ledger snapshot (JSON text of ChainState) for observers / lagging nodes.
+    SyncResponse {
+        chain_id: String,
+        height: u64,
+        state_json: String,
+    },
     Ping,
     Pong,
 }
@@ -180,6 +191,15 @@ fn read_peer(stream: TcpStream, tx: Sender<GossipMsg>, seen: Arc<Mutex<HashSet<S
                         height,
                         ..
                     } => format!("hello:{pubkey_hex}:{height}"),
+                    GossipMsg::SyncRequest {
+                        chain_id,
+                        have_height,
+                    } => format!("syncreq:{chain_id}:{have_height}"),
+                    GossipMsg::SyncResponse {
+                        chain_id,
+                        height,
+                        ..
+                    } => format!("syncres:{chain_id}:{height}"),
                     GossipMsg::Ping => continue,
                     GossipMsg::Pong => continue,
                 };

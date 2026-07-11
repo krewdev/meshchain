@@ -2,17 +2,20 @@
 
 **Goal:** other people can create wallets, relay traffic, and (with approval) produce blocks — not only the original lab host.
 
-## Live public seed (2026-07-10)
+## Live public seed
 
 | | |
 |--|--|
 | **Host** | Google Cloud `meshchain-testnet` · `us-central1-a` |
 | **Public IP** | **`34.172.103.125`** |
-| **Faucet** | http://34.172.103.125:8787 |
-| **Scanner** | http://34.172.103.125:8788/ |
+| **Faucet (HTTPS)** | https://faucet.34.172.103.125.sslip.io/info |
+| **Scanner (HTTPS)** | https://34.172.103.125.sslip.io/ |
+| **Faucet (HTTP)** | http://34.172.103.125:8787 |
+| **Scanner (HTTP)** | http://34.172.103.125:8788/ |
 | **Submit / seed** | `34.172.103.125:9100` (also 9101, 9102) |
 | **Genesis** | [`testnet/published/genesis.json`](../testnet/published/genesis.json) |
 | **Seeds** | [`testnet/seeds.json`](../testnet/seeds.json) |
+| **Catch-up** | Observers request full `chain_state` via gossip `SyncRequest` / `SyncResponse` |
 
 ```bash
 # Observer

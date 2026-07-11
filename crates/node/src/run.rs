@@ -115,7 +115,7 @@ pub fn run_validator(cfg: RunConfig) -> Result<()> {
         );
         println!("pubkey {}", hex::encode(kp.public_key()));
     }
-    println!("gossip: TCP line-JSON (Tx / Block / BlockAck)");
+    println!("gossip: TCP line-JSON (Tx / Block / BlockAck / Sync*)");
     println!("docs: docs/RUN_A_NODE.md");
 
     let _ = hub.broadcast(&GossipMsg::Hello {
@@ -127,8 +127,14 @@ pub fn run_validator(cfg: RunConfig) -> Result<()> {
         chain_id: genesis.chain_id.clone(),
         height: state.height,
     });
+    // Ask seeds for catch-up immediately (observers and lagging producers).
+    let _ = hub.broadcast(&GossipMsg::SyncRequest {
+        chain_id: genesis.chain_id.clone(),
+        have_height: state.height,
+    });
 
     let mut last_slot = now_secs();
+    let mut last_sync_req = now_secs();
     let slot_secs = genesis.slot_secs.max(1);
 
     loop {
@@ -190,12 +196,80 @@ pub fn run_validator(cfg: RunConfig) -> Result<()> {
                         "peer hello v{validator_index} height={height} chain={chain_id} peers={}",
                         hub.peer_count()
                     );
+                    // Catch-up if peer is ahead
+                    if chain_id == state.chain_id && height > state.height {
+                        let _ = hub.broadcast(&GossipMsg::SyncRequest {
+                            chain_id: state.chain_id.clone(),
+                            have_height: state.height,
+                        });
+                    }
+                }
+                GossipMsg::SyncRequest {
+                    chain_id,
+                    have_height,
+                } => {
+                    if chain_id == state.chain_id && state.height > have_height {
+                        if let Ok(state_json) = serde_json::to_string(&state) {
+                            let _ = hub.broadcast(&GossipMsg::SyncResponse {
+                                chain_id: state.chain_id.clone(),
+                                height: state.height,
+                                state_json,
+                            });
+                            println!(
+                                "sync: served snapshot height={} to peer (they had {have_height})",
+                                state.height
+                            );
+                        }
+                    }
+                }
+                GossipMsg::SyncResponse {
+                    chain_id,
+                    height,
+                    state_json,
+                } => {
+                    if chain_id != state.chain_id {
+                        continue;
+                    }
+                    if height <= state.height {
+                        continue;
+                    }
+                    match serde_json::from_str::<ChainState>(&state_json) {
+                        Ok(incoming) => {
+                            if incoming.chain_id != state.chain_id {
+                                continue;
+                            }
+                            if incoming.validators != state.validators {
+                                eprintln!("sync: reject snapshot (validator set mismatch)");
+                                continue;
+                            }
+                            println!(
+                                "sync: applying snapshot {} → {} (catch-up)",
+                                state.height, incoming.height
+                            );
+                            state = incoming;
+                            pending.clear();
+                            finality = FinalityTracker::new();
+                            if let Err(e) = state.save_json(&state_path) {
+                                eprintln!("sync: save failed: {e}");
+                            }
+                        }
+                        Err(e) => eprintln!("sync: bad snapshot: {e}"),
+                    }
                 }
                 GossipMsg::Ping | GossipMsg::Pong => {}
+                // Future: block_hint from radio relay ignored
             }
         }
 
         let now = now_secs();
+        // Observers / lagging nodes re-request sync every 60s if still alone-ish
+        if now.saturating_sub(last_sync_req) >= 60 {
+            last_sync_req = now;
+            let _ = hub.broadcast(&GossipMsg::SyncRequest {
+                chain_id: state.chain_id.clone(),
+                have_height: state.height,
+            });
+        }
         let slot_due = now >= last_slot + slot_secs;
         // Fast path: any pending tx can be proposed without waiting full slot_secs.
         // Higher fees still win ordering (MEV-style tip auction).

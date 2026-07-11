@@ -78,14 +78,16 @@
     "scanner_docs": "https://meshchain-sigma.vercel.app/docs/?doc=SCANNER",
     "faucet_ui": "https://meshchain-sigma.vercel.app/faucet/",
     "faucet_api_local": "http://127.0.0.1:8787",
-    "faucet_api": "http://34.172.103.125:8787",
+    "faucet_api": "https://faucet.34.172.103.125.sslip.io",
     "tunnel_note": "Cloudflare quick tunnel; re-run scripts/start_public_tunnel.sh if dead",
-    "scanner_api": "http://34.172.103.125:8788",
-    "scanner_ui": "http://34.172.103.125:8788/",
+    "scanner_api": "https://34.172.103.125.sslip.io/api/",
+    "scanner_ui": "https://34.172.103.125.sslip.io/",
     "submit_peer": "34.172.103.125:9100",
     "seeds_json": "https://meshchain-sigma.vercel.app/testnet/seeds.json",
     "genesis_json": "https://meshchain-sigma.vercel.app/testnet/published/genesis.json",
-    "run_a_node_docs": "https://meshchain-sigma.vercel.app/docs/?doc=RUN_A_NODE"
+    "run_a_node_docs": "https://meshchain-sigma.vercel.app/docs/?doc=RUN_A_NODE",
+    "faucet_api_http": "http://34.172.103.125:8787",
+    "scanner_api_http": "http://34.172.103.125:8788"
   },
   "how_to_join": [
     "Clone https://github.com/krewdev/meshchain && cargo build -p mesh -p meshchain-node",
@@ -107,5 +109,5 @@
     "default_auth": "open",
     "note": "Run meshchain-scanner against validator data_dir; internet-open for testnet"
   },
-  "tunnel_note": "Primary public seed is GCE meshchain-testnet (34.172.103.125)."
+  "tunnel_note": "Primary seed 34.172.103.125; HTTPS via sslip.io + Caddy."
 }
