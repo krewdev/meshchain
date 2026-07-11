@@ -188,6 +188,7 @@ fn main() -> Result<()> {
                 from: sid,
                 to: to_sid,
                 amount: units,
+                fee: 0,
             };
             let tx = Tx::sign(body, &kp).map_err(|e| anyhow::anyhow!(e.to_string()))?;
             tx.verify().map_err(|e| anyhow::anyhow!(e.to_string()))?;

@@ -3,6 +3,9 @@
 MeshChain validators gossip over **TCP** (line-delimited JSON).  
 Optional **Meshtastic** radios carry the same `MC` frames via `tools/meshtastic_bridge.py`.
 
+**Want others to run nodes?** See **[RUN_A_NODE.md](./RUN_A_NODE.md)**  
+(observers for anyone; PoA producers via application + shared genesis).
+
 ## Lab: 3 validators on one computer
 
 ```bash

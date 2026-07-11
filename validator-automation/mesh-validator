@@ -1,0 +1,488 @@
+#!/usr/bin/env bash
+# MeshChain comprehensive validator automation CLI.
+#
+# Usage:
+#   ./validator-automation/mesh-validator <command> [options]
+#   ./validator-automation/mesh-validator help
+#
+set -euo pipefail
+
+VA_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/common.sh
+source "$VA_ROOT/lib/common.sh"
+
+CONFIG_FILE=""
+COMMAND=""
+
+usage() {
+  cat <<'EOF'
+MeshChain Validator Automation
+==============================
+
+  mesh-validator <command> [options]
+
+Commands:
+  bootstrap   Build binaries + init genesis + prepare validator trees
+  start       Start all validators (background)
+  stop        Stop all validators managed by this tool
+  restart     stop + start
+  status      PIDs, ports, heights, chain_id
+  health      Exit 0 if healthy, 1 otherwise (for monitors)
+  logs [N]    Tail validator logs (default N=0, or 'all')
+  sync        Sync chain_state from leader (v0) to peers + lab snapshot
+  doctor      Diagnostics (bins, genesis, ports, key match)
+  watchdog    Loop: restart dead validators (Ctrl+C to stop)
+  submit <tx.json>   Submit signed payment to validator 0
+  promote-lab Copy live v0 state into ./data/chain_state.json for mesh CLI
+  help        This message
+
+Options (any command):
+  --config PATH     Env file (default: config/local.env or config/lab.env)
+  --mode lab|host   lab=./data  host=./data/host
+  --count N         Validator count (default 3)
+  --base-port P     First port (default 9100 → 9100..9100+N-1)
+  --slot-ms MS      Node poll interval (default 100)
+  --release         Use target/release binaries
+  --data-root PATH  Override data directory
+  --home PATH       Repo root (default: parent of this package)
+
+Examples:
+  ./validator-automation/mesh-validator bootstrap
+  ./validator-automation/mesh-validator start
+  ./validator-automation/mesh-validator status
+  ./validator-automation/mesh-validator logs 0
+  ./validator-automation/mesh-validator submit ./data/last_payment.json
+  ./validator-automation/mesh-validator watchdog
+
+  # host profile (always-on style)
+  ./validator-automation/mesh-validator --mode host --release bootstrap
+  ./validator-automation/mesh-validator --mode host --release start
+EOF
+}
+
+parse_args() {
+  local args=()
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --config) CONFIG_FILE="$2"; shift 2 ;;
+      --mode) CHAIN_MODE="$2"; shift 2 ;;
+      --count) VALIDATOR_COUNT="$2"; shift 2 ;;
+      --base-port) BASE_PORT="$2"; shift 2 ;;
+      --slot-ms) SLOT_MS="$2"; shift 2 ;;
+      --release) BUILD_PROFILE="release"; shift ;;
+      --data-root) DATA_ROOT="$2"; shift 2 ;;
+      --home) MESHCHAIN_HOME="$2"; shift 2 ;;
+      -h|--help) usage; exit 0 ;;
+      -*)
+        die "unknown option: $1"
+        ;;
+      *)
+        args+=("$1")
+        shift
+        ;;
+    esac
+  done
+  if [[ ${#args[@]} -eq 0 ]]; then
+    usage
+    exit 1
+  fi
+  COMMAND="${args[0]}"
+  EXTRA_ARGS=("${args[@]:1}")
+}
+
+cmd_bootstrap() {
+  ensure_build
+  local NODE MESH
+  NODE="$(node_bin)"
+  MESH="$(mesh_bin || true)"
+
+  mkdir -p "$DATA_ROOT/keys" "$LOG_DIR" "$PID_DIR"
+
+  if [[ ! -f "$DATA_ROOT/genesis.json" ]]; then
+    log "Initializing genesis (testnet profile) in $DATA_ROOT …"
+    "$NODE" init --data-dir "$DATA_ROOT" --validators "$VALIDATOR_COUNT" --testnet
+  else
+    log "Using existing genesis: $DATA_ROOT/genesis.json"
+  fi
+
+  local i
+  for ((i = 0; i < VALIDATOR_COUNT; i++)); do
+    prepare_validator_tree "$i"
+    log "prepared $(vdir "$i")"
+  done
+
+  # Lab convenience: mirror keys into ./data/keys if we're on host mode skip
+  if [[ "$CHAIN_MODE" == "lab" && -d "$DATA_ROOT/keys" ]]; then
+    mkdir -p "$MESHCHAIN_HOME/data/keys"
+    cp -f "$DATA_ROOT/keys"/*.json "$MESHCHAIN_HOME/data/keys/" 2>/dev/null || true
+  fi
+
+  log "Bootstrap OK"
+  log "  chain:   $(read_chain_id "$DATA_ROOT/genesis.json")"
+  log "  data:    $DATA_ROOT"
+  log "  node:    $NODE"
+  log "  next:    mesh-validator start"
+  if [[ -n "${MESH:-}" ]]; then
+    log "  mesh:    $MESH"
+  fi
+}
+
+cmd_start() {
+  ensure_build
+  local NODE
+  NODE="$(node_bin)"
+
+  if [[ -f "$(pidfile)" ]]; then
+    local alive=0 pid
+    while read -r pid; do
+      if is_pid_alive "$pid"; then alive=1; break; fi
+    done <"$(pidfile)"
+    if [[ "$alive" -eq 1 ]]; then
+      die "validators already running (see mesh-validator status). stop first."
+    fi
+    rm -f "$(pidfile)"
+  fi
+
+  # Port conflict check
+  local i p
+  for ((i = 0; i < VALIDATOR_COUNT; i++)); do
+    p="$(port_for "$i")"
+    if port_listening "$p"; then
+      die "port $p already in use — stop other meshchain-node processes first"
+    fi
+  done
+
+  : >"$(pidfile)"
+  {
+    echo "started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    echo "count=$VALIDATOR_COUNT"
+    echo "base_port=$BASE_PORT"
+    echo "data_root=$DATA_ROOT"
+    echo "node=$NODE"
+    echo "slot_ms=$SLOT_MS"
+  } >"$(metafile)"
+
+  for ((i = 0; i < VALIDATOR_COUNT; i++)); do
+    prepare_validator_tree "$i"
+    p="$(port_for "$i")"
+    local logfile peers=()
+    logfile="$LOG_DIR/v$i.log"
+    peers=()
+    while IFS= read -r _pline; do
+      [[ -n "$_pline" ]] && peers+=("$_pline")
+    done < <(peer_flags_for "$i")
+    log "starting validator $i on :$p -> $logfile"
+    nohup "$NODE" run \
+      --data-dir "$(vdir "$i")" \
+      --validator-index "$i" \
+      --listen "127.0.0.1:$p" \
+      "${peers[@]}" \
+      --slot-ms "$SLOT_MS" \
+      >>"$logfile" 2>&1 &
+    echo $! >>"$(pidfile)"
+  done
+
+  sleep 1
+  cmd_status
+  log "Start complete. PIDs: $(tr '\n' ' ' <"$(pidfile)")"
+}
+
+cmd_stop() {
+  local stopped=0 pid
+  if [[ -f "$(pidfile)" ]]; then
+    while read -r pid; do
+      if is_pid_alive "$pid"; then
+        kill "$pid" 2>/dev/null || true
+        stopped=1
+      fi
+    done <"$(pidfile)"
+    # grace then force
+    sleep 1
+    while read -r pid; do
+      if is_pid_alive "$pid"; then
+        kill -9 "$pid" 2>/dev/null || true
+      fi
+    done <"$(pidfile)"
+    rm -f "$(pidfile)"
+  fi
+
+  # Also clear orphans on our ports if still bound
+  local i p pids
+  for ((i = 0; i < VALIDATOR_COUNT; i++)); do
+    p="$(port_for "$i")"
+    if command -v lsof >/dev/null 2>&1; then
+      pids="$(lsof -tiTCP:"$p" -sTCP:LISTEN 2>/dev/null || true)"
+      if [[ -n "$pids" ]]; then
+        # shellcheck disable=SC2086
+        kill $pids 2>/dev/null || true
+        stopped=1
+      fi
+    fi
+  done
+
+  if [[ "$stopped" -eq 1 ]]; then
+    log "stopped validators"
+  else
+    log "no running validators found"
+  fi
+}
+
+cmd_restart() {
+  cmd_stop
+  sleep 1
+  cmd_start
+}
+
+cmd_status() {
+  echo "=== MeshChain validators ($CHAIN_MODE) ==="
+  echo "data:  $DATA_ROOT"
+  echo "chain: $(read_chain_id "$DATA_ROOT/genesis.json")"
+  local last_port=$((BASE_PORT + VALIDATOR_COUNT - 1))
+  echo "ports: ${BASE_PORT}-${last_port}  slot_ms=${SLOT_MS}"
+  echo
+  printf '%-4s %-8s %-8s %-8s %-10s %s\n' "IDX" "PORT" "LISTEN" "PID" "HEIGHT" "DATA"
+  local i p pid height listen pid_line=""
+  local pids=()
+  if [[ -f "$(pidfile)" ]]; then
+    while IFS= read -r _pid; do
+      [[ -n "$_pid" ]] && pids+=("$_pid")
+    done <"$(pidfile)"
+  fi
+  for ((i = 0; i < VALIDATOR_COUNT; i++)); do
+    p="$(port_for "$i")"
+    pid="${pids[$i]:-}"
+    if [[ -n "$pid" ]] && is_pid_alive "$pid"; then
+      pid_line="$pid"
+    else
+      pid_line="-"
+      if command -v lsof >/dev/null 2>&1; then
+        pid_line="$(lsof -tiTCP:"$p" -sTCP:LISTEN 2>/dev/null | head -1 || true)"
+        [[ -z "$pid_line" ]] && pid_line="-"
+      fi
+    fi
+    if port_listening "$p"; then listen="yes"; else listen="no"; fi
+    height="$(read_height "$(vdir "$i")/chain_state.json")"
+    printf '%-4s %-8s %-8s %-8s %-10s %s\n' "$i" "$p" "$listen" "$pid_line" "$height" "$(vdir "$i")"
+  done
+  echo
+  if [[ -f "$DATA_ROOT/chain_state.json" ]]; then
+    echo "lab snapshot height: $(read_height "$DATA_ROOT/chain_state.json")  ($DATA_ROOT/chain_state.json)"
+  fi
+  if [[ -f "$(metafile)" ]]; then
+    echo "meta: $(metafile)"
+  fi
+}
+
+cmd_health() {
+  local ok=1 i p pid
+  local pids=()
+  if [[ -f "$(pidfile)" ]]; then
+    while IFS= read -r _pid; do
+      [[ -n "$_pid" ]] && pids+=("$_pid")
+    done <"$(pidfile)"
+  fi
+
+  if [[ ${#pids[@]} -lt $VALIDATOR_COUNT ]]; then
+    warn "expected $VALIDATOR_COUNT pids, have ${#pids[@]}"
+    ok=0
+  fi
+
+  for ((i = 0; i < VALIDATOR_COUNT; i++)); do
+    p="$(port_for "$i")"
+    if ! port_listening "$p"; then
+      warn "validator $i not listening on $p"
+      ok=0
+    fi
+    pid="${pids[$i]:-}"
+    if [[ -n "$pid" ]] && ! is_pid_alive "$pid"; then
+      warn "validator $i pid $pid dead"
+      ok=0
+    fi
+  done
+
+  # height parity (allow small lag)
+  local h0 h max=0 min=999999999
+  h0="$(read_height "$(vdir 0)/chain_state.json")"
+  if [[ "$h0" == "-" ]]; then
+    warn "no chain_state on v0"
+    ok=0
+  else
+    for ((i = 0; i < VALIDATOR_COUNT; i++)); do
+      h="$(read_height "$(vdir "$i")/chain_state.json")"
+      if [[ "$h" == "-" ]]; then
+        warn "missing height on v$i"
+        ok=0
+        continue
+      fi
+      if [[ "$h" -gt "$max" ]]; then max=$h; fi
+      if [[ "$h" -lt "$min" ]]; then min=$h; fi
+    done
+    if [[ $((max - min)) -gt 2 ]]; then
+      warn "height skew too large: min=$min max=$max"
+      ok=0
+    fi
+  fi
+
+  if [[ "$ok" -eq 1 ]]; then
+    log "HEALTHY (height=$(read_height "$(vdir 0)/chain_state.json"))"
+    exit 0
+  else
+    log "UNHEALTHY"
+    exit 1
+  fi
+}
+
+cmd_logs() {
+  local which="${EXTRA_ARGS[0]:-0}"
+  if [[ "$which" == "all" ]]; then
+    # shellcheck disable=SC2086
+    tail -n 50 -f "$LOG_DIR"/v*.log
+  else
+    local f="$LOG_DIR/v${which}.log"
+    [[ -f "$f" ]] || die "no log: $f"
+    tail -n 80 -f "$f"
+  fi
+}
+
+cmd_sync() {
+  local src="$(vdir 0)/chain_state.json"
+  [[ -f "$src" ]] || die "missing $src — is v0 running / bootstrapped?"
+  local i
+  for ((i = 1; i < VALIDATOR_COUNT; i++)); do
+    # Only safe when validators are stopped OR for CLI snapshot promote
+    cp -f "$src" "$(vdir "$i")/chain_state.json"
+    log "synced v0 → v$i height=$(read_height "$(vdir "$i")/chain_state.json")"
+  done
+  cp -f "$src" "$DATA_ROOT/chain_state.json"
+  if [[ "$CHAIN_MODE" == "lab" ]]; then
+    cp -f "$src" "$MESHCHAIN_HOME/data/chain_state.json" 2>/dev/null || true
+  fi
+  log "synced lab snapshot height=$(read_height "$src")"
+  warn "If validators were running, restart them after a hard sync: mesh-validator restart"
+}
+
+cmd_promote_lab() {
+  local src="$(vdir 0)/chain_state.json"
+  [[ -f "$src" ]] || die "missing $src"
+  mkdir -p "$MESHCHAIN_HOME/data"
+  cp -f "$src" "$MESHCHAIN_HOME/data/chain_state.json"
+  cp -f "$src" "$DATA_ROOT/chain_state.json"
+  log "promoted v0 state → $MESHCHAIN_HOME/data/chain_state.json (height=$(read_height "$src"))"
+  log "mesh balance/status will now see live height"
+}
+
+cmd_doctor() {
+  echo "=== doctor ==="
+  echo "repo:   $MESHCHAIN_HOME"
+  echo "mode:   $CHAIN_MODE"
+  echo "data:   $DATA_ROOT"
+  echo "profile:$BUILD_PROFILE"
+  if node_bin >/dev/null 2>&1; then
+    echo "node:   $(node_bin)  OK"
+  else
+    echo "node:   MISSING"
+  fi
+  if mesh_bin >/dev/null 2>&1; then
+    echo "mesh:   $(mesh_bin)  OK"
+  else
+    echo "mesh:   MISSING (optional for validators)"
+  fi
+  echo "genesis:$(read_chain_id "$DATA_ROOT/genesis.json")  ($DATA_ROOT/genesis.json)"
+
+  local i key
+  for ((i = 0; i < VALIDATOR_COUNT; i++)); do
+    key="$(vdir "$i")/keys/validator-$i.json"
+    if [[ -f "$key" ]]; then
+      echo "key v$i: OK  $key"
+    else
+      echo "key v$i: MISSING  $key"
+    fi
+    if [[ -f "$(vdir "$i")/genesis.json" ]]; then
+      echo "tree v$i: genesis OK  height=$(read_height "$(vdir "$i")/chain_state.json")"
+    else
+      echo "tree v$i: missing genesis"
+    fi
+  done
+
+  # pubkey vs genesis match
+  if command -v python3 >/dev/null && [[ -f "$DATA_ROOT/genesis.json" ]]; then
+    python3 - "$DATA_ROOT" "$VALIDATOR_COUNT" <<'PY' || true
+import json, sys, pathlib
+root = pathlib.Path(sys.argv[1])
+n = int(sys.argv[2])
+g = json.loads((root / "genesis.json").read_text())
+vals = g.get("validators", [])
+print(f"genesis validators listed: {len(vals)}")
+for i in range(n):
+    kp = root / f"v{i}" / "keys" / f"validator-{i}.json"
+    if not kp.exists():
+        # try shared keys
+        kp = root / "keys" / f"validator-{i}.json"
+    if not kp.exists():
+        print(f"  v{i}: no key file")
+        continue
+    pub = json.loads(kp.read_text()).get("public_hex", "")
+    expect = vals[i] if i < len(vals) else ""
+    ok = pub == expect
+    print(f"  v{i}: {'MATCH' if ok else 'MISMATCH'} key={pub[:16]}…")
+PY
+  fi
+  echo
+  cmd_status
+}
+
+cmd_watchdog() {
+  log "watchdog every ${WATCHDOG_INTERVAL_SECS}s (Ctrl+C to stop)"
+  local fail=0
+  while true; do
+    if cmd_health >/dev/null 2>&1; then
+      fail=0
+      log "ok height=$(read_height "$(vdir 0)/chain_state.json")"
+    else
+      fail=$((fail + 1))
+      warn "health failed (streak=$fail) — restarting validators"
+      cmd_stop || true
+      sleep 2
+      cmd_start || true
+      fail=0
+    fi
+    sleep "$WATCHDOG_INTERVAL_SECS"
+  done
+}
+
+cmd_submit() {
+  local tx="${EXTRA_ARGS[0]:-}"
+  [[ -n "$tx" ]] || die "usage: mesh-validator submit <tx.json>"
+  [[ -f "$tx" ]] || die "tx file not found: $tx"
+  ensure_build
+  local NODE peer
+  NODE="$(node_bin)"
+  peer="127.0.0.1:$(port_for 0)"
+  log "submit $tx → $peer"
+  "$NODE" submit-tx --tx "$tx" --peer "$peer"
+}
+
+main() {
+  EXTRA_ARGS=()
+  parse_args "$@"
+  load_config "$CONFIG_FILE"
+
+  case "$COMMAND" in
+    bootstrap) cmd_bootstrap ;;
+    start) cmd_start ;;
+    stop) cmd_stop ;;
+    restart) cmd_restart ;;
+    status) cmd_status ;;
+    health) cmd_health ;;
+    logs) cmd_logs ;;
+    sync) cmd_sync ;;
+    promote-lab|promote) cmd_promote_lab ;;
+    doctor) cmd_doctor ;;
+    watchdog) cmd_watchdog ;;
+    submit) cmd_submit ;;
+    help) usage ;;
+    *) die "unknown command: $COMMAND (try: help)" ;;
+  esac
+}
+
+main "$@"

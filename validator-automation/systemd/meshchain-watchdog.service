@@ -1,0 +1,12 @@
+[Unit]
+Description=MeshChain validator health watchdog (one-shot check + heal)
+After=meshchain-validators.service
+
+[Service]
+Type=oneshot
+User=meshchain
+Group=meshchain
+WorkingDirectory=/opt/meshchain
+Environment=BUILD_PROFILE=release
+Environment=CHAIN_MODE=host
+ExecStart=/bin/bash -c '/opt/meshchain/validator-automation/mesh-validator --mode host health || /opt/meshchain/validator-automation/mesh-validator --mode host restart'

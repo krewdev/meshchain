@@ -1,0 +1,12 @@
+{
+  "role": "validator-applicant",
+  "chain_id": "meshchain-testnet-1",
+  "public_hex": "PASTE_64_CHAR_HEX_FROM_mesh_validator-keygen",
+  "operator_name": "your-handle",
+  "contact": "discord:you#0000 or email",
+  "region": "e.g. eu-west",
+  "listen": "node.example.com:9100",
+  "hardware": "VPS 2GB / home always-on / etc.",
+  "uptime_plan": "24/7 expected?",
+  "notes": "optional"
+}

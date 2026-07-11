@@ -1,0 +1,26 @@
+{
+  "chain_id": "meshchain-testnet-1",
+  "validators": [
+    "be22b10ed7223219b511473e0a80b8af38c0603d917c520f772e53ce23e0003e",
+    "65990085f3c8bd9e01156eec20d8eadb8582642c37e65a4afb173efa4905cf17",
+    "ce67461eb3ade45849e37b55f46766d8daf6d71a0867493b687f6fc6b4eb64d7"
+  ],
+  "block_reward": 100000,
+  "allocations": [
+    {
+      "public_key_hex": "6956e2805385aa3db0b457b273985358f9eeabd88aaf15bae31b57a5fc32424a",
+      "balance": 1000000000000
+    },
+    {
+      "public_key_hex": "3cbad8c20a9f60b36ab4d8823918f5f4fee1675c96e12e52185e1e6e47cbf38c",
+      "balance": 10000000000
+    },
+    {
+      "public_key_hex": "7c671be358d85c58fa811f42ccb6b475edc7b32f31c2e755eab80e64b8034c0f",
+      "balance": 0
+    }
+  ],
+  "minters": [],
+  "slot_secs": 30,
+  "pq_required_above": 100000000
+}

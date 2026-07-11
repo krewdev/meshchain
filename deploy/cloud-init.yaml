@@ -1,0 +1,32 @@
+#cloud-config
+# MeshChain testnet host — cloud-init for Ubuntu 22.04+
+# Used by deploy/gce-create.sh and manual cloud providers.
+package_update: true
+package_upgrade: true
+
+packages:
+  - build-essential
+  - pkg-config
+  - libssl-dev
+  - curl
+  - git
+  - ca-certificates
+  - python3
+  - ufw
+
+runcmd:
+  - |
+    set -euo pipefail
+    export DEBIAN_FRONTEND=noninteractive
+    export MESHCHAIN_REPO="${MESHCHAIN_REPO:-https://github.com/krewdev/meshchain.git}"
+    export MESHCHAIN_BRANCH="${MESHCHAIN_BRANCH:-main}"
+    export MESHCHAIN_SKIP_CADDY="${MESHCHAIN_SKIP_CADDY:-1}"
+    export OPEN_VALIDATOR_PORTS="${OPEN_VALIDATOR_PORTS:-0}"
+    # Install from git once clone is available — bootstrap via raw script after clone
+    mkdir -p /opt
+    if [[ ! -d /opt/meshchain/.git ]]; then
+      git clone --branch "$MESHCHAIN_BRANCH" "$MESHCHAIN_REPO" /opt/meshchain
+    fi
+    cd /opt/meshchain
+    bash deploy/vps-setup.sh
+    echo "MeshChain cloud-init finished at $(date -u)" | tee /var/log/meshchain-cloud-init.done

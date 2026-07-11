@@ -8,7 +8,7 @@ MeshChain is an open-source **mesh-native ledger** and wallet toolkit. Everyday 
 
 **Live site:** [meshchain-sigma.vercel.app](https://meshchain-sigma.vercel.app) · [Docs](https://meshchain-sigma.vercel.app/docs/) · [**Testnet**](https://meshchain-sigma.vercel.app/docs/?doc=TESTNET)
 
-[Meshtastic](https://meshtastic.org/) · [GitHub](https://github.com/krewdev/meshchain) · [Security](./docs/SECURITY_HARDENING.md) · [Hybrid vault](./docs/HYBRID_LOCK.md) · [Donate](./docs/DONATE.md)
+[Meshtastic](https://meshtastic.org/) · [GitHub](https://github.com/krewdev/meshchain) · [Discord setup](./docs/DISCORD.md) · [Security](./docs/SECURITY_HARDENING.md) · [Hybrid vault](./docs/HYBRID_LOCK.md) · [Donate](./docs/DONATE.md)
 
 ---
 
@@ -31,7 +31,7 @@ cargo build -p mesh -p meshchain-node
 ./target/debug/mesh demo
 ```
 
-Guide: [docs/TESTNET.md](./docs/TESTNET.md)
+Guide: [docs/TESTNET.md](./docs/TESTNET.md) · **[Run a node](./docs/RUN_A_NODE.md)** (wallets, observers, validators)
 
 ---
 

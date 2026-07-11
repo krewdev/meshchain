@@ -28,6 +28,9 @@ mkdir -p "$LOG"
 PIDFILE="$HOST_DATA/host.pids"
 : >"$PIDFILE"
 
+# LISTEN_HOST=0.0.0.0 for public seed; default 127.0.0.1 for local-only lab
+LISTEN_HOST="${LISTEN_HOST:-127.0.0.1}"
+
 start_one() {
   local idx=$1 port=$2
   local peers=()
@@ -36,11 +39,11 @@ start_one() {
     1) peers=(--peer 127.0.0.1:9100 --peer 127.0.0.1:9102) ;;
     2) peers=(--peer 127.0.0.1:9100 --peer 127.0.0.1:9101) ;;
   esac
-  echo "starting validator $idx on :$port"
+  echo "starting validator $idx on ${LISTEN_HOST}:$port"
   nohup "$NODE" run \
     --data-dir "$HOST_DATA/v$idx" \
     --validator-index "$idx" \
-    --listen "127.0.0.1:$port" \
+    --listen "${LISTEN_HOST}:$port" \
     "${peers[@]}" \
     >"$LOG/v$idx.log" 2>&1 &
   echo $! >>"$PIDFILE"
@@ -79,11 +82,16 @@ else
 fi
 
 echo "Host running. PIDs in $PIDFILE"
-echo "  Logs:    $LOG"
-echo "  Faucet:  http://127.0.0.1:8787/info"
-echo "  Scanner: http://127.0.0.1:8788/"
-echo "  Live:    ./scripts/start_scanner_live.sh   # public Cloudflare URL + Vercel"
-echo "  Stop:    ./scripts/stop_testnet_host.sh"
+echo "  Logs:      $LOG"
+echo "  Listen:    ${LISTEN_HOST}:9100-9102"
+echo "  Faucet:    http://127.0.0.1:8787/info"
+echo "  Scanner:   http://127.0.0.1:8788/"
+if [[ "$LISTEN_HOST" == "0.0.0.0" ]]; then
+  echo "  Public:    validators bound on all interfaces (seed-ready)"
+  echo "  Join:      mesh join-public && mesh observer --peer THIS_HOST:9100"
+fi
+echo "  Live:      ./scripts/start_scanner_live.sh   # Cloudflare tunnel"
+echo "  Stop:      ./scripts/stop_testnet_host.sh"
 sleep 2
 curl -s http://127.0.0.1:8787/info || true
 echo

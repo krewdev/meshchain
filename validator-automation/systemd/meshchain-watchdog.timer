@@ -1,0 +1,11 @@
+[Unit]
+Description=Run MeshChain validator watchdog every minute
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1min
+AccuracySec=10s
+Unit=meshchain-watchdog.service
+
+[Install]
+WantedBy=timers.target

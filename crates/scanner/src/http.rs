@@ -82,6 +82,8 @@ fn handle_client(mut stream: TcpStream, state: AppState) -> Result<()> {
         path,
         "/" | "/index.html"
             | "/api/v1/status"
+            | "/api/v1/chain_state"
+            | "/api/v1/network"
             | "/api/v1/auth/mode"
             | "/api/v1/auth/challenge"
             | "/favicon.ico"
@@ -138,6 +140,11 @@ fn handle_client(mut stream: TcpStream, state: AppState) -> Result<()> {
         ("GET", "/api/v1/network") => {
             let meta = state.network_meta.read().unwrap().clone();
             write_json(&mut stream, 200, &meta)
+        }
+        // Full ledger snapshot for light clients / mesh sync-state
+        ("GET", "/api/v1/chain_state") => {
+            let c = state.chain.read().unwrap();
+            write_json(&mut stream, 200, &*c)
         }
         ("GET", "/api/v1/blocks") => {
             let limit = query_param(query, "limit")
@@ -289,7 +296,8 @@ fn handle_client(mut stream: TcpStream, state: AppState) -> Result<()> {
             &serde_json::json!({
                 "error": "not found",
                 "paths": [
-                    "/","/api/v1/status","/api/v1/blocks","/api/v1/accounts",
+                    "/","/api/v1/status","/api/v1/chain_state","/api/v1/network",
+                    "/api/v1/blocks","/api/v1/accounts",
                     "/api/v1/search?q=","/api/v1/validators",
                     "/api/v1/auth/challenge","/api/v1/auth/verify"
                 ]

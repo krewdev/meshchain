@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: Build & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build workspace (debug)
+        run: cargo build -p meshchain-proto -p meshchain-ledger -p meshchain-node -p mesh -p meshchain-scanner -p meshchain-transport
+
+      - name: Unit tests
+        run: cargo test -p meshchain-proto -p meshchain-ledger -p meshchain-transport -- --nocapture
+
+      - name: CLI help smoke
+        run: |
+          ./target/debug/mesh --help
+          ./target/debug/meshchain-node --help
+          ./target/debug/mesh join-public --help || true
+
+      - name: join-public dry-run (artifacts present)
+        run: |
+          set -e
+          test -f testnet/published/genesis.json
+          test -f testnet/seeds.json
+          rm -rf /tmp/mesh-ci-join
+          ./target/debug/mesh --dir /tmp/mesh-ci-join join-public || true
+          # sync may fail without network to seed; genesis must install
+          test -f /tmp/mesh-ci-join/genesis.json
+          test -f /tmp/mesh-ci-join/seeds.json
+          ./target/debug/mesh --dir /tmp/mesh-ci-join new-wallet --name ci.json
+          ./target/debug/mesh --dir /tmp/mesh-ci-join address --wallet ci.json
+          ./target/debug/mesh --dir /tmp/mesh-ci-join validator-keygen --name ci-val.json
+
+      - name: Public seed HTTP smoke (best-effort)
+        continue-on-error: true
+        run: |
+          # Live seed may be offline; don't fail the PR
+          curl -fsS --max-time 10 http://34.172.103.125:8787/info || exit 0
+          curl -fsS --max-time 10 http://34.172.103.125:8788/api/v1/status || exit 0

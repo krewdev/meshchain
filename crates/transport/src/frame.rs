@@ -159,6 +159,7 @@ mod tests {
                 from,
                 to,
                 amount: 42,
+                fee: 0,
             },
             &kp,
         )

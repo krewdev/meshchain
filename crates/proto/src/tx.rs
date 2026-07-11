@@ -48,11 +48,16 @@ pub struct Tx {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum TxBody {
+    /// Everyday payment. Optional `fee` is a priority tip paid to the **block producer**
+    /// (MEV-style inclusion preference — higher fee wins the next slot when mempool is contested).
     Transfer {
         nonce: u32,
         from: ShortId,
         to: ShortId,
         amount: u64,
+        /// Priority fee in base units (0 = no tip). Paid to block producer on inclusion.
+        #[serde(default)]
+        fee: u64,
     },
     Register {
         nonce: u32,
@@ -100,6 +105,14 @@ impl TxBody {
         }
     }
 
+    /// Priority tip (base units) for inclusion preference. Only Transfer carries a fee today.
+    pub fn priority_fee(&self) -> u64 {
+        match self {
+            TxBody::Transfer { fee, .. } => *fee,
+            _ => 0,
+        }
+    }
+
     /// Canonical bytes for signing (deterministic bincode).
     pub fn sign_bytes(&self) -> Result<Vec<u8>, ProtoError> {
         bincode::serialize(&(PROTOCOL_VERSION, self))
@@ -137,6 +150,11 @@ impl Tx {
         }
     }
 
+    /// Priority tip attached to this tx (0 if none).
+    pub fn priority_fee(&self) -> u64 {
+        self.body.priority_fee()
+    }
+
     pub fn has_pq(&self) -> bool {
         self.pq_pk.is_some() && self.pq_sig.is_some()
     }
@@ -167,9 +185,18 @@ impl Tx {
 
         // Structural checks
         match &self.body {
-            TxBody::Transfer { from, amount, .. } => {
+            TxBody::Transfer {
+                from,
+                amount,
+                fee,
+                ..
+            } => {
                 if *amount == 0 {
                     return Err(ProtoError::InvalidTx("amount must be > 0".into()));
+                }
+                // fee may be 0 (no tip); overflow guard for amount+fee debit
+                if amount.checked_add(*fee).is_none() {
+                    return Err(ProtoError::InvalidTx("amount+fee overflow".into()));
                 }
                 if short_id(&self.signer) != *from {
                     return Err(ProtoError::InvalidTx("signer does not match from".into()));
@@ -246,9 +273,22 @@ mod tests {
             from,
             to,
             amount: 1_000_000,
+            fee: 0,
         };
         let tx = Tx::sign(body, &kp).unwrap();
         tx.verify().unwrap();
+        assert_eq!(tx.priority_fee(), 0);
+
+        let body_tip = TxBody::Transfer {
+            nonce: 1,
+            from,
+            to,
+            amount: 1_000_000,
+            fee: 50_000,
+        };
+        let tx2 = Tx::sign(body_tip, &kp).unwrap();
+        tx2.verify().unwrap();
+        assert_eq!(tx2.priority_fee(), 50_000);
         assert!(transfer_wire_size_estimate() < 200);
     }
 }

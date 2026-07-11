@@ -90,6 +90,7 @@ pub fn run_sim(data_dir: &Path, n_transfers: u32, mut slot_time: u64) -> Result<
             from: alice_sid,
             to: bob_sid,
             amount,
+            fee: 0,
         };
         let tx = Tx::sign(body, &alice).map_err(|e| anyhow::anyhow!(e.to_string()))?;
 
@@ -120,6 +121,7 @@ pub fn run_sim(data_dir: &Path, n_transfers: u32, mut slot_time: u64) -> Result<
             from: alice_sid,
             to: bob_sid,
             amount: 1,
+            fee: 0,
         };
         let tx = Tx::sign(body, &alice).map_err(|e| anyhow::anyhow!(e.to_string()))?;
         let next_height = state.height + 1;
@@ -146,6 +148,7 @@ pub fn run_sim(data_dir: &Path, n_transfers: u32, mut slot_time: u64) -> Result<
             from: alice_sid,
             to: bob_sid,
             amount: alice_acc.balance.saturating_add(1),
+            fee: 0,
         };
         let tx = Tx::sign(body, &alice).map_err(|e| anyhow::anyhow!(e.to_string()))?;
         let next_height = state.height + 1;
@@ -239,6 +242,7 @@ pub fn run_sim(data_dir: &Path, n_transfers: u32, mut slot_time: u64) -> Result<
                 from: alice_sid,
                 to: bob_sid,
                 amount: big,
+                fee: 0,
             };
             let bad = Tx::sign(body.clone(), &alice).map_err(|e| anyhow::anyhow!(e.to_string()))?;
             let next_height = state.height + 1;

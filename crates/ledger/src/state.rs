@@ -202,13 +202,18 @@ impl ChainState {
                 from,
                 to,
                 amount,
+                fee,
             } => {
+                // Debit amount + priority fee (fee paid to block producer in apply_block).
+                let total = amount
+                    .checked_add(*fee)
+                    .ok_or_else(|| LedgerError::State("amount+fee overflow".into()))?;
                 // Balance check before PQ so users see "not enough" first.
                 {
                     let from_acc = self
                         .account(from)
                         .ok_or_else(|| LedgerError::AccountNotFound(short_id_hex(from)))?;
-                    if from_acc.balance < *amount {
+                    if from_acc.balance < total {
                         return Err(LedgerError::InsufficientBalance);
                     }
                     if from_acc.nonce != *nonce {
@@ -218,16 +223,17 @@ impl ChainState {
                         });
                     }
                 }
+                // PQ policy is on transfer amount (value moved), not the tip.
                 self.enforce_pq_policy(tx, from, *amount, false)?;
-                // Debit from
+                // Debit from (amount + fee); fee is reassigned to producer after apply_tx.
                 {
                     let from_acc = self
                         .account_mut(from)
                         .ok_or_else(|| LedgerError::AccountNotFound(short_id_hex(from)))?;
-                    if from_acc.balance < *amount {
+                    if from_acc.balance < total {
                         return Err(LedgerError::InsufficientBalance);
                     }
-                    from_acc.balance -= amount;
+                    from_acc.balance -= total;
                     from_acc.nonce = from_acc.nonce.saturating_add(1);
                 }
                 // Credit to (create if needed with unknown pubkey placeholder — need full key)
@@ -349,6 +355,14 @@ impl ChainState {
 
         for tx in &block.txs {
             self.apply_tx(tx)?;
+            // Priority fee (MEV tip) → block producer. Supply conserved (debited from sender above).
+            let tip = tx.priority_fee();
+            if tip > 0 {
+                let prod_sid = short_id(&block.header.producer);
+                self.ensure_account(&block.header.producer);
+                let acc = self.account_mut(&prod_sid).unwrap();
+                acc.balance = acc.balance.saturating_add(tip);
+            }
         }
 
         // Block reward on non-genesis blocks
@@ -383,5 +397,80 @@ impl ChainState {
     pub fn load_json(path: &Path) -> Result<Self, LedgerError> {
         let s = fs::read_to_string(path).map_err(|e| LedgerError::Io(e.to_string()))?;
         serde_json::from_str(&s).map_err(|e| LedgerError::Io(e.to_string()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::genesis::{GenesisAccount, GenesisConfig, ONE_MESH};
+    use meshchain_proto::crypto::Keypair;
+    use meshchain_proto::tx::{Tx, TxBody};
+
+    #[test]
+    fn transfer_priority_fee_goes_to_producer() {
+        let alice = Keypair::generate();
+        let bob = Keypair::generate();
+        let producer = Keypair::generate();
+        let genesis = GenesisConfig {
+            chain_id: "test".into(),
+            validators: vec![hex::encode(producer.public_key())],
+            block_reward: 0,
+            allocations: vec![
+                GenesisAccount {
+                    public_key_hex: hex::encode(alice.public_key()),
+                    balance: 100 * ONE_MESH,
+                },
+                GenesisAccount {
+                    public_key_hex: hex::encode(bob.public_key()),
+                    balance: 0,
+                },
+            ],
+            minters: vec![],
+            slot_secs: 1,
+            pq_required_above: 1000 * ONE_MESH,
+        };
+        let mut st = ChainState::from_genesis(&genesis).unwrap();
+        // genesis block height 0
+        let gblock = meshchain_proto::block::Block::new(
+            0,
+            [0u8; 32],
+            1,
+            0,
+            &producer,
+            vec![],
+        )
+        .unwrap();
+        st.apply_block(&gblock).unwrap();
+
+        let from = short_id(&alice.public_key());
+        let to = short_id(&bob.public_key());
+        let amount = 10 * ONE_MESH;
+        let fee = ONE_MESH / 2;
+        let body = TxBody::Transfer {
+            nonce: 0,
+            from,
+            to,
+            amount,
+            fee,
+        };
+        let tx = Tx::sign(body, &alice).unwrap();
+        let block = meshchain_proto::block::Block::new(
+            1,
+            st.tip_hash,
+            2,
+            0,
+            &producer,
+            vec![tx],
+        )
+        .unwrap();
+        st.apply_block(&block).unwrap();
+
+        assert_eq!(st.balance_of(&from), 100 * ONE_MESH - amount - fee);
+        assert_eq!(st.balance_of(&to), amount);
+        let prod = short_id(&producer.public_key());
+        assert_eq!(st.balance_of(&prod), fee);
+        // supply unchanged by fee transfer
+        assert_eq!(st.total_supply, 100 * ONE_MESH);
     }
 }

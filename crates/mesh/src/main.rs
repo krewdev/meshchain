@@ -5,6 +5,7 @@
 //!   mesh new-wallet
 //!   mesh balance
 //!   mesh send <who> <amount>
+//!   mesh register
 //!   mesh new-cold-key
 //!   mesh demo
 //!   mesh help
@@ -21,6 +22,8 @@ use meshchain_transport::{fragment_bytes, session_id_from_hash};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::thread;
+use std::time::Duration;
 
 #[derive(Parser)]
 #[command(
@@ -32,8 +35,11 @@ Examples:\n  \
   mesh testnet-info       Show testnet parameters\n  \
   mesh setup              Create a local dev network\n  \
   mesh new-wallet         Make a new spending wallet\n  \
+  mesh join-public        Install shared public genesis + seeds\n  \
+  mesh register           Put your wallet on-chain (so others can pay you)\n  \
   mesh balance            Show how much you have\n  \
   mesh send BOB 5         Send 5 MESH to Bob’s short address\n  \
+  mesh sync-state         Pull chain_state from a public scanner\n  \
   mesh new-cold-key       Make a quantum-safe cold key (keep offline)\n  \
   mesh demo               Run the built-in network demo\n"
 )]
@@ -59,6 +65,22 @@ enum Commands {
     #[command(name = "testnet-info")]
     TestnetInfo,
 
+    /// Install published public genesis + seeds into --dir (join shared testnet)
+    #[command(name = "join-public")]
+    JoinPublic {
+        /// Optional scanner base URL to sync chain_state after install
+        #[arg(long)]
+        scanner: Option<String>,
+    },
+
+    /// Pull chain_state.json from a scanner (light client sync)
+    #[command(name = "sync-state")]
+    SyncState {
+        /// Scanner base, e.g. http://34.172.103.125:8788
+        #[arg(long)]
+        scanner: String,
+    },
+
     /// Create a local DEV network (not the public testnet)
     Setup {
         /// How many validator computers (default 3)
@@ -78,6 +100,28 @@ enum Commands {
         /// Optional name for the key file (default: wallet.json)
         #[arg(long, default_value = "wallet.json")]
         name: String,
+        /// Also sign Register and submit to a validator (on-chain account)
+        #[arg(long)]
+        publish: bool,
+        /// Validator peer for --publish (default: seeds.json / MESH_SUBMIT / 127.0.0.1:9100)
+        #[arg(long, default_value = "")]
+        submit: String,
+    },
+
+    /// Put a wallet on-chain so others can pay it (Register tx)
+    #[command(name = "register")]
+    Register {
+        #[arg(long, default_value = "wallet.json")]
+        wallet: String,
+        /// Write the signed register tx here
+        #[arg(long)]
+        out: Option<PathBuf>,
+        /// Submit to this validator peer (default: seeds.json / MESH_SUBMIT / 127.0.0.1:9100)
+        #[arg(long)]
+        submit: Option<String>,
+        /// Sign only; do not submit (overrides default submit)
+        #[arg(long, default_value_t = false)]
+        no_submit: bool,
     },
 
     /// Make a quantum-safe cold key for large amounts / long-term storage
@@ -110,9 +154,18 @@ enum Commands {
         /// Cold key file (needed for large sends)
         #[arg(long, default_value = "cold.json")]
         cold: String,
+        /// Priority fee / tip in MESH (paid to block producer for faster inclusion)
+        #[arg(long, default_value = "0")]
+        fee: String,
         /// Write the signed payment to this file instead of only printing it
         #[arg(long)]
         out: Option<PathBuf>,
+        /// Submit to validator peer after signing (e.g. 127.0.0.1:9100)
+        #[arg(long)]
+        submit: Option<String>,
+        /// After --submit, wait and refresh local chain_state from data/v0
+        #[arg(long, default_value_t = true)]
+        wait: bool,
     },
 
     /// Show network height and total MESH
@@ -130,11 +183,28 @@ enum Commands {
     #[command(name = "security")]
     Security,
 
-    /// Run a testnet validator process (multi-machine TCP gossip)
+    /// Generate a validator key to apply for a PoA seat (share only public_hex)
+    #[command(name = "validator-keygen")]
+    ValidatorKeygen {
+        /// Key file name under data/keys/
+        #[arg(long, default_value = "operator-validator.json")]
+        name: String,
+    },
+
+    /// Run a testnet validator (must be listed in shared genesis)
     #[command(name = "validator")]
     Validator {
         #[arg(long)]
         index: u8,
+        #[arg(long, default_value = "0.0.0.0:9100")]
+        listen: String,
+        #[arg(long = "peer")]
+        peers: Vec<String>,
+    },
+
+    /// Run a non-producing full node (anyone — needs shared genesis + seeds)
+    #[command(name = "observer")]
+    Observer {
         #[arg(long, default_value = "0.0.0.0:9100")]
         listen: String,
         #[arg(long = "peer")]
@@ -166,6 +236,260 @@ fn wallet_path(dir: &Path, name: &str) -> PathBuf {
     } else {
         keys_dir(dir).join(name)
     }
+}
+
+/// Prefer the freshest chain_state among lab snapshot and live v0 validator tree.
+fn best_chain_state_path(dir: &Path) -> PathBuf {
+    let candidates = [
+        dir.join("chain_state.json"),
+        dir.join("v0").join("chain_state.json"),
+    ];
+    let mut best = candidates[0].clone();
+    let mut best_h: i64 = -1;
+    for p in &candidates {
+        if let Ok(st) = ChainState::load_json(p) {
+            let h = st.height as i64;
+            if h >= best_h {
+                best_h = h;
+                best = p.clone();
+            }
+        }
+    }
+    best
+}
+
+fn promote_v0_snapshot(dir: &Path) {
+    let v0 = dir.join("v0").join("chain_state.json");
+    let snap = dir.join("chain_state.json");
+    if v0.exists() {
+        if let Err(e) = fs::copy(&v0, &snap) {
+            eprintln!("note: could not promote v0 chain_state: {e}");
+        }
+    }
+}
+
+fn is_local_peer(peer: &str) -> bool {
+    let host = peer.split(':').next().unwrap_or(peer);
+    matches!(host, "127.0.0.1" | "localhost" | "::1")
+}
+
+/// Default submit peer: MESH_SUBMIT env → data/seeds.json → repo testnet/seeds.json → localhost
+fn default_submit_peer(dir: &Path) -> String {
+    if let Ok(p) = std::env::var("MESH_SUBMIT") {
+        if !p.is_empty() {
+            return p;
+        }
+    }
+    for seeds_path in [
+        dir.join("seeds.json"),
+        PathBuf::from("testnet/seeds.json"),
+        PathBuf::from("testnet/published/seeds.json"),
+    ] {
+        if let Ok(s) = fs::read_to_string(&seeds_path) {
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&s) {
+                if let Some(arr) = v.get("seeds").and_then(|x| x.as_array()) {
+                    for seed in arr {
+                        let roles = seed
+                            .get("roles")
+                            .and_then(|r| r.as_array())
+                            .map(|a| {
+                                a.iter()
+                                    .filter_map(|x| x.as_str())
+                                    .collect::<Vec<_>>()
+                            })
+                            .unwrap_or_default();
+                        let prefer = roles.iter().any(|r| *r == "submit" || *r == "seed");
+                        if prefer || roles.is_empty() {
+                            if let (Some(host), Some(port)) = (
+                                seed.get("host").and_then(|h| h.as_str()),
+                                seed.get("port").and_then(|p| p.as_u64()),
+                            ) {
+                                return format!("{host}:{port}");
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    "127.0.0.1:9100".into()
+}
+
+fn default_scanner_url(dir: &Path) -> Option<String> {
+    if let Ok(p) = std::env::var("MESH_SCANNER") {
+        if !p.is_empty() {
+            return Some(p);
+        }
+    }
+    for seeds_path in [
+        dir.join("seeds.json"),
+        PathBuf::from("testnet/seeds.json"),
+        PathBuf::from("testnet/published/seeds.json"),
+    ] {
+        if let Ok(s) = fs::read_to_string(&seeds_path) {
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&s) {
+                if let Some(u) = v
+                    .pointer("/http/scanner")
+                    .and_then(|x| x.as_str())
+                {
+                    return Some(u.to_string());
+                }
+            }
+        }
+    }
+    None
+}
+
+fn sync_state_from_scanner(dir: &Path, scanner_base: &str) -> Result<ChainState> {
+    let base = scanner_base.trim_end_matches('/');
+    let url = format!("{base}/api/v1/chain_state");
+    println!("Syncing chain state from {url} …");
+    let body = http_get(&url)?;
+    let st: ChainState =
+        serde_json::from_str(&body).context("scanner returned invalid chain_state JSON")?;
+    fs::create_dir_all(dir)?;
+    let path = dir.join("chain_state.json");
+    fs::write(&path, serde_json::to_string_pretty(&st)?)?;
+    println!(
+        "Wrote {} (height {} · {} accounts · {})",
+        path.display(),
+        st.height,
+        st.accounts.len(),
+        st.chain_id
+    );
+    Ok(st)
+}
+
+/// Minimal HTTP GET without extra crates (std only).
+fn http_get(url: &str) -> Result<String> {
+    // Prefer curl for TLS + portability in operator environments.
+    let out = Command::new("curl")
+        .args(["-fsSL", "--max-time", "30", url])
+        .output()
+        .context("curl failed — install curl to use join-public/sync-state")?;
+    if !out.status.success() {
+        bail!(
+            "HTTP GET failed ({url}): {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+    String::from_utf8(out.stdout).context("response not utf-8")
+}
+
+fn install_public_artifacts(dir: &Path) -> Result<(String, Option<String>)> {
+    fs::create_dir_all(dir)?;
+    fs::create_dir_all(keys_dir(dir))?;
+
+    let genesis_candidates = [
+        PathBuf::from("testnet/published/genesis.json"),
+        PathBuf::from("testnet/genesis.public.json"),
+        PathBuf::from("web/testnet/published/genesis.json"),
+    ];
+    let mut genesis_src = None;
+    for p in &genesis_candidates {
+        if p.exists() {
+            genesis_src = Some(p.clone());
+            break;
+        }
+    }
+    let genesis_src = genesis_src.context(
+        "No published genesis found. Expected testnet/published/genesis.json (clone full repo).",
+    )?;
+    fs::copy(&genesis_src, dir.join("genesis.json"))
+        .with_context(|| format!("copy {}", genesis_src.display()))?;
+    println!("Installed genesis from {}", genesis_src.display());
+
+    let seeds_candidates = [
+        PathBuf::from("testnet/seeds.json"),
+        PathBuf::from("testnet/published/seeds.json"),
+        PathBuf::from("web/testnet/seeds.json"),
+    ];
+    for p in &seeds_candidates {
+        if p.exists() {
+            fs::copy(p, dir.join("seeds.json"))?;
+            println!("Installed seeds from {}", p.display());
+            break;
+        }
+    }
+
+    // Profile marker for CLI
+    let profile = serde_json::json!({
+        "is_testnet": true,
+        "chain_id": "meshchain-testnet-1",
+        "token_symbol": "tMESH",
+        "channel_name": "MeshChain-Testnet-1",
+        "warning": "TESTNET ONLY — no real value",
+        "docs": "https://meshchain-sigma.vercel.app/docs/?doc=RUN_A_NODE",
+        "joined_public": true,
+    });
+    fs::write(
+        dir.join("testnet_profile.json"),
+        serde_json::to_string_pretty(&profile)?,
+    )?;
+
+    let peer = default_submit_peer(dir);
+    let scanner = default_scanner_url(dir);
+    Ok((peer, scanner))
+}
+
+fn refresh_after_submit(dir: &Path, peer: &str) {
+    if is_local_peer(peer) {
+        thread::sleep(Duration::from_secs(3));
+        promote_v0_snapshot(dir);
+        return;
+    }
+    // Remote seed: wait then pull scanner snapshot when available
+    thread::sleep(Duration::from_secs(5));
+    if let Some(scanner) = default_scanner_url(dir) {
+        if let Err(e) = sync_state_from_scanner(dir, &scanner) {
+            eprintln!("note: could not sync from scanner ({e}). Run: mesh sync-state --scanner {scanner}");
+        }
+    } else {
+        eprintln!("note: remote submit done. Sync with: mesh sync-state --scanner http://SEED:8788");
+    }
+}
+
+fn submit_tx_to_peer(tx_path: &Path, peer: &str) -> Result<()> {
+    let tx = tx_path
+        .to_str()
+        .context("tx path is not valid UTF-8")?;
+    println!("Submitting to {peer} …");
+    run_external_node(&["submit-tx", "--tx", tx, "--peer", peer])?;
+    Ok(())
+}
+
+fn sign_register(dir: &Path, wallet: &str, out: Option<PathBuf>) -> Result<(PathBuf, Tx)> {
+    let wpath = wallet_path(dir, wallet);
+    let kp = load_wallet(&wpath)?;
+    let pubkey = kp.public_key();
+    let sid = short_id(&pubkey);
+    let state_path = best_chain_state_path(dir);
+    let nonce = if state_path.exists() {
+        let st = ChainState::load_json(&state_path).map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        if let Some(acc) = st.account(&sid) {
+            if acc.nonce > 0 || acc.balance > 0 {
+                bail!(
+                    "Wallet {} is already on-chain (balance {}, nonce {}).",
+                    mesh_name(&sid),
+                    fmt_mesh(acc.balance),
+                    acc.nonce
+                );
+            }
+            // Account may exist with 0/0 (edge); still try register with nonce 0
+            acc.nonce
+        } else {
+            0
+        }
+    } else {
+        0
+    };
+
+    let body = TxBody::Register { nonce, pubkey };
+    let tx = Tx::sign(body, &kp).map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    tx.verify().map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    let out_path = out.unwrap_or_else(|| dir.join("last_register.json"));
+    fs::write(&out_path, serde_json::to_string_pretty(&tx)?)?;
+    Ok((out_path, tx))
 }
 
 fn load_wallet(path: &Path) -> Result<Keypair> {
@@ -317,6 +641,43 @@ fn main() -> Result<()> {
             print_testnet_info(&dir)?;
         }
 
+        Commands::JoinPublic { scanner } => {
+            println!("Joining MeshChain PUBLIC testnet profile…");
+            let (peer, scanner_from_seeds) = install_public_artifacts(&dir)?;
+            let scanner = scanner.or(scanner_from_seeds);
+            if let Some(ref sc) = scanner {
+                match sync_state_from_scanner(&dir, sc) {
+                    Ok(st) => {
+                        println!("Synced live state height={}", st.height);
+                    }
+                    Err(e) => {
+                        eprintln!("WARN: sync-state skipped: {e}");
+                        eprintln!("  Retry: mesh sync-state --scanner {sc}");
+                    }
+                }
+            }
+            println!();
+            println!("Done. Public seed peer: {peer}");
+            println!("Next:");
+            println!("  mesh new-wallet --name me.json");
+            println!("  mesh register --wallet data/keys/me.json --submit {peer}");
+            if let Some(sc) = scanner {
+                println!("  mesh sync-state --scanner {sc}");
+                println!("  Faucet/scanner: see {sc}");
+            }
+            println!("  Docs: docs/RUN_A_NODE.md");
+        }
+
+        Commands::SyncState { scanner } => {
+            let st = sync_state_from_scanner(&dir, &scanner)?;
+            println!(
+                "Network {} · block #{} · supply {}",
+                st.chain_id,
+                st.height,
+                fmt_mesh(st.total_supply)
+            );
+        }
+
         Commands::Setup { validators } => {
             println!("Setting up a local MeshChain DEV network (not public testnet)…");
             run_external_node(&[
@@ -349,7 +710,11 @@ fn main() -> Result<()> {
             println!("  mesh balance --wallet bob.json");
         }
 
-        Commands::NewWallet { name } => {
+        Commands::NewWallet {
+            name,
+            publish,
+            submit,
+        } => {
             fs::create_dir_all(keys_dir(&dir))?;
             let path = wallet_path(&dir, &name);
             if path.exists() {
@@ -364,9 +729,68 @@ fn main() -> Result<()> {
             println!("  Mesh name: {tag}");
             println!("  (hex id:   {})", short_id_hex(&sid));
             println!();
-            println!("Share your mesh name so people can pay you.");
+            let peer = if submit.is_empty() {
+                default_submit_peer(&dir)
+            } else {
+                submit
+            };
+            if publish {
+                let name_only = path
+                    .file_name()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or(&name);
+                match sign_register(&dir, name_only, None) {
+                    Ok((reg_path, tx)) => {
+                        println!("Register signed → {}", reg_path.display());
+                        println!("  Id: {}", tx.txid_hex());
+                        if let Err(e) = submit_tx_to_peer(&reg_path, &peer) {
+                            eprintln!("WARN: submit failed: {e}");
+                            eprintln!("  Retry: mesh register --wallet {name_only} --submit {peer}");
+                        } else {
+                            println!("Submitted Register to {peer}");
+                            refresh_after_submit(&dir, &peer);
+                            println!("  Check: mesh balance --wallet {name_only}");
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("WARN: could not register: {e}");
+                        eprintln!("  Run: mesh register --wallet {name_only} --submit {peer}");
+                    }
+                }
+            } else {
+                println!("Share your mesh name so people can pay you.");
+                println!("On-chain:  mesh register --wallet {name} --submit {peer}");
+                println!("Or:        mesh new-wallet --name {name} --publish");
+                println!("Public:    mesh join-public   # once, installs genesis+seeds");
+            }
             println!("Keep this file secret. Anyone with it can spend your MESH.");
             println!("For large long-term savings also run: mesh new-cold-key");
+        }
+
+        Commands::Register {
+            wallet,
+            out,
+            submit,
+            no_submit,
+        } => {
+            let (out_path, tx) = sign_register(&dir, &wallet, out)?;
+            let sid = short_id(&tx.signer);
+            println!("Register signed.");
+            println!("  Mesh name: {}", mesh_name(&sid));
+            println!("  Id:        {}", tx.txid_hex());
+            println!("  File:      {}", out_path.display());
+            if no_submit {
+                let peer = default_submit_peer(&dir);
+                println!();
+                println!("Signed only. Submit with:");
+                println!("  mesh register --wallet {wallet} --submit {peer}");
+            } else {
+                let peer = submit.unwrap_or_else(|| default_submit_peer(&dir));
+                submit_tx_to_peer(&out_path, &peer)?;
+                println!("Submitted to {peer}");
+                println!("Account will appear after the next block (often a few seconds).");
+                refresh_after_submit(&dir, &peer);
+            }
         }
 
         Commands::NewColdKey { name } => {
@@ -400,10 +824,11 @@ fn main() -> Result<()> {
 
         Commands::Balance { wallet } => {
             let path = wallet_path(&dir, &wallet);
-            let state_path = dir.join("chain_state.json");
+            promote_v0_snapshot(&dir);
+            let state_path = best_chain_state_path(&dir);
             if !state_path.exists() {
                 bail!(
-                    "No network state yet. Run:\n  mesh testnet-setup\n  mesh demo"
+                    "No network state yet. Run:\n  mesh testnet-setup\n  mesh demo\n  # or start validators"
                 );
             }
             let kp = load_wallet(&path)?;
@@ -412,10 +837,14 @@ fn main() -> Result<()> {
             let bal = st.balance_of(&sid);
             let nonce = st.account(&sid).map(|a| a.nonce).unwrap_or(0);
             let cold = st.account(&sid).and_then(|a| a.pq_pk.as_ref()).is_some();
+            let on_chain = st.account(&sid).is_some();
             println!("Mesh name: {}", mesh_name(&sid));
             println!("Balance:   {} MESH", fmt_mesh(bal));
             println!("Sends:     {nonce} completed from this wallet");
-            println!("Network:   block #{}", st.height);
+            println!("Network:   block #{} ({})", st.height, state_path.display());
+            if !on_chain {
+                println!("On-chain:  NO — run: mesh register --wallet {wallet} --submit 127.0.0.1:9100");
+            }
             if cold {
                 println!("Cold key:  locked to this account (large sends use it)");
             } else {
@@ -431,9 +860,13 @@ fn main() -> Result<()> {
             amount,
             wallet,
             cold,
+            fee,
             out,
+            submit,
+            wait,
         } => {
-            let state_path = dir.join("chain_state.json");
+            promote_v0_snapshot(&dir);
+            let state_path = best_chain_state_path(&dir);
             if !state_path.exists() {
                 bail!("No network yet. Run: mesh setup && mesh demo");
             }
@@ -441,20 +874,30 @@ fn main() -> Result<()> {
             let kp = load_wallet(&wpath)?;
             let st = ChainState::load_json(&state_path).map_err(|e| anyhow::anyhow!(e.to_string()))?;
             let sid = short_id(&kp.public_key());
+            let peer_hint = default_submit_peer(&dir);
             let acc = st
                 .account(&sid)
-                .with_context(|| "This wallet is not on the network yet. Get some MESH first.")?;
+                .with_context(|| {
+                    format!(
+                        "This wallet is not on the network yet. Run:\n  mesh register --wallet {wallet} --submit {peer_hint}"
+                    )
+                })?;
             let units = parse_mesh_amount(&amount)?;
-            if units > acc.balance {
+            let fee_units = parse_mesh_amount(&fee)?;
+            let total = units
+                .checked_add(fee_units)
+                .context("amount + fee overflow")?;
+            if total > acc.balance {
                 bail!(
-                    "Not enough funds. You have {} MESH.",
+                    "Not enough funds. Need {} MESH (amount + priority fee), you have {}.",
+                    fmt_mesh(total),
                     fmt_mesh(acc.balance)
                 );
             }
             let to_sid = parse_recipient(&to).map_err(|e| anyhow::anyhow!(e))?;
             if st.account(&to_sid).is_none() {
                 bail!(
-                    "Unknown recipient {}. They must already be on this network.",
+                    "Unknown recipient {}. They must already be on this network.\n  They should run: mesh register --wallet THEIR.json --submit 127.0.0.1:9100",
                     mesh_name(&to_sid)
                 );
             }
@@ -463,6 +906,7 @@ fn main() -> Result<()> {
                 from: sid,
                 to: to_sid,
                 amount: units,
+                fee: fee_units,
             };
 
             let need_pq = units >= st.pq_required_above;
@@ -486,6 +930,14 @@ fn main() -> Result<()> {
             println!("Payment signed.");
             println!("  To:     {} ({to})", mesh_name(&to_sid));
             println!("  Amount: {} MESH", fmt_mesh(units));
+            if fee_units > 0 {
+                println!(
+                    "  Fee:    {} MESH priority tip → block producer (faster inclusion)",
+                    fmt_mesh(fee_units)
+                );
+            } else {
+                println!("  Fee:    0 (add --fee 0.1 for priority inclusion)");
+            }
             println!("  Id:     {}", tx.txid_hex());
             println!("  File:   {}", out_path.display());
             if need_pq {
@@ -499,12 +951,33 @@ fn main() -> Result<()> {
             } else {
                 println!("  Radio:  one small packet (everyday send)");
             }
-            println!();
-            println!("Note: a live radio network will broadcast this file. For now it is saved locally.");
+            if let Some(peer) = submit {
+                submit_tx_to_peer(&out_path, &peer)?;
+                println!("Submitted to {peer}");
+                if wait {
+                    println!("Waiting for inclusion…");
+                    refresh_after_submit(&dir, &peer);
+                    if let Ok(st2) = ChainState::load_json(&best_chain_state_path(&dir)) {
+                        println!(
+                            "Network now block #{} · your balance {} MESH",
+                            st2.height,
+                            fmt_mesh(st2.balance_of(&sid))
+                        );
+                    }
+                }
+            } else {
+                let peer = default_submit_peer(&dir);
+                println!();
+                println!("Signed only. Submit with:");
+                println!(
+                    "  mesh send {to} {amount} --wallet {wallet} --submit {peer}"
+                );
+            }
         }
 
         Commands::Status => {
-            let state_path = dir.join("chain_state.json");
+            promote_v0_snapshot(&dir);
+            let state_path = best_chain_state_path(&dir);
             if !state_path.exists() {
                 println!("No network data in {}.", dir.display());
                 println!("Run: mesh setup");
@@ -513,6 +986,7 @@ fn main() -> Result<()> {
             let st = ChainState::load_json(&state_path).map_err(|e| anyhow::anyhow!(e.to_string()))?;
             println!("Network:   {}", st.chain_id);
             println!("Block:     #{}", st.height);
+            println!("State:     {}", state_path.display());
             println!("Total MESH in circulation: {}", fmt_mesh(st.total_supply));
             println!(
                 "Large send threshold (needs cold key): {} MESH",
@@ -591,18 +1065,76 @@ Read: docs/SECURITY_HARDENING.md  docs/HYBRID_LOCK.md
             );
         }
 
+        Commands::ValidatorKeygen { name } => {
+            fs::create_dir_all(keys_dir(&dir))?;
+            let path = wallet_path(&dir, &name);
+            if path.exists() {
+                bail!("File already exists: {}", path.display());
+            }
+            let kp = Keypair::generate();
+            let file = kp.to_file();
+            fs::write(&path, serde_json::to_string_pretty(&file)?)?;
+            let sid = short_id(&kp.public_key());
+            println!("Validator operator key created.");
+            println!("  Secret file:  {}  (KEEP PRIVATE)", path.display());
+            println!("  public_hex:   {}", file.public_hex);
+            println!("  mesh name:    {}", mesh_name(&sid));
+            println!();
+            println!("This does NOT make you a producer yet.");
+            println!("PoA seats are listed in shared genesis.validators.");
+            println!();
+            println!("Apply (GitHub issue / Discord #validators) with:");
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "role": "validator-applicant",
+                    "chain_id": "meshchain-testnet-1",
+                    "public_hex": file.public_hex,
+                    "operator_name": "your-handle",
+                    "contact": "discord-or-email",
+                    "listen": "your.host:9100",
+                }))?
+            );
+            println!();
+            println!("Docs: docs/RUN_A_NODE.md");
+            println!("Template: testnet/operator_application.example.json");
+        }
+
         Commands::Validator {
             index,
             listen,
             peers,
         } => {
             println!("Starting testnet validator index={index} listen={listen}");
+            println!("(Must match shared genesis.validators[{index}])");
             let mut args = vec![
                 "run".to_string(),
                 "--data-dir".into(),
                 dir.to_str().unwrap_or("./data").into(),
                 "--validator-index".into(),
                 index.to_string(),
+                "--listen".into(),
+                listen,
+            ];
+            for p in peers {
+                args.push("--peer".into());
+                args.push(p);
+            }
+            let args_ref: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+            run_external_node(&args_ref)?;
+        }
+
+        Commands::Observer { listen, peers } => {
+            println!("Starting observer (full node, non-producing) listen={listen}");
+            println!("Requires data/genesis.json from the public set + --peer seeds.");
+            if peers.is_empty() {
+                eprintln!("WARN: no --peer seeds; node will only listen (see testnet/seeds.example.json)");
+            }
+            let mut args = vec![
+                "run".to_string(),
+                "--data-dir".into(),
+                dir.to_str().unwrap_or("./data").into(),
+                "--observer".into(),
                 "--listen".into(),
                 listen,
             ];

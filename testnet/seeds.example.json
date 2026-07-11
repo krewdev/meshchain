@@ -1,0 +1,23 @@
+{
+  "chain_id": "meshchain-testnet-1",
+  "updated": "YYYY-MM-DD",
+  "note": "Copy to seeds.json and publish. Observers and validators use these as --peer bootstrap.",
+  "seeds": [
+    {
+      "id": "seed-0",
+      "host": "REPLACE_WITH_PUBLIC_IP_OR_DNS",
+      "port": 9100,
+      "roles": ["validator", "submit"],
+      "operator": "primary-lab",
+      "region": "us"
+    }
+  ],
+  "http": {
+    "faucet": "https://YOUR_FAUCET_OR_IP:8787",
+    "scanner": "https://YOUR_SCANNER_OR_IP:8788"
+  },
+  "how_to_use": [
+    "meshchain-node run --observer --listen 0.0.0.0:9100 --peer HOST:9100",
+    "mesh send NAME 1 --submit HOST:9100"
+  ]
+}

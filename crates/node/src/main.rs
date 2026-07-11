@@ -52,13 +52,16 @@ enum Commands {
         #[arg(long, default_value = "./data")]
         data_dir: PathBuf,
     },
-    /// Run a multi-machine validator (TCP gossip between hosts/processes)
+    /// Run a multi-machine validator or observer (TCP gossip)
     Run {
         #[arg(long, default_value = "./data")]
         data_dir: PathBuf,
-        /// Index into genesis.validators (0..N-1)
+        /// Index into genesis.validators (0..N-1). Required unless --observer.
         #[arg(long)]
-        validator_index: u8,
+        validator_index: Option<u8>,
+        /// Non-producing full node: relay + follow chain (anyone can run)
+        #[arg(long, default_value_t = false)]
+        observer: bool,
         /// Listen address, e.g. 0.0.0.0:9100
         #[arg(long, default_value = "0.0.0.0:9100")]
         listen: String,
@@ -249,14 +252,19 @@ fn main() -> Result<()> {
         Commands::Run {
             data_dir,
             validator_index,
+            observer,
             listen,
             peers,
             slot_ms,
         } => {
             let listen: SocketAddr = listen.parse().context("bad --listen address")?;
+            if !observer && validator_index.is_none() {
+                anyhow::bail!("provide --validator-index N  or  --observer");
+            }
             run::run_validator(run::RunConfig {
                 data_dir,
                 validator_index,
+                observer,
                 listen,
                 peers,
                 slot_ms,

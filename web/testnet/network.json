@@ -29,8 +29,15 @@
     "gossip": "TCP line-JSON; see docs/MULTI_VALIDATOR.md"
   },
   "validators": {
-    "how_to_run": "mesh testnet-setup && mesh validator --index N --listen 0.0.0.0:9100 --peer host:port",
-    "lab_script": "scripts/run_local_validators.sh"
+    "model": "poa",
+    "how_to_run_producer": "mesh validator --index N --listen 0.0.0.0:9100 --peer seed:9100",
+    "how_to_run_observer": "mesh observer --listen 0.0.0.0:9100 --peer seed:9100",
+    "how_to_apply": "mesh validator-keygen then open issue with testnet/operator_application.example.json",
+    "lab_script": "scripts/run_local_validators.sh",
+    "docs": "docs/RUN_A_NODE.md",
+    "seeds_example": "testnet/seeds.example.json",
+    "public_seed": "34.172.103.125:9100",
+    "seeds_file": "testnet/seeds.json"
   },
   "faucet": {
     "enabled": true,
@@ -71,16 +78,23 @@
     "scanner_docs": "https://meshchain-sigma.vercel.app/docs/?doc=SCANNER",
     "faucet_ui": "https://meshchain-sigma.vercel.app/faucet/",
     "faucet_api_local": "http://127.0.0.1:8787",
-    "faucet_api": "https://circuit-adipex-coffee-manual.trycloudflare.com",
-    "tunnel_note": "Cloudflare quick tunnel; re-run scripts/start_public_tunnel.sh if dead"
+    "faucet_api": "http://34.172.103.125:8787",
+    "tunnel_note": "Cloudflare quick tunnel; re-run scripts/start_public_tunnel.sh if dead",
+    "scanner_api": "http://34.172.103.125:8788",
+    "scanner_ui": "http://34.172.103.125:8788/",
+    "submit_peer": "34.172.103.125:9100",
+    "seeds_json": "https://meshchain-sigma.vercel.app/testnet/seeds.json",
+    "genesis_json": "https://meshchain-sigma.vercel.app/testnet/published/genesis.json",
+    "run_a_node_docs": "https://meshchain-sigma.vercel.app/docs/?doc=RUN_A_NODE"
   },
   "how_to_join": [
-    "Clone https://github.com/krewdev/meshchain",
-    "cargo build -p mesh -p meshchain-node",
-    "mesh testnet-setup",
-    "mesh testnet-info",
-    "Optional multi-validator: ./scripts/run_local_validators.sh",
-    "mesh new-wallet && mesh demo"
+    "Clone https://github.com/krewdev/meshchain && cargo build -p mesh -p meshchain-node",
+    "Download public genesis: testnet/published/genesis.json -> data/genesis.json",
+    "Observer: mesh observer --peer 34.172.103.125:9100 --listen 0.0.0.0:9100",
+    "Wallet: mesh new-wallet --name me.json && mesh register --wallet data/keys/me.json --submit 34.172.103.125:9100",
+    "Send: mesh send NAME 1 --wallet data/keys/me.json --submit 34.172.103.125:9100",
+    "Faucet: http://34.172.103.125:8787  Scanner: http://34.172.103.125:8788/",
+    "Apply as producer: mesh validator-keygen (docs/RUN_A_NODE.md)"
   ],
   "reset_policy": "Operators may reset meshchain-testnet-1 state at any time.",
   "scanner": {
@@ -92,5 +106,6 @@
     ],
     "default_auth": "open",
     "note": "Run meshchain-scanner against validator data_dir; internet-open for testnet"
-  }
+  },
+  "tunnel_note": "Primary public seed is GCE meshchain-testnet (34.172.103.125)."
 }
