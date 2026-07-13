@@ -12,6 +12,9 @@
 
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
+
+mod config;
+use config::MeshConfig;
 use meshchain_ledger::genesis::ONE_MESH;
 use meshchain_ledger::state::ChainState;
 use meshchain_proto::address::{mesh_name, parse_recipient, short_id, short_id_hex};
@@ -53,7 +56,77 @@ struct Cli {
 }
 
 #[derive(Subcommand)]
+enum ConfigAction {
+    /// Initialize default settings file (`data/config.json`)
+    Init,
+    /// Show current zero-config settings
+    Show,
+    /// Set a configuration value
+    Set {
+        #[arg(long)]
+        port: Option<String>,
+        #[arg(long)]
+        delay_ms: Option<u64>,
+        #[arg(long)]
+        portnum: Option<u32>,
+        #[arg(long)]
+        compress: Option<bool>,
+        #[arg(long)]
+        wallet: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+enum RadioAction {
+    /// Launch the stdio radio bridge (`meshtastic_bridge.py`) with pacing & port filtering
+    Bridge {
+        #[arg(long)]
+        port: Option<String>,
+        #[arg(long)]
+        delay_ms: Option<u64>,
+        #[arg(long)]
+        portnum: Option<u32>,
+    },
+    /// Query attached Meshtastic device over serial/USB using `native_proto`
+    Info {
+        #[arg(long)]
+        port: Option<String>,
+    },
+    /// Send signed payment directly over the radio
+    Send {
+        /// Their mesh name (M4K7X-J9P2Q-R3W) or 16-char hex
+        to: String,
+        /// How much MESH to send
+        amount: String,
+        #[arg(long)]
+        wallet: Option<String>,
+        #[arg(long)]
+        cold: Option<String>,
+        #[arg(long)]
+        port: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
 enum Commands {
+    /// Manage persistent zero-config settings (default port, delay, wallet)
+    Config {
+        #[command(subcommand)]
+        action: ConfigAction,
+    },
+
+    /// Manage attached LoRa radio (bridge, device info, send direct)
+    Radio {
+        #[command(subcommand)]
+        action: RadioAction,
+    },
+
+    /// Run automated hardware, environment, and key diagnostics
+    Doctor,
+
+    /// Live terminal dashboard of blockchain status and radio metrics
+    Monitor,
+
     /// Set up the public TESTNET profile (tMESH — no real value)
     #[command(name = "testnet-setup")]
     TestnetSetup {
@@ -735,11 +808,63 @@ fn run_external_node(args: &[&str]) -> Result<()> {
     }
 }
 
+fn run_config_cmd(dir: &Path, action: ConfigAction) -> Result<()> {
+    match action {
+        ConfigAction::Init => {
+            let mut cfg = MeshConfig::load_or_default(dir);
+            let path = cfg.save(dir)?;
+            println!("Initialized configuration file: {}", path.display());
+            println!("Settings:\n{}", serde_json::to_string_pretty(&cfg)?);
+        }
+        ConfigAction::Show => {
+            let cfg = MeshConfig::load_or_default(dir);
+            let path = MeshConfig::config_path(dir);
+            println!("Configuration file: {}", path.display());
+            if !path.exists() {
+                println!("(Using defaults — run 'mesh config init' to save to disk)");
+            }
+            println!("{}", serde_json::to_string_pretty(&cfg)?);
+        }
+        ConfigAction::Set {
+            port,
+            delay_ms,
+            portnum,
+            compress,
+            wallet,
+        } => {
+            let mut cfg = MeshConfig::load_or_default(dir);
+            if let Some(p) = port {
+                cfg.radio_port = if p == "auto" || p.is_empty() { None } else { Some(p) };
+            }
+            if let Some(d) = delay_ms {
+                cfg.tx_delay_ms = d;
+            }
+            if let Some(pn) = portnum {
+                cfg.portnum = pn;
+            }
+            if let Some(c) = compress {
+                cfg.compression = c;
+            }
+            if let Some(w) = wallet {
+                cfg.default_wallet = w;
+            }
+            let path = cfg.save(dir)?;
+            println!("Updated configuration saved to: {}", path.display());
+            println!("{}", serde_json::to_string_pretty(&cfg)?);
+        }
+    }
+    Ok(())
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
     let dir = cli.dir;
 
     match cli.cmd {
+        Commands::Config { action } => run_config_cmd(&dir, action)?,
+        Commands::Radio { .. } => bail!("Radio commands not implemented yet"),
+        Commands::Doctor => bail!("Doctor not implemented yet"),
+        Commands::Monitor => bail!("Monitor not implemented yet"),
         Commands::TestnetSetup { validators } => {
             println!("Setting up MeshChain PUBLIC TESTNET (meshchain-testnet-1)…");
             println!("WARNING: tMESH has no cash value. Balances may be wiped.\n");

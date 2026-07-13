@@ -32,3 +32,4 @@ anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 rand = "0.8"
 tempfile = "3"
+flate2 = { version = "1.0", default-features = false, features = ["rust_backend"] }

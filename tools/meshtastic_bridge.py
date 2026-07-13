@@ -40,11 +40,15 @@ def main() -> int:
     ap.add_argument("--port", default="", help="Serial path or tcp:host:port")
     ap.add_argument("--channel-index", type=int, default=0)
     ap.add_argument("--mock", action="store_true", help="Loopback without radio")
+    ap.add_argument("--tx-delay-ms", type=int, default=500, help="Inter-packet pacing delay in ms for LoRa duty-cycle limits")
+    ap.add_argument("--portnum", type=int, default=265, help="Meshtastic application PortNum for packet filtering")
     args = ap.parse_args()
 
     iface = None
     rx_queue: list[bytes] = []
+    tx_queue: list[bytes] = []
     lock = threading.Lock()
+    tx_cond = threading.Condition(lock)
 
     if args.mock:
         log("mock mode — no radio")
@@ -61,11 +65,11 @@ def main() -> int:
         def on_receive(packet, interface):  # noqa: ARG001
             try:
                 decoded = packet.get("decoded") or {}
+                portnum = decoded.get("portnum")
                 payload = decoded.get("payload")
                 if payload is None:
                     text = decoded.get("text")
                     if text:
-                        # allow hex text messages
                         t = text.strip()
                         if t.startswith("MC") or (len(t) >= 4 and all(c in "0123456789abcdefABCDEF" for c in t[:4])):
                             try:
@@ -79,7 +83,8 @@ def main() -> int:
                 else:
                     raw = bytes(payload) if not isinstance(payload, bytes) else payload
 
-                if len(raw) >= 2 and raw[0:2] == b"MC":
+                # Filter by exact PortNum (default 265) or magic header 'MC'
+                if portnum == args.portnum or (len(raw) >= 2 and raw[0:2] == b"MC"):
                     with lock:
                         rx_queue.append(raw)
             except Exception as e:
@@ -89,7 +94,6 @@ def main() -> int:
 
         port = args.port
         if port.startswith("tcp:"):
-            # tcp:host:port
             rest = port[4:]
             host, _, p = rest.partition(":")
             iface = meshtastic.tcp_interface.TCPInterface(hostname=host or "localhost")
@@ -112,8 +116,50 @@ def main() -> int:
                 print(f"RXHEX {binascii.hexlify(raw).decode()}", flush=True)
             time.sleep(0.05)
 
-    t = threading.Thread(target=drain_rx, daemon=True)
-    t.start()
+    def drain_tx():
+        while True:
+            with tx_cond:
+                while not tx_queue:
+                    tx_cond.wait()
+                raw = tx_queue.pop(0)
+
+            if args.mock:
+                with lock:
+                    rx_queue.append(raw)
+                log(f"mock tx {len(raw)} bytes")
+            else:
+                try:
+                    if hasattr(iface, "sendData"):
+                        try:
+                            iface.sendData(
+                                raw,
+                                channelIndex=args.channel_index,
+                                wantAck=False,
+                                portNum=args.portnum,
+                            )
+                        except TypeError:
+                            # Fallback if meshtastic library version doesn't accept portNum param
+                            iface.sendData(
+                                raw,
+                                channelIndex=args.channel_index,
+                                wantAck=False,
+                            )
+                    else:
+                        iface.sendText(
+                            binascii.hexlify(raw).decode(),
+                            channelIndex=args.channel_index,
+                        )
+                    log(f"tx {len(raw)} bytes ch={args.channel_index}")
+                except Exception as e:
+                    print(f"ERR send: {e}", flush=True)
+
+            if args.tx_delay_ms > 0:
+                time.sleep(args.tx_delay_ms / 1000.0)
+
+    t_rx = threading.Thread(target=drain_rx, daemon=True)
+    t_rx.start()
+    t_tx = threading.Thread(target=drain_tx, daemon=True)
+    t_tx.start()
 
     for line in sys.stdin:
         line = line.strip()
@@ -129,29 +175,9 @@ def main() -> int:
             except Exception as e:
                 print(f"ERR bad hex: {e}", flush=True)
                 continue
-            if args.mock:
-                # loopback
-                with lock:
-                    rx_queue.append(raw)
-                log(f"mock tx {len(raw)} bytes")
-            else:
-                try:
-                    # Send as binary-ish text hex for max client compatibility
-                    # Prefer sendData if available
-                    if hasattr(iface, "sendData"):
-                        iface.sendData(
-                            raw,
-                            channelIndex=args.channel_index,
-                            wantAck=False,
-                        )
-                    else:
-                        iface.sendText(
-                            binascii.hexlify(raw).decode(),
-                            channelIndex=args.channel_index,
-                        )
-                    log(f"tx {len(raw)} bytes ch={args.channel_index}")
-                except Exception as e:
-                    print(f"ERR send: {e}", flush=True)
+            with tx_cond:
+                tx_queue.append(raw)
+                tx_cond.notify()
         else:
             print(f"ERR unknown cmd", flush=True)
 

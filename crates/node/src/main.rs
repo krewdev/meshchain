@@ -486,7 +486,7 @@ fn burn_for_withdraw(
     use meshchain_proto::pq::PqKeypair;
     use meshchain_proto::tx::{Tx, TxBody};
 
-    let genesis: GenesisConfig = serde_json::from_str(&fs::read_to_string(
+    let _genesis: GenesisConfig = serde_json::from_str(&fs::read_to_string(
         data_dir.join("genesis.json"),
     )?)?;
     let state_path = data_dir.join("chain_state.json");

@@ -23,12 +23,27 @@ pub struct MeshtasticStdioTransport {
 impl MeshtasticStdioTransport {
     /// Spawn bridge script. `script` path to meshtastic_bridge.py; `port` e.g. /dev/ttyUSB0 or "tcp:localhost:4403"
     pub fn spawn(script: &str, port: &str, channel_index: u8) -> Result<Self> {
+        Self::spawn_with_options(script, port, channel_index, 500, 265)
+    }
+
+    /// Spawn bridge script with configurable LoRa airtime pacing and PortNum application filtering.
+    pub fn spawn_with_options(
+        script: &str,
+        port: &str,
+        channel_index: u8,
+        tx_delay_ms: u32,
+        portnum: u16,
+    ) -> Result<Self> {
         let mut child = Command::new("python3")
             .arg(script)
             .arg("--port")
             .arg(port)
             .arg("--channel-index")
             .arg(channel_index.to_string())
+            .arg("--tx-delay-ms")
+            .arg(tx_delay_ms.to_string())
+            .arg("--portnum")
+            .arg(portnum.to_string())
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())

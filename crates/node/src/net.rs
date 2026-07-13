@@ -105,9 +105,11 @@ pub struct GossipHub {
     peers: Arc<Mutex<Vec<PeerConn>>>,
     inbound: Receiver<GossipMsg>,
     inbound_tx: Sender<GossipMsg>,
+    #[allow(dead_code)]
     seen: Arc<Mutex<HashSet<String>>>,
 }
 
+#[allow(dead_code)]
 struct PeerConn {
     addr: String,
     writer: TcpStream,
@@ -226,6 +228,7 @@ impl GossipHub {
         self.peers.lock().unwrap().len()
     }
 
+    #[allow(dead_code)]
     pub fn mark_seen(&self, id: &str) -> bool {
         let mut seen = self.seen.lock().unwrap();
         if seen.len() > MAX_SEEN_ENTRIES {
@@ -342,12 +345,17 @@ fn read_peer(
     }
 }
 
+use meshchain_transport::frag::{decode_frag_nack, encode_frag_nack, FragAssembler, FragCache};
+use meshchain_transport::frame::{decode_frame, MsgType};
+
 /// Spawn meshtastic_bridge.py and forward TXHEX/RXHEX as raw frame bytes callbacks.
+#[allow(dead_code)]
 pub struct MeshRadioBridge {
     pub _marker: (),
 }
 
 impl MeshRadioBridge {
+    #[allow(dead_code)]
     pub fn spawn_bridge_process(script: &str, port: &str) -> Result<std::process::Child> {
         let child = std::process::Command::new("python3")
             .arg(script)
@@ -359,5 +367,121 @@ impl MeshRadioBridge {
             .spawn()
             .context("spawn meshtastic_bridge.py")?;
         Ok(child)
+    }
+}
+
+/// High-level radio network manager that maintains fragment reassembly, retransmission caching (`FragCache`),
+/// and selective ARQ (`FragNack`) for LoRa node gossip.
+pub struct MeshRadioHub {
+    pub assembler: FragAssembler,
+    pub cache: FragCache,
+}
+
+impl MeshRadioHub {
+    pub fn new() -> Self {
+        Self {
+            assembler: FragAssembler::new(),
+            cache: FragCache::new(),
+        }
+    }
+
+    /// Process raw incoming LoRa wire bytes.
+    /// Returns `Ok(Some(completed_payload))` when a multi-chunk session finishes reassembly.
+    /// Returns `Ok(None)` if more chunks are needed or if handled internally (e.g. NACK retransmissions generated).
+    pub fn process_incoming_raw(&mut self, raw_frame: &[u8]) -> Result<(Option<Vec<u8>>, Vec<Vec<u8>>)> {
+        let mut outbound_frames = Vec::new();
+        let frame = match decode_frame(raw_frame) {
+            Ok(f) => f,
+            Err(_) => return Ok((None, outbound_frames)),
+        };
+
+        match frame.msg_type {
+            MsgType::Frag => {
+                if let Ok(Some(full_payload)) = self.assembler.push_frame(&frame) {
+                    return Ok((Some(full_payload), outbound_frames));
+                }
+            }
+            MsgType::FragNack => {
+                if let Ok((sid, missing)) = decode_frag_nack(&frame.payload) {
+                    let retrans = self.cache.handle_nack(&sid, &missing);
+                    outbound_frames.extend(retrans);
+                }
+            }
+            _ => {}
+        }
+        Ok((None, outbound_frames))
+    }
+
+    /// Check for timed-out reassembly sessions (`timeout_secs`) and generate outbound `FragNack` wire frames.
+    pub fn check_timeouts_and_generate_nacks(&mut self, timeout_secs: u64) -> Vec<Vec<u8>> {
+        let nacks = self.assembler.check_missing_chunks(timeout_secs);
+        let mut frames = Vec::with_capacity(nacks.len());
+        for (sid, missing) in nacks {
+            if let Ok(frame_bytes) = encode_frag_nack(sid, &missing) {
+                frames.push(frame_bytes);
+            }
+        }
+        frames
+    }
+
+    /// Cache fragmented wire frames before transmitting over the air for future selective NACK recovery.
+    pub fn cache_outbound_session(&mut self, session_id: [u8; 8], frames: Vec<Vec<u8>>) {
+        self.cache.insert(session_id, frames);
+    }
+
+    /// Prune expired sessions from both assembler and cache.
+    #[allow(dead_code)]
+    pub fn prune(&mut self) {
+        self.cache.prune();
+    }
+}
+
+impl Default for MeshRadioHub {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use meshchain_transport::frag::{fragment_bytes, session_id_from_hash};
+
+    #[test]
+    fn test_meshradiohub_nack_retransmission_flow() {
+        let mut sender_hub = MeshRadioHub::new();
+        let mut receiver_hub = MeshRadioHub::new();
+
+        let data: Vec<u8> = (0..800).map(|i| (i % 256) as u8).collect();
+        let sid = session_id_from_hash(&data);
+        let frames = fragment_bytes(sid, &data).unwrap();
+        assert!(frames.len() >= 2);
+
+        // Sender caches outbound frames
+        sender_hub.cache_outbound_session(sid, frames.clone());
+
+        // Receiver gets chunk 0, but drops all other chunks
+        let (res, outbound) = receiver_hub.process_incoming_raw(&frames[0]).unwrap();
+        assert!(res.is_none());
+        assert!(outbound.is_empty());
+
+        // Timeout triggers NACK frame from receiver
+        let nack_frames = receiver_hub.check_timeouts_and_generate_nacks(0);
+        assert_eq!(nack_frames.len(), 1);
+
+        // Sender receives NACK frame and produces retransmissions
+        let (res2, retrans_frames) = sender_hub.process_incoming_raw(&nack_frames[0]).unwrap();
+        assert!(res2.is_none());
+        assert_eq!(retrans_frames.len(), frames.len() - 1);
+
+        // Receiver processes retransmissions and finishes assembly
+        let mut completed = None;
+        for retrans in retrans_frames {
+            let (res3, _) = receiver_hub.process_incoming_raw(&retrans).unwrap();
+            if let Some(data) = res3 {
+                completed = Some(data);
+            }
+        }
+        assert_eq!(completed.unwrap(), data);
     }
 }

@@ -3,6 +3,7 @@
 pub mod frag;
 pub mod frame;
 pub mod meshtastic;
+pub mod native_proto;
 pub mod sim;
 
 pub use frag::{fragment_bytes, session_id_from_hash, FragAssembler};
@@ -13,4 +14,8 @@ pub use frame::{
     TipPayload, AIR_MAX_TXS_PER_BLOCK, FRAME_MAGIC, MAX_PAYLOAD,
 };
 pub use meshtastic::MeshtasticStdioTransport;
+pub use native_proto::{
+    decode_from_radio_packet, decode_mesh_packet, decode_serial_frame, encode_serial_frame,
+    encode_to_radio_packet, MeshPacketData, ProtoError, DEFAULT_PORTNUM_MESHCHAIN,
+};
 pub use sim::SimTransport;
