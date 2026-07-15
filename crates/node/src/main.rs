@@ -71,6 +71,9 @@ enum Commands {
         peers: Vec<String>,
         #[arg(long, default_value_t = 100)]
         slot_ms: u64,
+        /// LoRa radio port for live Meshtastic bridging, e.g. /dev/ttyUSB0 or tcp:localhost:4403
+        #[arg(long)]
+        radio_port: Option<String>,
     },
     /// Submit a signed payment JSON to a validator peer
     SubmitTx {
@@ -267,6 +270,7 @@ fn main() -> Result<()> {
             listen,
             peers,
             slot_ms,
+            radio_port,
         } => {
             let listen: SocketAddr = listen.parse().context("bad --listen address")?;
             if !observer && validator_index.is_none() {
@@ -279,6 +283,7 @@ fn main() -> Result<()> {
                 listen,
                 peers,
                 slot_ms,
+                radio_port,
             })?;
         }
         Commands::SubmitTx { tx, peer, air } => {

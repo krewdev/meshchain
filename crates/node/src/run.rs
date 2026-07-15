@@ -7,6 +7,8 @@ use crate::net::{GossipHub, GossipMsg};
 use anyhow::{bail, Context, Result};
 use meshchain_ledger::genesis::GenesisConfig;
 use meshchain_ledger::state::ChainState;
+use meshchain_ledger::registry::Registry;
+const RELAYER_POLL_INTERVAL: Duration = Duration::from_secs(10);
 use meshchain_proto::block::{Block, MAX_TXS_PER_BLOCK};
 use meshchain_proto::crypto::{Keypair, PublicKey};
 use meshchain_proto::tx::Tx;
@@ -26,6 +28,7 @@ pub struct RunConfig {
     pub listen: SocketAddr,
     pub peers: Vec<String>,
     pub slot_ms: u64,
+    pub radio_port: Option<String>, // TODO: use this for meshtastic init
 }
 
 fn now_secs() -> u64 {
@@ -130,10 +133,44 @@ pub fn run_validator(cfg: RunConfig) -> Result<()> {
     }
 
     let hub = GossipHub::start(cfg.listen, cfg.peers.clone())?;
+    
+    // --- Solana Bridge Relayer Daemon Setup ---
+    if my_index.is_some() {
+        let relayer_script = PathBuf::from("programs-mesh-bridge/scripts/relayer_daemon.ts");
+        if relayer_script.exists() {
+            println!("Starting Solana-MeshChain Bridge Relayer daemon...");
+            let bridge_dir = PathBuf::from("programs-mesh-bridge");
+            thread::spawn(move || {
+                loop {
+                    let res = std::process::Command::new("deno")
+                        .arg("run")
+                        .arg("--allow-net")
+                        .arg("--allow-read")
+                        .arg("--allow-write")
+                        .arg("scripts/relayer_daemon.ts")
+                        .current_dir(&bridge_dir)
+                        .output();
+
+                    match res {
+                        Ok(out) => {
+                            if !out.status.success() {
+                                let err = String::from_utf8_lossy(&out.stderr);
+                                eprintln!("[Relayer] Bridge Daemon error: {}", err);
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("[Relayer] Failed to execute relayer: {}", e);
+                        }
+                    }
+                    thread::sleep(RELAYER_POLL_INTERVAL);
+                }
+            });
+        }
+    }
     let mut finality = FinalityTracker::new();
     let mut mempool: VecDeque<Tx> = VecDeque::new();
     let mut pending: HashMap<String, Block> = HashMap::new();
-    /// height -> first seen block hash (equivocation detect)
+    // height -> first seen block hash (equivocation detect)
     let mut seen_at_height: HashMap<u64, String> = HashMap::new();
 
     if observer {
@@ -777,6 +814,11 @@ fn try_finalize(
         Ok(()) => {
             let _ = save_finalized_block(data_dir, &block);
             state.save_json(state_path).ok();
+            
+            // Dump the current registry (Name -> Address mappings) for the TS Relayer to consume
+            let registry = Registry::from_state(state);
+            let r_path = data_dir.join("registry.json");
+            std::fs::write(&r_path, serde_json::to_string_pretty(&registry).unwrap()).ok();
             println!(
                 "finalized height={} acks>=threshold supply={}",
                 state.height, state.total_supply

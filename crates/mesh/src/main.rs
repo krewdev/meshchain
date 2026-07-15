@@ -817,7 +817,7 @@ fn run_config_cmd(dir: &Path, action: ConfigAction) -> Result<()> {
             println!("Settings:\n{}", serde_json::to_string_pretty(&cfg)?);
         }
         ConfigAction::Show => {
-            let cfg = MeshConfig::load_or_default(dir);
+            let mut cfg = MeshConfig::load_or_default(dir);
             let path = MeshConfig::config_path(dir);
             println!("Configuration file: {}", path.display());
             if !path.exists() {
@@ -1027,6 +1027,47 @@ fn main() -> Result<()> {
             println!("  File:      {}", path.display());
             println!("  Mesh name: {tag}");
             println!("  (hex id:   {})", short_id_hex(&sid));
+            println!();
+            
+            // Attempt to hit the local faucet if it is running, to auto-mint on chain
+            let pubkey_hex = hex::encode(kp.public_key());
+            println!("Attempting to auto-mint 100 tMESH via local faucet...");
+            let payload = serde_json::json!({
+                "mesh_name": tag,
+                "public_key_hex": pubkey_hex
+            });
+            let payload_str = payload.to_string();
+
+            let output = std::process::Command::new("curl")
+                .arg("-s")
+                .arg("-X")
+                .arg("POST")
+                .arg("http://127.0.0.1:8787/drip")
+                .arg("-H")
+                .arg("Content-Type: application/json")
+                .arg("-d")
+                .arg(&payload_str)
+                .output();
+
+            match output {
+                Ok(out) if out.status.success() => {
+                    if let Ok(res_val) = serde_json::from_slice::<serde_json::Value>(&out.stdout) {
+                        if res_val.get("ok").and_then(|v| v.as_bool()).unwrap_or(false) {
+                            println!("✅ Successfully auto-minted 100 tMESH! Wallet registered on-chain.");
+                        } else if let Some(err) = res_val.get("error").and_then(|v| v.as_str()) {
+                            println!("ℹ️ Faucet responded: {}", err);
+                        } else {
+                            println!("ℹ️ Faucet contacted, but registration status is unclear.");
+                        }
+                    } else {
+                        println!("ℹ️ Faucet contacted, but response could not be parsed.");
+                    }
+                }
+                _ => {
+                    println!("ℹ️ Local faucet not running/reachable. Run `mesh testnet-setup` or start the host to activate the faucet.");
+                }
+            }
+
             println!();
             let peer = if submit.is_empty() {
                 default_submit_peer(&dir)

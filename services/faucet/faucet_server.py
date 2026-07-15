@@ -143,6 +143,20 @@ def drip(mesh_name: str, public_key_hex: str | None = None) -> dict:
         h = hashlib.sha256(pk).digest()[:8].hex()
         if h != short_hex:
             raise RuntimeError("public_key_hex does not match mesh name")
+        
+        # Save mapping to registry.json
+        reg_file = DATA / "registry.json"
+        reg = {}
+        if reg_file.exists():
+            try:
+                reg = json.loads(reg_file.read_text())
+            except Exception:
+                pass
+        reg[short_hex] = public_key_hex
+        try:
+            reg_file.write_text(json.dumps(reg, indent=2))
+        except Exception:
+            pass
 
     ext = hashlib.sha256(f"faucet:{short_hex}:{now}".encode()).hexdigest()[:32]
     peer = os.environ.get("MESH_MINT_PEER", "127.0.0.1:9100")
