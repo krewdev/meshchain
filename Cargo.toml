@@ -33,3 +33,12 @@ clap = { version = "4", features = ["derive"] }
 rand = "0.8"
 tempfile = "3"
 flate2 = { version = "1.0", default-features = false, features = ["rust_backend"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
+opt-level = 3
+
+[profile.dev]
+debug = 1           # line tables only — faster builds, still useful in backtraces

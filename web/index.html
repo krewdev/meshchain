@@ -9,6 +9,12 @@
   <meta property="og:description" content="Off-grid. Private. Mesh-native value on LoRa." />
   <meta property="og:type" content="website" />
   <meta property="og:image" content="/assets/logo.jpg" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="MeshChain — Off-grid private money on LoRa" />
+  <meta name="twitter:description" content="Privacy-first mesh ledger for Meshtastic. Quantum-safe cold storage, hybrid vaults. Testnet live." />
+  <meta name="twitter:image" content="/assets/logo.jpg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="/styles.css" />
   <link rel="icon" href="/assets/logo.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="/assets/logo.jpg" />
@@ -26,7 +32,7 @@
         <img class="logo-img" src="/assets/logo.svg" width="36" height="36" alt="MeshChain" />
         MeshChain
       </a>
-      <nav class="nav-links">
+      <nav class="nav-links" id="navLinks">
         <a href="#privacy">Privacy</a>
         <a href="#features">Protocol</a>
         <a href="#wallets">Wallets</a>
@@ -37,6 +43,9 @@
         <a href="https://github.com/krewdev/meshchain" target="_blank" rel="noopener">GitHub</a>
         <a class="btn btn-primary" href="/docs/?doc=GETTING_STARTED">Launch CLI</a>
       </nav>
+      <button class="nav-toggle" id="navToggle" aria-expanded="false" aria-controls="navLinks" aria-label="Open navigation">
+        <span></span><span></span><span></span>
+      </button>
     </div>
   </header>
 
@@ -79,13 +88,38 @@
               <span>Testnet token · no cash value</span>
             </div>
           </div>
-          <div class="panel" aria-label="CLI preview" style="width:100%;max-width:340px">
-<pre><span class="cmt"># privacy-first wallet CLI</span>
+          <div class="panel code-wrap" aria-label="CLI preview" style="width:100%;max-width:340px">
+            <button class="copy-btn" data-target="hero-cli">copy</button>
+<pre id="hero-cli"><span class="cmt"># privacy-first wallet CLI</span>
 <span class="prompt">$</span> <span class="cmd">mesh testnet-setup</span>
 <span class="prompt">$</span> <span class="cmd">mesh new-wallet</span>
 <span class="cmt"># → M3SQRT-XTA1Y-ZJ6</span>
 <span class="prompt">$</span> <span class="cmd">mesh new-cold-key</span>
 <span class="prompt">$</span> <span class="cmd">mesh security</span></pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="how-it-works">
+      <div class="wrap">
+        <h2 class="section-title">How it works</h2>
+        <p class="section-sub">Three commands from unboxing to your first off-grid transaction.</p>
+        <div class="steps">
+          <div class="step" data-step="1">
+            <span class="step-icon">📡</span>
+            <h3>Flash &amp; Join</h3>
+            <p>Flash a Meshtastic node over USB. Run <code>mesh join-public</code> to install the shared testnet genesis and peer seeds.</p>
+          </div>
+          <div class="step" data-step="2">
+            <span class="step-icon">💳</span>
+            <h3>Create a Wallet</h3>
+            <p>Run <code>mesh new-wallet</code> to generate a keypair and a human-readable mesh name like <code>M3SQRT-XTA1Y-ZJ6</code>. No email, no KYC.</p>
+          </div>
+          <div class="step" data-step="3">
+            <span class="step-icon">📦</span>
+            <h3>Transact Over LoRa</h3>
+            <p>Sign payments with <code>mesh send &lt;name&gt; &lt;amount&gt;</code>. Transactions hop peer-to-peer across Meshtastic nodes — no internet needed.</p>
           </div>
         </div>
       </div>
@@ -175,8 +209,9 @@
             </tbody>
           </table>
         </div>
-        <div class="panel" style="margin-top:1.25rem">
-<pre><span class="prompt">$</span> <span class="cmd">git clone https://github.com/krewdev/meshchain.git && cd meshchain</span>
+        <div class="panel code-wrap" style="margin-top:1.25rem">
+          <button class="copy-btn" data-target="testnet-cli">copy</button>
+<pre id="testnet-cli"><span class="prompt">$</span> <span class="cmd">git clone https://github.com/krewdev/meshchain.git &amp;&amp; cd meshchain</span>
 <span class="prompt">$</span> <span class="cmd">cargo build -p mesh -p meshchain-node</span>
 <span class="prompt">$</span> <span class="cmd">./target/debug/mesh join-public</span>
 <span class="prompt">$</span> <span class="cmd">./target/debug/mesh new-wallet --name me.json --publish</span>
@@ -213,7 +248,7 @@
       </div>
     </section>
 
-    <section>
+    <section id="docs">
       <div class="wrap">
         <h2 class="section-title">Documentation</h2>
         <p class="section-sub">Protocol, security, hybrid lock, host ops, VPS &amp; tunnel.</p>
@@ -304,4 +339,63 @@
     </div>
   </footer>
 </body>
+
+<script>
+  // --- Hamburger nav toggle ---
+  const toggle = document.getElementById('navToggle');
+  const navLinks = document.getElementById('navLinks');
+  toggle.addEventListener('click', () => {
+    const open = navLinks.classList.toggle('open');
+    toggle.setAttribute('aria-expanded', open);
+    toggle.setAttribute('aria-label', open ? 'Close navigation' : 'Open navigation');
+  });
+  // Close nav when a link is clicked (mobile)
+  navLinks.querySelectorAll('a').forEach(a => {
+    a.addEventListener('click', () => {
+      navLinks.classList.remove('open');
+      toggle.setAttribute('aria-expanded', 'false');
+    });
+  });
+
+  // --- Active nav link on scroll ---
+  const sections = document.querySelectorAll('section[id]');
+  const navAnchors = document.querySelectorAll('.nav-links a[href^="#"]');
+  const obs = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      const id = e.target.id;
+      navAnchors.forEach(a => {
+        if (a.getAttribute('href') === '#' + id) {
+          a.classList.toggle('active', e.isIntersecting);
+        }
+      });
+    });
+  }, { threshold: 0.35, rootMargin: '-60px 0px -40% 0px' });
+  sections.forEach(s => obs.observe(s));
+
+  // --- Copy-to-clipboard ---
+  document.querySelectorAll('.copy-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const targetId = btn.dataset.target;
+      const pre = targetId ? document.getElementById(targetId) : btn.closest('.code-wrap')?.querySelector('pre');
+      if (!pre) return;
+      const text = pre.textContent;
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch {
+        // Fallback for older browsers
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        ta.remove();
+      }
+      btn.textContent = 'copied!';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = 'copy'; btn.classList.remove('copied'); }, 1800);
+    });
+  });
+</script>
 </html>

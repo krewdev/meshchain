@@ -48,16 +48,19 @@
   <header class="nav">
     <div class="wrap nav-inner">
       <a class="brand" href="/">
-        <span class="logo" aria-hidden="true"></span>
+        <img class="logo-img" src="/assets/logo.svg" width="36" height="36" alt="MeshChain" />
         MeshChain
       </a>
-      <nav class="nav-links">
+      <nav class="nav-links" id="navLinks">
         <a href="/">Home</a>
         <a class="active" href="/scanner/">Scanner</a>
         <a href="/docs/?doc=TESTNET">Testnet</a>
         <a href="/docs/">Docs</a>
         <a href="https://github.com/krewdev/meshchain" target="_blank" rel="noopener">GitHub</a>
       </nav>
+      <button class="nav-toggle" id="navToggle" aria-expanded="false" aria-controls="navLinks" aria-label="Open navigation">
+        <span></span><span></span><span></span>
+      </button>
     </div>
   </header>
 
@@ -129,5 +132,21 @@
   </footer>
 
   <script type="module" src="/scanner/js/app.js"></script>
+  <script>
+    // Hamburger nav
+    const toggle = document.getElementById('navToggle');
+    const navLinks = document.getElementById('navLinks');
+    toggle.addEventListener('click', () => {
+      const open = navLinks.classList.toggle('open');
+      toggle.setAttribute('aria-expanded', open);
+      toggle.setAttribute('aria-label', open ? 'Close navigation' : 'Open navigation');
+    });
+    navLinks.querySelectorAll('a').forEach(a => {
+      a.addEventListener('click', () => {
+        navLinks.classList.remove('open');
+        toggle.setAttribute('aria-expanded', 'false');
+      });
+    });
+  </script>
 </body>
 </html>
