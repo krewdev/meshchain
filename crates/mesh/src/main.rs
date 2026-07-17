@@ -393,7 +393,11 @@ fn run_config_cmd(dir: &std::path::Path, action: ConfigAction) -> Result<()> {
         } => {
             let mut cfg = MeshConfig::load_or_default(dir);
             if let Some(p) = port {
-                cfg.radio_port = if p == "auto" || p.is_empty() { None } else { Some(p) };
+                cfg.radio_port = if p == "auto" || p.is_empty() {
+                    None
+                } else {
+                    Some(p)
+                };
             }
             if let Some(d) = delay_ms {
                 cfg.tx_delay_ms = d;
@@ -451,7 +455,11 @@ fn main() -> Result<()> {
         Commands::Status => {
             cmd::network::cmd_status(&dir)?;
         }
-        Commands::Validator { index, listen, peers } => {
+        Commands::Validator {
+            index,
+            listen,
+            peers,
+        } => {
             cmd::network::cmd_validator(&dir, index, &listen, &peers)?;
         }
         Commands::Observer { listen, peers } => {
@@ -460,14 +468,24 @@ fn main() -> Result<()> {
         Commands::TestnetAttestors => {
             cmd::network::cmd_testnet_attestors()?;
         }
-        Commands::GenesisExtend { genesis, add, out } | Commands::GenesisAdd { genesis, out, add } => {
+        Commands::GenesisExtend { genesis, add, out }
+        | Commands::GenesisAdd { genesis, out, add } => {
             cmd::network::cmd_genesis_modify(&genesis, &add, &out)?;
         }
 
-        Commands::NewWallet { name, publish, submit } => {
+        Commands::NewWallet {
+            name,
+            publish,
+            submit,
+        } => {
             cmd::wallet::cmd_new_wallet(&dir, &name, publish, &submit)?;
         }
-        Commands::Register { wallet, out, submit, no_submit } => {
+        Commands::Register {
+            wallet,
+            out,
+            submit,
+            no_submit,
+        } => {
             cmd::wallet::cmd_register(&dir, &wallet, out, submit, no_submit)?;
         }
         Commands::NewColdKey { name } => {
@@ -483,8 +501,21 @@ fn main() -> Result<()> {
             cmd::wallet::cmd_validator_keygen(&dir, &name)?;
         }
 
-        Commands::Send { to, amount, wallet, cold, fee, out, submit, wait, air, relay } => {
-            cmd::radio::cmd_send(&dir, &to, &amount, &wallet, &cold, &fee, out, submit, wait, air, &relay)?;
+        Commands::Send {
+            to,
+            amount,
+            wallet,
+            cold,
+            fee,
+            out,
+            submit,
+            wait,
+            air,
+            relay,
+        } => {
+            cmd::radio::cmd_send(
+                &dir, &to, &amount, &wallet, &cold, &fee, out, submit, wait, air, &relay,
+            )?;
         }
         Commands::AirSubmit { tx, peer, relay } => {
             cmd::radio::cmd_air_submit(&dir, &tx, &peer, &relay)?;

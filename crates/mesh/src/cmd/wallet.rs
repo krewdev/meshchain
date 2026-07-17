@@ -10,9 +10,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::helpers::{
-    best_chain_state_path, default_submit_peer, fmt_mesh, keys_dir, load_wallet,
-    promote_v0_snapshot, refresh_after_submit, submit_tx_to_peer, sync_state_from_scanner,
-    wallet_path, default_scanner_url,
+    best_chain_state_path, default_scanner_url, default_submit_peer, fmt_mesh, keys_dir,
+    load_wallet, promote_v0_snapshot, refresh_after_submit, submit_tx_to_peer,
+    sync_state_from_scanner, wallet_path,
 };
 
 // ── register helper (shared by new-wallet --publish and register cmd) ─────────
@@ -57,7 +57,10 @@ pub fn cmd_new_wallet(dir: &Path, name: &str, publish: bool, submit: &str) -> Re
     fs::create_dir_all(keys_dir(dir))?;
     let path = wallet_path(dir, name);
     if path.exists() {
-        bail!("File already exists: {}. Pick another --name", path.display());
+        bail!(
+            "File already exists: {}. Pick another --name",
+            path.display()
+        );
     }
     let kp = Keypair::generate();
     fs::write(&path, serde_json::to_string_pretty(&kp.to_file())?)?;
@@ -115,10 +118,7 @@ pub fn cmd_new_wallet(dir: &Path, name: &str, publish: bool, submit: &str) -> Re
         submit.to_string()
     };
     if publish {
-        let name_only = path
-            .file_name()
-            .and_then(|s| s.to_str())
-            .unwrap_or(name);
+        let name_only = path.file_name().and_then(|s| s.to_str()).unwrap_or(name);
         match sign_register(dir, name_only, None) {
             Ok((reg_path, tx)) => {
                 println!("Register signed → {}", reg_path.display());
@@ -194,9 +194,7 @@ pub fn cmd_balance(dir: &Path, wallet: &str) -> Result<()> {
     }
     let state_path = best_chain_state_path(dir);
     if !state_path.exists() {
-        bail!(
-            "No network state yet. Run:\n  mesh join-public\n  # or mesh testnet-setup + demo"
-        );
+        bail!("No network state yet. Run:\n  mesh join-public\n  # or mesh testnet-setup + demo");
     }
     let kp = load_wallet(&path)?;
     let sid = short_id(&kp.public_key());

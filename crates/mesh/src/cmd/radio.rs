@@ -205,7 +205,9 @@ pub fn cmd_air_submit(dir: &Path, tx: &str, peer: &str, relay: &str) -> Result<(
         &target,
         "--air",
     ])?;
-    println!("Sent MC frame path (tx_air + MCHEX). Needs local validator + optional mesh_radio_relay.");
+    println!(
+        "Sent MC frame path (tx_air + MCHEX). Needs local validator + optional mesh_radio_relay."
+    );
     println!("Docs: docs/MESHTASTIC.md");
     Ok(())
 }

@@ -82,11 +82,7 @@ pub fn default_submit_peer(dir: &Path) -> String {
                         let roles = seed
                             .get("roles")
                             .and_then(|r| r.as_array())
-                            .map(|a| {
-                                a.iter()
-                                    .filter_map(|x| x.as_str())
-                                    .collect::<Vec<_>>()
-                            })
+                            .map(|a| a.iter().filter_map(|x| x.as_str()).collect::<Vec<_>>())
                             .unwrap_or_default();
                         let prefer = roles.iter().any(|r| *r == "submit" || *r == "seed");
                         if prefer || roles.is_empty() {
@@ -283,17 +279,19 @@ pub fn refresh_after_submit(dir: &Path, peer: &str) {
     thread::sleep(Duration::from_secs(5));
     if let Some(scanner) = default_scanner_url(dir) {
         if let Err(e) = sync_state_from_scanner(dir, &scanner) {
-            eprintln!("note: could not sync from scanner ({e}). Run: mesh sync-state --scanner {scanner}");
+            eprintln!(
+                "note: could not sync from scanner ({e}). Run: mesh sync-state --scanner {scanner}"
+            );
         }
     } else {
-        eprintln!("note: remote submit done. Sync with: mesh sync-state --scanner http://SEED:8788");
+        eprintln!(
+            "note: remote submit done. Sync with: mesh sync-state --scanner http://SEED:8788"
+        );
     }
 }
 
 pub fn submit_tx_to_peer(tx_path: &Path, peer: &str) -> Result<()> {
-    let tx = tx_path
-        .to_str()
-        .context("tx path is not valid UTF-8")?;
+    let tx = tx_path.to_str().context("tx path is not valid UTF-8")?;
     println!("Submitting to {peer} …");
     run_external_node(&["submit-tx", "--tx", tx, "--peer", peer])?;
     Ok(())

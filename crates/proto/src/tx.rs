@@ -119,8 +119,7 @@ impl TxBody {
 
     /// Canonical bytes for signing (deterministic bincode).
     pub fn sign_bytes(&self) -> Result<Vec<u8>, ProtoError> {
-        bincode::serialize(&(PROTOCOL_VERSION, self))
-            .map_err(|e| ProtoError::Codec(e.to_string()))
+        bincode::serialize(&(PROTOCOL_VERSION, self)).map_err(|e| ProtoError::Codec(e.to_string()))
     }
 }
 
@@ -138,7 +137,11 @@ impl Tx {
     }
 
     /// Sign with ed25519 + ML-DSA-65 (required for large cold-storage spends).
-    pub fn sign_with_pq(body: TxBody, keypair: &Keypair, pq: &PqKeypair) -> Result<Self, ProtoError> {
+    pub fn sign_with_pq(
+        body: TxBody,
+        keypair: &Keypair,
+        pq: &PqKeypair,
+    ) -> Result<Self, ProtoError> {
         let mut tx = Self::sign(body, keypair)?;
         let msg = tx.body.sign_bytes()?;
         let sig = pq.sign(&msg)?;
@@ -190,10 +193,7 @@ impl Tx {
         // Structural checks
         match &self.body {
             TxBody::Transfer {
-                from,
-                amount,
-                fee,
-                ..
+                from, amount, fee, ..
             } => {
                 if *amount == 0 {
                     return Err(ProtoError::InvalidTx("amount must be > 0".into()));
@@ -208,7 +208,9 @@ impl Tx {
             }
             TxBody::Register { pubkey, .. } => {
                 if *pubkey != self.signer {
-                    return Err(ProtoError::InvalidTx("register pubkey must be signer".into()));
+                    return Err(ProtoError::InvalidTx(
+                        "register pubkey must be signer".into(),
+                    ));
                 }
             }
             TxBody::Mint { amount, .. } => {

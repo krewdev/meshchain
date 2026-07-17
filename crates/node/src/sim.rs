@@ -12,10 +12,13 @@ use std::path::Path;
 
 pub fn run_sim(data_dir: &Path, n_transfers: u32, mut slot_time: u64) -> Result<()> {
     let genesis_path = data_dir.join("genesis.json");
-    let genesis: GenesisConfig = serde_json::from_str(
-        &fs::read_to_string(&genesis_path)
-            .with_context(|| format!("missing genesis — run init first: {}", genesis_path.display()))?,
-    )?;
+    let genesis: GenesisConfig =
+        serde_json::from_str(&fs::read_to_string(&genesis_path).with_context(|| {
+            format!(
+                "missing genesis — run init first: {}",
+                genesis_path.display()
+            )
+        })?)?;
 
     let mut state = ChainState::from_genesis(&genesis)?;
     let n = state.validators.len();
@@ -96,13 +99,7 @@ pub fn run_sim(data_dir: &Path, n_transfers: u32, mut slot_time: u64) -> Result<
 
         let next_height = state.height + 1;
         let idx = leader_index(next_height, n);
-        let block = produce_block(
-            &state,
-            &validators[idx as usize],
-            idx,
-            slot_time,
-            vec![tx],
-        )?;
+        let block = produce_block(&state, &validators[idx as usize], idx, slot_time, vec![tx])?;
         commit_with_finality(&mut state, &mut finality, &block, &validators)?;
         println!(
             "transfer #{i}: +1 MESH alice->bob | height={} alice={} bob={} supply={}",
@@ -126,13 +123,7 @@ pub fn run_sim(data_dir: &Path, n_transfers: u32, mut slot_time: u64) -> Result<
         let tx = Tx::sign(body, &alice).map_err(|e| anyhow::anyhow!(e.to_string()))?;
         let next_height = state.height + 1;
         let idx = leader_index(next_height, n);
-        let block = produce_block(
-            &state,
-            &validators[idx as usize],
-            idx,
-            slot_time,
-            vec![tx],
-        )?;
+        let block = produce_block(&state, &validators[idx as usize], idx, slot_time, vec![tx])?;
         match state.apply_block(&block) {
             Ok(_) => bail!("double-spend should have failed"),
             Err(e) => println!("double-spend correctly rejected: {e}"),
@@ -153,13 +144,7 @@ pub fn run_sim(data_dir: &Path, n_transfers: u32, mut slot_time: u64) -> Result<
         let tx = Tx::sign(body, &alice).map_err(|e| anyhow::anyhow!(e.to_string()))?;
         let next_height = state.height + 1;
         let idx = leader_index(next_height, n);
-        let block = produce_block(
-            &state,
-            &validators[idx as usize],
-            idx,
-            slot_time,
-            vec![tx],
-        )?;
+        let block = produce_block(&state, &validators[idx as usize], idx, slot_time, vec![tx])?;
         match state.apply_block(&block) {
             Ok(_) => bail!("overspend should have failed"),
             Err(e) => println!("overspend correctly rejected: {e}"),
@@ -183,13 +168,7 @@ pub fn run_sim(data_dir: &Path, n_transfers: u32, mut slot_time: u64) -> Result<
         let tx = Tx::sign(body, minter).map_err(|e| anyhow::anyhow!(e.to_string()))?;
         let next_height = state.height + 1;
         let idx = leader_index(next_height, n);
-        let block = produce_block(
-            &state,
-            &validators[idx as usize],
-            idx,
-            slot_time,
-            vec![tx],
-        )?;
+        let block = produce_block(&state, &validators[idx as usize], idx, slot_time, vec![tx])?;
         commit_with_finality(&mut state, &mut finality, &block, &validators)?;
         println!(
             "bridge MINT 50 MESH -> bob (external_ref=vault deposit) bob={}",
@@ -212,17 +191,11 @@ pub fn run_sim(data_dir: &Path, n_transfers: u32, mut slot_time: u64) -> Result<
             asset_id: 1, // SOL-claim — vault-linked ⇒ always needs cold PQ key
         };
         let bob_pq = PqKeypair::generate().map_err(|e| anyhow::anyhow!(e.to_string()))?;
-        let tx = Tx::sign_with_pq(body, &bob, &bob_pq)
-            .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        let tx =
+            Tx::sign_with_pq(body, &bob, &bob_pq).map_err(|e| anyhow::anyhow!(e.to_string()))?;
         let next_height = state.height + 1;
         let idx = leader_index(next_height, n);
-        let block = produce_block(
-            &state,
-            &validators[idx as usize],
-            idx,
-            slot_time,
-            vec![tx],
-        )?;
+        let block = produce_block(&state, &validators[idx as usize], idx, slot_time, vec![tx])?;
         commit_with_finality(&mut state, &mut finality, &block, &validators)?;
         println!(
             "bridge BURN 10 MESH from bob (hybrid off-ramp, PQ+hashed dest) bob={} supply={}",
@@ -248,13 +221,8 @@ pub fn run_sim(data_dir: &Path, n_transfers: u32, mut slot_time: u64) -> Result<
             let bad = Tx::sign(body.clone(), &alice).map_err(|e| anyhow::anyhow!(e.to_string()))?;
             let next_height = state.height + 1;
             let idx = leader_index(next_height, n);
-            let block = produce_block(
-                &state,
-                &validators[idx as usize],
-                idx,
-                slot_time,
-                vec![bad],
-            )?;
+            let block =
+                produce_block(&state, &validators[idx as usize], idx, slot_time, vec![bad])?;
             match state.apply_block(&block) {
                 Ok(_) => bail!("large transfer without cold key should fail"),
                 Err(e) => println!("large send without cold key correctly rejected: {e}"),

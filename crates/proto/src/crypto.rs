@@ -1,6 +1,6 @@
 use crate::error::ProtoError;
 use ed25519_dalek::{
-    Signature as DalekSig, Signer, SigningKey, Verifier, VerifyingKey, SignatureError,
+    Signature as DalekSig, SignatureError, Signer, SigningKey, Verifier, VerifyingKey,
 };
 use rand::rngs::OsRng;
 use serde::de::{self, SeqAccess, Visitor};
@@ -92,7 +92,11 @@ impl Keypair {
 pub struct Signature;
 
 impl Signature {
-    pub fn verify(pubkey: &PublicKey, message: &[u8], sig: &SignatureBytes) -> Result<(), ProtoError> {
+    pub fn verify(
+        pubkey: &PublicKey,
+        message: &[u8],
+        sig: &SignatureBytes,
+    ) -> Result<(), ProtoError> {
         let vk = VerifyingKey::from_bytes(pubkey).map_err(|_| ProtoError::InvalidPublicKey)?;
         let signature = DalekSig::from_bytes(sig.as_bytes());
         vk.verify(message, &signature)

@@ -173,8 +173,7 @@ impl ChainState {
 
     /// Apply a verified tx to state (mutates). Does not check block context.
     pub fn apply_tx(&mut self, tx: &Tx) -> Result<(), LedgerError> {
-        tx.verify()
-            .map_err(|e| LedgerError::Proto(e.to_string()))?;
+        tx.verify().map_err(|e| LedgerError::Proto(e.to_string()))?;
 
         match &tx.body {
             TxBody::Register { nonce, pubkey } => {
@@ -268,9 +267,9 @@ impl ChainState {
                 // Minter nonce on minter account
                 let minter_sid = short_id(&tx.signer);
                 {
-                    let minter = self.account_mut(&minter_sid).ok_or_else(|| {
-                        LedgerError::AccountNotFound(short_id_hex(&minter_sid))
-                    })?;
+                    let minter = self
+                        .account_mut(&minter_sid)
+                        .ok_or_else(|| LedgerError::AccountNotFound(short_id_hex(&minter_sid)))?;
                     if minter.nonce != *nonce {
                         return Err(LedgerError::InvalidNonce {
                             expected: minter.nonce,
@@ -483,15 +482,8 @@ mod tests {
         };
         let mut st = ChainState::from_genesis(&genesis).unwrap();
         // genesis block height 0
-        let gblock = meshchain_proto::block::Block::new(
-            0,
-            [0u8; 32],
-            1,
-            0,
-            &producer,
-            vec![],
-        )
-        .unwrap();
+        let gblock =
+            meshchain_proto::block::Block::new(0, [0u8; 32], 1, 0, &producer, vec![]).unwrap();
         st.apply_block(&gblock).unwrap();
 
         let from = short_id(&alice.public_key());
@@ -506,15 +498,8 @@ mod tests {
             fee,
         };
         let tx = Tx::sign(body, &alice).unwrap();
-        let block = meshchain_proto::block::Block::new(
-            1,
-            st.tip_hash,
-            2,
-            0,
-            &producer,
-            vec![tx],
-        )
-        .unwrap();
+        let block =
+            meshchain_proto::block::Block::new(1, st.tip_hash, 2, 0, &producer, vec![tx]).unwrap();
         st.apply_block(&block).unwrap();
 
         assert_eq!(st.balance_of(&from), 100 * ONE_MESH - amount - fee);
@@ -569,14 +554,12 @@ mod tests {
         };
         let tx1 = Tx::sign(body.clone(), &alice).unwrap();
         let block1 =
-            meshchain_proto::block::Block::new(1, st.tip_hash, 2, 0, &producer, vec![tx1])
-                .unwrap();
+            meshchain_proto::block::Block::new(1, st.tip_hash, 2, 0, &producer, vec![tx1]).unwrap();
         st.apply_block(&block1).unwrap();
 
         let tx2 = Tx::sign(body, &alice).unwrap(); // same nonce 0
         let block2 =
-            meshchain_proto::block::Block::new(2, st.tip_hash, 3, 0, &producer, vec![tx2])
-                .unwrap();
+            meshchain_proto::block::Block::new(2, st.tip_hash, 3, 0, &producer, vec![tx2]).unwrap();
         let err = st.apply_block(&block2).unwrap_err();
         let msg = err.to_string();
         assert!(
@@ -610,10 +593,7 @@ mod tests {
         let v1 = Keypair::generate();
         let genesis = GenesisConfig {
             chain_id: "test".into(),
-            validators: vec![
-                hex::encode(v0.public_key()),
-                hex::encode(v1.public_key()),
-            ],
+            validators: vec![hex::encode(v0.public_key()), hex::encode(v1.public_key())],
             block_reward: 0,
             allocations: vec![
                 GenesisAccount {
@@ -631,8 +611,7 @@ mod tests {
             protocol_version: 1,
         };
         let mut st = ChainState::from_genesis(&genesis).unwrap();
-        let gblock =
-            meshchain_proto::block::Block::new(0, [0u8; 32], 1, 0, &v0, vec![]).unwrap();
+        let gblock = meshchain_proto::block::Block::new(0, [0u8; 32], 1, 0, &v0, vec![]).unwrap();
         st.apply_block(&gblock).unwrap();
         let from = short_id(&alice.public_key());
         let to = short_id(&bob.public_key());

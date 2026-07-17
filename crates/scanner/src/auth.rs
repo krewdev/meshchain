@@ -46,9 +46,8 @@ pub struct MeshChallengeResponse {
 pub fn issue_challenge(now: u64, ttl_secs: u64) -> MeshChallenge {
     let expires = now.saturating_add(ttl_secs);
     let nonce = format!("{now}-{}", rand_token());
-    let message = format!(
-        "MESHCHAIN-SCANNER-2FA\nchain=meshchain-testnet-1\nexp={expires}\nnonce={nonce}"
-    );
+    let message =
+        format!("MESHCHAIN-SCANNER-2FA\nchain=meshchain-testnet-1\nexp={expires}\nnonce={nonce}");
     let mut h = Sha256::new();
     h.update(message.as_bytes());
     let challenge_id = hex::encode(h.finalize());

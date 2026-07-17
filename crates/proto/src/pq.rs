@@ -27,7 +27,8 @@ pub struct PqKeypair {
 
 impl PqKeypair {
     pub fn generate() -> Result<Self, ProtoError> {
-        let (pk, sk) = ml_dsa_65::try_keygen().map_err(|e| ProtoError::Codec(format!("pq keygen: {e}")))?;
+        let (pk, sk) =
+            ml_dsa_65::try_keygen().map_err(|e| ProtoError::Codec(format!("pq keygen: {e}")))?;
         Ok(Self {
             sk_bytes: sk.into_bytes(),
             pk_bytes: pk.into_bytes(),
@@ -71,7 +72,10 @@ impl PqKeypair {
 
     pub fn from_file(f: &PqKeypairFile) -> Result<Self, ProtoError> {
         if f.scheme != "ml-dsa-65" {
-            return Err(ProtoError::Codec(format!("unsupported pq scheme {}", f.scheme)));
+            return Err(ProtoError::Codec(format!(
+                "unsupported pq scheme {}",
+                f.scheme
+            )));
         }
         let sk_v = hex::decode(&f.secret_hex).map_err(|e| ProtoError::Codec(e.to_string()))?;
         let pk_v = hex::decode(&f.public_hex).map_err(|e| ProtoError::Codec(e.to_string()))?;
@@ -96,7 +100,11 @@ pub fn short_id_from_pq_pk(pk: &[u8]) -> [u8; 8] {
     id
 }
 
-pub fn pq_verify(pk: &[u8; PQ_PK_LEN], message: &[u8], sig: &[u8; PQ_SIG_LEN]) -> Result<(), ProtoError> {
+pub fn pq_verify(
+    pk: &[u8; PQ_PK_LEN],
+    message: &[u8],
+    sig: &[u8; PQ_SIG_LEN],
+) -> Result<(), ProtoError> {
     let public = ml_dsa_65::PublicKey::try_from_bytes(*pk)
         .map_err(|e| ProtoError::Codec(format!("pq pk: {e}")))?;
     if public.verify(message, sig, MESH_PQ_CTX) {

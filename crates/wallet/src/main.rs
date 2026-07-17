@@ -2,14 +2,12 @@
 
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
+use meshchain_ledger::genesis::ONE_MESH;
 use meshchain_ledger::state::ChainState;
-use meshchain_proto::address::{
-    mesh_name, parse_recipient, short_id, short_id_hex,
-};
+use meshchain_proto::address::{mesh_name, parse_recipient, short_id, short_id_hex};
 use meshchain_proto::crypto::Keypair;
 use meshchain_proto::pq::{PqKeypair, PqSigned};
 use meshchain_proto::tx::{Tx, TxBody};
-use meshchain_ledger::genesis::ONE_MESH;
 use meshchain_transport::{fragment_bytes, session_id_from_hash};
 use std::fs;
 use std::path::PathBuf;
@@ -126,7 +124,10 @@ fn main() -> Result<()> {
             let kp = PqKeypair::from_file(&file).map_err(|e| anyhow::anyhow!(e.to_string()))?;
             println!("scheme:  ml-dsa-65");
             println!("short:   {}", short_id_hex(&kp.short_id()));
-            println!("pk_hex:  {}...(truncated)", &hex::encode(kp.public_key_bytes())[..32]);
+            println!(
+                "pk_hex:  {}...(truncated)",
+                &hex::encode(kp.public_key_bytes())[..32]
+            );
         }
         Commands::PqSign { key, message, out } => {
             let file: meshchain_proto::pq::PqKeypairFile =
@@ -137,8 +138,13 @@ fn main() -> Result<()> {
             env.verify().map_err(|e| anyhow::anyhow!(e.to_string()))?;
             let encoded = env.encode().map_err(|e| anyhow::anyhow!(e.to_string()))?;
             let sid = session_id_from_hash(&encoded);
-            let frags = fragment_bytes(sid, &encoded).map_err(|e| anyhow::anyhow!(e.to_string()))?;
-            println!("pq envelope {} bytes → {} mesh frames", encoded.len(), frags.len());
+            let frags =
+                fragment_bytes(sid, &encoded).map_err(|e| anyhow::anyhow!(e.to_string()))?;
+            println!(
+                "pq envelope {} bytes → {} mesh frames",
+                encoded.len(),
+                frags.len()
+            );
             if let Some(path) = out {
                 fs::write(&path, serde_json::to_string_pretty(&env)?)?;
                 println!("wrote {}", path.display());
@@ -152,7 +158,11 @@ fn main() -> Result<()> {
             let nonce = st.account(&sid).map(|a| a.nonce).unwrap_or(0);
             println!("mesh name: {}", mesh_name(&sid));
             println!("hex id:    {}", short_id_hex(&sid));
-            println!("balance:   {} base units ({:.6} MESH)", bal, bal as f64 / ONE_MESH as f64);
+            println!(
+                "balance:   {} base units ({:.6} MESH)",
+                bal,
+                bal as f64 / ONE_MESH as f64
+            );
             println!("nonce:    {nonce}");
             println!("height:   {}", st.height);
             println!("supply:   {}", st.total_supply);

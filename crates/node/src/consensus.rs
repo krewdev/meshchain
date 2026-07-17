@@ -16,11 +16,7 @@ pub fn sign_block_ack(kp: &Keypair, block_hash_hex: &str) -> String {
     hex::encode(sig.as_bytes())
 }
 
-pub fn verify_block_ack(
-    pubkey: &PublicKey,
-    block_hash_hex: &str,
-    signature_hex: &str,
-) -> bool {
+pub fn verify_block_ack(pubkey: &PublicKey, block_hash_hex: &str, signature_hex: &str) -> bool {
     let Ok(bytes) = hex::decode(signature_hex.trim()) else {
         return false;
     };
@@ -63,19 +59,12 @@ impl FinalityTracker {
     }
 
     pub fn is_final(&self, block_hash_hex: &str, n_validators: usize) -> bool {
-        let count = self
-            .acks
-            .get(block_hash_hex)
-            .map(|s| s.len())
-            .unwrap_or(0);
+        let count = self.acks.get(block_hash_hex).map(|s| s.len()).unwrap_or(0);
         count >= Self::threshold(n_validators)
     }
 
     pub fn ack_count(&self, block_hash_hex: &str) -> usize {
-        self.acks
-            .get(block_hash_hex)
-            .map(|s| s.len())
-            .unwrap_or(0)
+        self.acks.get(block_hash_hex).map(|s| s.len()).unwrap_or(0)
     }
 
     /// Drop ACK sets for block hashes no longer pending (bound memory).
@@ -138,7 +127,11 @@ mod ack_tests {
         let hash = "deadbeefcafe";
         let sig = sign_block_ack(&kp, hash);
         assert!(verify_block_ack(&kp.public_key(), hash, &sig));
-        assert!(!verify_block_ack(&kp.public_key(), hash, "00".repeat(64).as_str()));
+        assert!(!verify_block_ack(
+            &kp.public_key(),
+            hash,
+            "00".repeat(64).as_str()
+        ));
         let other = Keypair::generate();
         assert!(!verify_block_ack(&other.public_key(), hash, &sig));
     }

@@ -47,7 +47,11 @@ impl BlockHeader {
 }
 
 impl Block {
-    pub fn genesis(slot_time: u64, producer: &Keypair, producer_index: u8) -> Result<Self, ProtoError> {
+    pub fn genesis(
+        slot_time: u64,
+        producer: &Keypair,
+        producer_index: u8,
+    ) -> Result<Self, ProtoError> {
         let header = BlockHeader {
             height: 0,
             prev_hash: [0u8; BLOCK_HASH_LEN],

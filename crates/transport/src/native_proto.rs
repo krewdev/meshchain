@@ -120,7 +120,9 @@ pub fn encode_to_radio_packet(data: &MeshPacketData) -> Vec<u8> {
 /// Wrap raw protobuf payload in standard Meshtastic serial framing `[0x94, 0xC3, len_msb, len_lsb, payload...]`
 pub fn encode_serial_frame(proto_bytes: &[u8]) -> Result<Vec<u8>, ProtoError> {
     if proto_bytes.len() > u16::MAX as usize {
-        return Err(ProtoError::WireFormat("Payload exceeds 64KB serial limit".into()));
+        return Err(ProtoError::WireFormat(
+            "Payload exceeds 64KB serial limit".into(),
+        ));
     }
     let len = proto_bytes.len() as u16;
     let mut out = Vec::with_capacity(4 + proto_bytes.len());
@@ -187,7 +189,11 @@ fn decode_data_submsg(buf: &[u8]) -> Result<(u32, Vec<u8>), ProtoError> {
                 }
                 pos += len as usize;
             }
-            _ => return Err(ProtoError::WireFormat(format!("Unsupported wire_type {wire_type} for tag {field_number}"))),
+            _ => {
+                return Err(ProtoError::WireFormat(format!(
+                    "Unsupported wire_type {wire_type} for tag {field_number}"
+                )))
+            }
         }
     }
     Ok((portnum, payload))
@@ -262,7 +268,11 @@ pub fn decode_mesh_packet(buf: &[u8]) -> Result<MeshPacketData, ProtoError> {
                 }
                 pos += len as usize;
             }
-            _ => return Err(ProtoError::WireFormat(format!("Unsupported wire_type {wire_type} for tag {field_number}"))),
+            _ => {
+                return Err(ProtoError::WireFormat(format!(
+                    "Unsupported wire_type {wire_type} for tag {field_number}"
+                )))
+            }
         }
     }
     Ok(data)
@@ -301,7 +311,11 @@ pub fn decode_from_radio_packet(buf: &[u8]) -> Result<Option<MeshPacketData>, Pr
                 }
                 pos += len as usize;
             }
-            _ => return Err(ProtoError::WireFormat(format!("Unsupported wire_type {wire_type} for tag {field_number}"))),
+            _ => {
+                return Err(ProtoError::WireFormat(format!(
+                    "Unsupported wire_type {wire_type} for tag {field_number}"
+                )))
+            }
         }
     }
     Ok(None)

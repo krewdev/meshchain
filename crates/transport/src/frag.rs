@@ -73,7 +73,8 @@ impl FragAssembler {
     pub fn push_payload(&mut self, payload: &[u8]) -> Result<Option<Vec<u8>>, FrameError> {
         let now = now_secs();
         // Prune expired sessions to prevent memory leaks from abandoned fragments
-        self.pending.retain(|_, (_, _, ts)| now.saturating_sub(*ts) < SESSION_TTL_SECS);
+        self.pending
+            .retain(|_, (_, _, ts)| now.saturating_sub(*ts) < SESSION_TTL_SECS);
 
         if payload.len() < FRAG_HDR {
             return Err(FrameError::Truncated);
@@ -83,18 +84,28 @@ impl FragAssembler {
         let idx = u16::from_le_bytes([payload[8], payload[9]]);
         let total = u16::from_le_bytes([payload[10], payload[11]]);
         if total == 0 || total > MAX_CHUNKS || idx >= total {
-            return Err(FrameError::Codec("bad frag idx/total or exceeds chunk limit".into()));
+            return Err(FrameError::Codec(
+                "bad frag idx/total or exceeds chunk limit".into(),
+            ));
         }
         let chunk = payload[FRAG_HDR..].to_vec();
 
         if !self.pending.contains_key(&session) && self.pending.len() >= MAX_SESSIONS {
             // Evict the oldest session when at maximum capacity
-            if let Some(oldest) = self.pending.iter().min_by_key(|(_, (_, _, ts))| *ts).map(|(k, _)| *k) {
+            if let Some(oldest) = self
+                .pending
+                .iter()
+                .min_by_key(|(_, (_, _, ts))| *ts)
+                .map(|(k, _)| *k)
+            {
                 self.pending.remove(&oldest);
             }
         }
 
-        let entry = self.pending.entry(session).or_insert_with(|| (total, HashMap::new(), now));
+        let entry = self
+            .pending
+            .entry(session)
+            .or_insert_with(|| (total, HashMap::new(), now));
         entry.2 = now; // update activity timestamp
         if entry.0 != total {
             return Err(FrameError::Codec("frag total mismatch".into()));
@@ -145,7 +156,10 @@ impl FragAssembler {
     }
 }
 
-pub fn encode_frag_nack(session_id: [u8; 8], missing_indices: &[u16]) -> Result<Vec<u8>, FrameError> {
+pub fn encode_frag_nack(
+    session_id: [u8; 8],
+    missing_indices: &[u16],
+) -> Result<Vec<u8>, FrameError> {
     if missing_indices.len() > MAX_CHUNKS as usize {
         return Err(FrameError::Codec("too many missing indices".into()));
     }
@@ -192,9 +206,15 @@ impl FragCache {
     /// Store the fragmented wire frames of a session for potential retransmission.
     pub fn insert(&mut self, session_id: [u8; 8], frames: Vec<Vec<u8>>) {
         let now = now_secs();
-        self.sessions.retain(|_, (ts, _)| now.saturating_sub(*ts) < SESSION_TTL_SECS);
+        self.sessions
+            .retain(|_, (ts, _)| now.saturating_sub(*ts) < SESSION_TTL_SECS);
         if self.sessions.len() >= MAX_SESSIONS {
-            if let Some(oldest) = self.sessions.iter().min_by_key(|(_, (ts, _))| *ts).map(|(k, _)| *k) {
+            if let Some(oldest) = self
+                .sessions
+                .iter()
+                .min_by_key(|(_, (ts, _))| *ts)
+                .map(|(k, _)| *k)
+            {
                 self.sessions.remove(&oldest);
             }
         }
@@ -216,7 +236,8 @@ impl FragCache {
 
     pub fn prune(&mut self) {
         let now = now_secs();
-        self.sessions.retain(|_, (ts, _)| now.saturating_sub(*ts) < SESSION_TTL_SECS);
+        self.sessions
+            .retain(|_, (ts, _)| now.saturating_sub(*ts) < SESSION_TTL_SECS);
     }
 }
 
@@ -253,8 +274,10 @@ mod tests {
         for i in 0..MAX_SESSIONS + 5 {
             let mut payload = vec![0u8; FRAG_HDR + 5];
             payload[0..8].copy_from_slice(&(i as u64).to_le_bytes());
-            payload[8] = 0; payload[9] = 0;
-            payload[10] = 2; payload[11] = 0;
+            payload[8] = 0;
+            payload[9] = 0;
+            payload[10] = 2;
+            payload[11] = 0;
             asm.push_payload(&payload).unwrap();
         }
         assert!(asm.pending.len() <= MAX_SESSIONS);

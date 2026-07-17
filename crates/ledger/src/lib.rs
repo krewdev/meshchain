@@ -5,6 +5,6 @@ pub mod genesis;
 pub mod state;
 
 pub use error::LedgerError;
-pub use genesis::{GenesisConfig, GenesisAccount};
-pub use state::{Account, ChainState, AppliedBlock};
+pub use genesis::{GenesisAccount, GenesisConfig};
+pub use state::{Account, AppliedBlock, ChainState};
 pub mod registry;

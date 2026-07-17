@@ -116,7 +116,11 @@ pub fn encode_frame(msg_type: MsgType, payload: &[u8]) -> Result<Vec<u8>, FrameE
     Ok(out)
 }
 
-pub fn encode_frame_with_hops(msg_type: MsgType, payload: &[u8], hop_limit: u8) -> Result<Vec<u8>, FrameError> {
+pub fn encode_frame_with_hops(
+    msg_type: MsgType,
+    payload: &[u8],
+    hop_limit: u8,
+) -> Result<Vec<u8>, FrameError> {
     if payload.len() > MAX_PAYLOAD {
         return Err(FrameError::TooLarge(payload.len()));
     }
@@ -171,9 +175,7 @@ pub fn decode_frame(data: &[u8]) -> Result<Frame, FrameError> {
 }
 
 pub fn encode_tx(tx: &Tx) -> Result<Vec<u8>, FrameError> {
-    let body = tx
-        .encode()
-        .map_err(|e| FrameError::Codec(e.to_string()))?;
+    let body = tx.encode().map_err(|e| FrameError::Codec(e.to_string()))?;
     encode_frame(MsgType::Tx, &body)
 }
 
@@ -308,7 +310,10 @@ use std::io::{Read, Write};
 
 /// Encode a frame with LZ77/Deflate compression (`MsgType::Compressed`).
 /// Wire payload inside Compressed msg_type: `inner_msg_type[u8] | uncompressed_len[u16 LE] | deflate_bytes...`
-pub fn encode_compressed(inner_msg_type: MsgType, inner_payload: &[u8]) -> Result<Vec<u8>, FrameError> {
+pub fn encode_compressed(
+    inner_msg_type: MsgType,
+    inner_payload: &[u8],
+) -> Result<Vec<u8>, FrameError> {
     if inner_payload.len() > u16::MAX as usize {
         return Err(FrameError::TooLarge(inner_payload.len()));
     }
@@ -316,7 +321,9 @@ pub fn encode_compressed(inner_msg_type: MsgType, inner_payload: &[u8]) -> Resul
     encoder
         .write_all(inner_payload)
         .map_err(|e| FrameError::Codec(e.to_string()))?;
-    let deflated = encoder.finish().map_err(|e| FrameError::Codec(e.to_string()))?;
+    let deflated = encoder
+        .finish()
+        .map_err(|e| FrameError::Codec(e.to_string()))?;
 
     let mut comp_payload = Vec::with_capacity(1 + 2 + deflated.len());
     comp_payload.push(inner_msg_type as u8);
@@ -335,8 +342,8 @@ pub fn decode_compressed(frame: &Frame) -> Result<Frame, FrameError> {
         return Err(FrameError::Truncated);
     }
     let inner_type_u8 = frame.payload[0];
-    let inner_msg_type = MsgType::from_u8(inner_type_u8)
-        .ok_or(FrameError::UnknownType(inner_type_u8))?;
+    let inner_msg_type =
+        MsgType::from_u8(inner_type_u8).ok_or(FrameError::UnknownType(inner_type_u8))?;
     let expected_len = u16::from_le_bytes([frame.payload[1], frame.payload[2]]) as usize;
     if expected_len > MAX_PAYLOAD * 64 {
         return Err(FrameError::Codec("decompressed payload too large".into()));

@@ -3,16 +3,17 @@
 use crate::consensus::{
     leader_index, produce_block, sign_block_ack, verify_block_ack, FinalityTracker,
 };
+use crate::mempool::Mempool;
 use crate::net::{GossipHub, GossipMsg};
 use anyhow::{bail, Context, Result};
 use meshchain_ledger::genesis::GenesisConfig;
-use meshchain_ledger::state::ChainState;
 use meshchain_ledger::registry::Registry;
+use meshchain_ledger::state::ChainState;
 const RELAYER_POLL_INTERVAL: Duration = Duration::from_secs(10);
 use meshchain_proto::block::{Block, MAX_TXS_PER_BLOCK};
 use meshchain_proto::crypto::{Keypair, PublicKey};
 use meshchain_proto::tx::Tx;
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
@@ -75,7 +76,10 @@ fn load_finalized_blocks(data_dir: &Path, from_height: u64, max_blocks: u32) -> 
         if !path.exists() {
             break;
         }
-        match fs::read_to_string(&path).ok().and_then(|s| serde_json::from_str(&s).ok()) {
+        match fs::read_to_string(&path)
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+        {
             Some(b) => out.push(b),
             None => break,
         }
@@ -133,42 +137,40 @@ pub fn run_validator(cfg: RunConfig) -> Result<()> {
     }
 
     let hub = GossipHub::start(cfg.listen, cfg.peers.clone())?;
-    
+
     // --- Solana Bridge Relayer Daemon Setup ---
     if my_index.is_some() {
         let relayer_script = PathBuf::from("programs-mesh-bridge/scripts/relayer_daemon.ts");
         if relayer_script.exists() {
             println!("Starting Solana-MeshChain Bridge Relayer daemon...");
             let bridge_dir = PathBuf::from("programs-mesh-bridge");
-            thread::spawn(move || {
-                loop {
-                    let res = std::process::Command::new("deno")
-                        .arg("run")
-                        .arg("--allow-net")
-                        .arg("--allow-read")
-                        .arg("--allow-write")
-                        .arg("scripts/relayer_daemon.ts")
-                        .current_dir(&bridge_dir)
-                        .output();
+            thread::spawn(move || loop {
+                let res = std::process::Command::new("deno")
+                    .arg("run")
+                    .arg("--allow-net")
+                    .arg("--allow-read")
+                    .arg("--allow-write")
+                    .arg("scripts/relayer_daemon.ts")
+                    .current_dir(&bridge_dir)
+                    .output();
 
-                    match res {
-                        Ok(out) => {
-                            if !out.status.success() {
-                                let err = String::from_utf8_lossy(&out.stderr);
-                                eprintln!("[Relayer] Bridge Daemon error: {}", err);
-                            }
-                        }
-                        Err(e) => {
-                            eprintln!("[Relayer] Failed to execute relayer: {}", e);
+                match res {
+                    Ok(out) => {
+                        if !out.status.success() {
+                            let err = String::from_utf8_lossy(&out.stderr);
+                            eprintln!("[Relayer] Bridge Daemon error: {}", err);
                         }
                     }
-                    thread::sleep(RELAYER_POLL_INTERVAL);
+                    Err(e) => {
+                        eprintln!("[Relayer] Failed to execute relayer: {}", e);
+                    }
                 }
+                thread::sleep(RELAYER_POLL_INTERVAL);
             });
         }
     }
     let mut finality = FinalityTracker::new();
-    let mut mempool: VecDeque<Tx> = VecDeque::new();
+    let mut mempool = Mempool::new();
     let mut pending: HashMap<String, Block> = HashMap::new();
     // height -> first seen block hash (equivocation detect)
     let mut seen_at_height: HashMap<u64, String> = HashMap::new();
@@ -242,9 +244,7 @@ pub fn run_validator(cfg: RunConfig) -> Result<()> {
             match msg {
                 GossipMsg::Tx { tx } => {
                     if tx.verify().is_ok() && state.can_apply_tx(&tx) {
-                        let id = tx.txid_hex();
-                        if !mempool.iter().any(|t| t.txid_hex() == id) {
-                            mempool.push_back(tx.clone());
+                        if mempool.insert(tx.clone()) {
                             let _ = hub.broadcast(&GossipMsg::Tx { tx });
                         }
                     }
@@ -255,9 +255,11 @@ pub fn run_validator(cfg: RunConfig) -> Result<()> {
                         match Tx::decode(&raw) {
                             Ok(tx) if tx.verify().is_ok() && state.can_apply_tx(&tx) => {
                                 let id = tx.txid_hex();
-                                if !mempool.iter().any(|t| t.txid_hex() == id) {
-                                    println!("air: accepted Tx {} into mempool", &id[..16.min(id.len())]);
-                                    mempool.push_back(tx.clone());
+                                if mempool.insert(tx.clone()) {
+                                    println!(
+                                        "air: accepted Tx {} into mempool",
+                                        &id[..16.min(id.len())]
+                                    );
                                     let _ = hub.broadcast(&GossipMsg::Tx { tx });
                                 }
                             }
@@ -449,8 +451,7 @@ pub fn run_validator(cfg: RunConfig) -> Result<()> {
                     max_blocks,
                 } => {
                     if chain_id == state.chain_id {
-                        let blocks =
-                            load_finalized_blocks(&cfg.data_dir, from_height, max_blocks);
+                        let blocks = load_finalized_blocks(&cfg.data_dir, from_height, max_blocks);
                         if !blocks.is_empty() {
                             println!(
                                 "blocks: serve {} from height {} (req max={max_blocks})",
@@ -519,7 +520,7 @@ pub fn run_validator(cfg: RunConfig) -> Result<()> {
                             state.height
                         );
                         // Clear mempool txs that no longer apply.
-                        mempool.retain(|t| state.can_apply_tx(t));
+                        mempool.retain_valid(&state);
                     }
                 }
                 GossipMsg::Ping | GossipMsg::Pong => {}
@@ -555,20 +556,11 @@ pub fn run_validator(cfg: RunConfig) -> Result<()> {
         }
 
         // Drop stale mempool entries that no longer apply.
-        if mempool.len() > 256 {
-            mempool.retain(|t| state.can_apply_tx(t));
-            while mempool.len() > 256 {
-                mempool.pop_front();
-            }
-        }
+        mempool.enforce_limits(&state, 256);
 
         let slot_due = now >= last_slot + slot_secs;
         let mempool_boost = !mempool.is_empty();
-        let best_fee = mempool
-            .iter()
-            .map(|t| t.priority_fee())
-            .max()
-            .unwrap_or(0);
+        let best_fee = mempool.best_fee();
 
         if !observer && (slot_due || mempool_boost) {
             let next_height = if state.applied.is_empty() {
@@ -586,7 +578,7 @@ pub fn run_validator(cfg: RunConfig) -> Result<()> {
                     let mut txs = vec![];
                     if next_height > 0 {
                         // Pack highest-fee txs that still apply (multi-tx blocks).
-                        txs = take_applicable_fee_txs(&mut mempool, &state, MAX_TXS_PER_BLOCK);
+                        txs = mempool.take_applicable_fee_txs(&state, MAX_TXS_PER_BLOCK);
                         if !txs.is_empty() {
                             let fees: u64 = txs.iter().map(|t| t.priority_fee()).sum();
                             if fees > 0 {
@@ -667,46 +659,6 @@ fn request_blocks_catchup(hub: &GossipHub, state: &ChainState, _data_dir: &Path)
         from_height: from,
         max_blocks: 64,
     });
-}
-
-/// Pop highest-fee applicable txs up to `max`, simulating sequential apply order.
-fn take_applicable_fee_txs(
-    mempool: &mut VecDeque<Tx>,
-    state: &ChainState,
-    max: usize,
-) -> Vec<Tx> {
-    let mut trial = state.clone();
-    let mut picked = Vec::new();
-    while picked.len() < max && !mempool.is_empty() {
-        let mut best_i: Option<usize> = None;
-        let mut best_fee = 0u64;
-        let mut best_id = String::new();
-        for (i, tx) in mempool.iter().enumerate() {
-            if !trial.can_apply_tx(tx) {
-                continue;
-            }
-            let fee = tx.priority_fee();
-            let id = tx.txid_hex();
-            if best_i.is_none()
-                || fee > best_fee
-                || (fee == best_fee && id < best_id)
-            {
-                best_i = Some(i);
-                best_fee = fee;
-                best_id = id;
-            }
-        }
-        let Some(i) = best_i else {
-            break;
-        };
-        let tx = mempool.remove(i).unwrap();
-        let _ = trial.apply_tx(&tx);
-        // Fee to producer not needed for dry sequencing of next nonces.
-        picked.push(tx);
-    }
-    // Drop permanently invalid head spam occasionally
-    mempool.retain(|t| state.can_apply_tx(t) || trial.can_apply_tx(t));
-    picked
 }
 
 fn on_block(
@@ -814,7 +766,7 @@ fn try_finalize(
         Ok(()) => {
             let _ = save_finalized_block(data_dir, &block);
             state.save_json(state_path).ok();
-            
+
             // Dump the current registry (Name -> Address mappings) for the TS Relayer to consume
             let registry = Registry::from_state(state);
             let r_path = data_dir.join("registry.json");
@@ -872,9 +824,7 @@ pub fn submit_tx_air(tx_path: &Path, peer: &str) -> Result<()> {
     let raw = fs::read_to_string(tx_path)?;
     let tx: Tx = serde_json::from_str(&raw)?;
     tx.verify().map_err(|e| anyhow::anyhow!(e.to_string()))?;
-    let bin = tx
-        .encode()
-        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    let bin = tx.encode().map_err(|e| anyhow::anyhow!(e.to_string()))?;
     let frame = meshchain_transport::encode_tx(&tx).map_err(|e| anyhow::anyhow!(e.to_string()))?;
     let line_air = serde_json::to_string(&GossipMsg::TxAir {
         tx_bincode_hex: hex::encode(&bin),

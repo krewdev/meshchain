@@ -354,8 +354,7 @@ pub fn cmd_genesis_modify(genesis: &Path, add: &[String], out: &Path) -> Result<
     if add.is_empty() {
         bail!("provide at least one --add <public_hex>");
     }
-    let raw = fs::read_to_string(genesis)
-        .with_context(|| format!("read {}", genesis.display()))?;
+    let raw = fs::read_to_string(genesis).with_context(|| format!("read {}", genesis.display()))?;
     let mut g: serde_json::Value = serde_json::from_str(&raw).context("invalid genesis JSON")?;
     let vals = g
         .get_mut("validators")
@@ -385,7 +384,10 @@ pub fn cmd_genesis_modify(genesis: &Path, add: &[String], out: &Path) -> Result<
         out.display(),
         (2 * after).div_ceil(3)
     );
-    println!("Restack: ASSUME_YES=1 ./scripts/restack_public_seed.sh {}", out.display());
+    println!(
+        "Restack: ASSUME_YES=1 ./scripts/restack_public_seed.sh {}",
+        out.display()
+    );
     println!("Docs: docs/MULTI_OPERATOR.md");
     Ok(())
 }

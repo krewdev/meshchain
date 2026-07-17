@@ -81,13 +81,15 @@ pub fn block_summaries(state: &ChainState, limit: usize) -> Vec<BlockSummary> {
 }
 
 pub fn find_block(state: &ChainState, height: u64) -> Option<BlockSummary> {
-    state.applied.iter().find(|b| b.height == height).map(|b| {
-        BlockSummary {
+    state
+        .applied
+        .iter()
+        .find(|b| b.height == height)
+        .map(|b| BlockSummary {
             height: b.height,
             hash_hex: b.hash_hex.clone(),
             tx_count: b.tx_count,
-        }
-    })
+        })
 }
 
 pub fn account_view(short_hex: &str, state: &ChainState) -> Option<AccountView> {

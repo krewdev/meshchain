@@ -270,7 +270,10 @@ fn read_peer(
             continue;
         }
         if line.len() > MAX_GOSSIP_LINE_BYTES {
-            eprintln!("gossip: drop oversized line ({} bytes) from {rate_key}", line.len());
+            eprintln!(
+                "gossip: drop oversized line ({} bytes) from {rate_key}",
+                line.len()
+            );
             continue;
         }
         if !rate_allow(&rate, &rate_key) {
@@ -302,9 +305,7 @@ fn read_peer(
                         ..
                     } => format!("ack:{block_hash_hex}:{validator_pubkey_hex}:{signature_hex}"),
                     GossipMsg::Hello {
-                        pubkey_hex,
-                        height,
-                        ..
+                        pubkey_hex, height, ..
                     } => format!("hello:{pubkey_hex}:{height}"),
                     GossipMsg::SyncRequest {
                         chain_id,
@@ -322,10 +323,7 @@ fn read_peer(
                         max_blocks,
                     } => format!("blksreq:{chain_id}:{from_height}:{max_blocks}"),
                     GossipMsg::BlocksResponse { chain_id, blocks } => {
-                        let tip = blocks
-                            .last()
-                            .map(|b| b.header.height)
-                            .unwrap_or(0);
+                        let tip = blocks.last().map(|b| b.header.height).unwrap_or(0);
                         format!("blksres:{chain_id}:{tip}:{}", blocks.len())
                     }
                     GossipMsg::Ping => continue,
@@ -388,7 +386,10 @@ impl MeshRadioHub {
     /// Process raw incoming LoRa wire bytes.
     /// Returns `Ok(Some(completed_payload))` when a multi-chunk session finishes reassembly.
     /// Returns `Ok(None)` if more chunks are needed or if handled internally (e.g. NACK retransmissions generated).
-    pub fn process_incoming_raw(&mut self, raw_frame: &[u8]) -> Result<(Option<Vec<u8>>, Vec<Vec<u8>>)> {
+    pub fn process_incoming_raw(
+        &mut self,
+        raw_frame: &[u8],
+    ) -> Result<(Option<Vec<u8>>, Vec<Vec<u8>>)> {
         let mut outbound_frames = Vec::new();
         let frame = match decode_frame(raw_frame) {
             Ok(f) => f,

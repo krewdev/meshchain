@@ -1,7 +1,7 @@
-use serde::Serialize;
-use std::collections::HashMap;
 use crate::state::ChainState;
 use meshchain_proto::address::mesh_name;
+use serde::Serialize;
+use std::collections::HashMap;
 
 #[derive(Serialize)]
 pub struct Registry {

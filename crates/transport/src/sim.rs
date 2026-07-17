@@ -13,8 +13,7 @@ pub struct SimTransport {
 
 impl SimTransport {
     pub fn new_network(n: usize) -> Vec<Self> {
-        let bus: Arc<Mutex<Vec<Arc<Mutex<VecDeque<Vec<u8>>>>>>> =
-            Arc::new(Mutex::new(Vec::new()));
+        let bus: Arc<Mutex<Vec<Arc<Mutex<VecDeque<Vec<u8>>>>>>> = Arc::new(Mutex::new(Vec::new()));
         let mut peers = Vec::new();
         for _ in 0..n {
             let inbox = Arc::new(Mutex::new(VecDeque::new()));

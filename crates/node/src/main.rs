@@ -1,6 +1,7 @@
 //! MeshChain node: PoA simulator and single-process multi-validator demo.
 
 mod consensus;
+mod mempool;
 mod net;
 mod run;
 mod sim;
@@ -218,7 +219,7 @@ fn main() -> Result<()> {
                 slot_secs: if testnet { 30 } else { 5 },
                 // Big moves need cold (quantum-safe) key. Small demo transfers stay simple.
                 protocol_version: 1,
-            pq_required_above: 100 * ONE_MESH,
+                pq_required_above: 100 * ONE_MESH,
             };
 
             let genesis_path = data_dir.join("genesis.json");
@@ -254,10 +255,16 @@ fn main() -> Result<()> {
                 println!("channel: MeshChain-Testnet-1");
                 println!("next: mesh testnet-info   OR   mesh demo");
             } else {
-                println!("init complete — run: meshchain-node sim --data-dir {}", data_dir.display());
+                println!(
+                    "init complete — run: meshchain-node sim --data-dir {}",
+                    data_dir.display()
+                );
             }
         }
-        Commands::Sim { data_dir, transfers } => {
+        Commands::Sim {
+            data_dir,
+            transfers,
+        } => {
             sim::run_sim(&data_dir, transfers, now_secs()).context("sim failed")?;
         }
         Commands::PqColdDemo { data_dir } => {
@@ -335,14 +342,13 @@ fn mint_for_deposit(
     peer: &str,
     offline: bool,
 ) -> Result<()> {
+    use crate::consensus::{leader_index, produce_block, FinalityTracker};
     use meshchain_ledger::state::ChainState;
     use meshchain_proto::address::{short_id, short_id_hex};
     use meshchain_proto::tx::{Tx, TxBody};
-    use crate::consensus::{leader_index, produce_block, FinalityTracker};
 
-    let genesis: GenesisConfig = serde_json::from_str(&fs::read_to_string(
-        data_dir.join("genesis.json"),
-    )?)?;
+    let genesis: GenesisConfig =
+        serde_json::from_str(&fs::read_to_string(data_dir.join("genesis.json"))?)?;
     let state_path = data_dir.join("chain_state.json");
     let mut state =
         ChainState::from_genesis(&genesis).map_err(|e| anyhow::anyhow!(e.to_string()))?;
@@ -384,10 +390,7 @@ fn mint_for_deposit(
     let minter = Keypair::from_file(&key_file).map_err(|e| anyhow::anyhow!(e.to_string()))?;
 
     let minter_sid = short_id(&minter.public_key());
-    let nonce = state
-        .account(&minter_sid)
-        .map(|a| a.nonce)
-        .unwrap_or(0);
+    let nonce = state.account(&minter_sid).map(|a| a.nonce).unwrap_or(0);
 
     let body = TxBody::Mint {
         nonce,
@@ -469,8 +472,14 @@ fn mint_for_deposit(
         .map_err(|e| anyhow::anyhow!(e.to_string()))?;
 
     let bal = state.balance_of(&to_sid);
-    println!("minted {amount} base units tMESH → {}", short_id_hex(&to_sid));
-    println!("recipient balance: {bal} ({:.6} tMESH)", bal as f64 / 1_000_000.0);
+    println!(
+        "minted {amount} base units tMESH → {}",
+        short_id_hex(&to_sid)
+    );
+    println!(
+        "recipient balance: {bal} ({:.6} tMESH)",
+        bal as f64 / 1_000_000.0
+    );
     println!("height: {}", state.height);
     println!("chain_id: {}", state.chain_id);
     Ok(())
@@ -487,15 +496,15 @@ fn burn_for_withdraw(
     use crate::consensus::{leader_index, produce_block, FinalityTracker};
     use meshchain_ledger::state::ChainState;
     use meshchain_proto::address::{mesh_name, short_id, short_id_hex};
-    use meshchain_proto::privacy::redeem_hint;
     use meshchain_proto::pq::PqKeypair;
+    use meshchain_proto::privacy::redeem_hint;
     use meshchain_proto::tx::{Tx, TxBody};
 
-    let _genesis: GenesisConfig = serde_json::from_str(&fs::read_to_string(
-        data_dir.join("genesis.json"),
-    )?)?;
+    let _genesis: GenesisConfig =
+        serde_json::from_str(&fs::read_to_string(data_dir.join("genesis.json"))?)?;
     let state_path = data_dir.join("chain_state.json");
-    let mut state = ChainState::load_json(&state_path).map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    let mut state =
+        ChainState::load_json(&state_path).map_err(|e| anyhow::anyhow!(e.to_string()))?;
 
     let wfile: meshchain_proto::crypto::KeypairFile =
         serde_json::from_str(&fs::read_to_string(wallet_path)?)?;
@@ -566,7 +575,10 @@ fn burn_for_withdraw(
     println!("burn finalized height={}", state.height);
     println!("burn_txid: {burn_hex}");
     println!("mesh name: {}", mesh_name(&from));
-    println!("balance after: {} tMESH", state.balance_of(&from) as f64 / 1e6);
+    println!(
+        "balance after: {} tMESH",
+        state.balance_of(&from) as f64 / 1e6
+    );
     println!("wrote {}", out_path.display());
     Ok(())
 }

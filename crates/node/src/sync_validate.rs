@@ -77,8 +77,7 @@ mod tests {
             protocol_version: 1,
         };
         let mut st = ChainState::from_genesis(&genesis).unwrap();
-        let gblock =
-            meshchain_proto::block::Block::new(0, [0u8; 32], 1, 0, &v, vec![]).unwrap();
+        let gblock = meshchain_proto::block::Block::new(0, [0u8; 32], 1, 0, &v, vec![]).unwrap();
         st.apply_block(&gblock).unwrap();
         st
     }
@@ -96,14 +95,8 @@ mod tests {
         });
         let json = serde_json::to_string(&ahead).unwrap();
         let tip = hex::encode(ahead.tip_hash);
-        let out = accept_sync_snapshot(
-            &current,
-            "meshchain-testnet-1",
-            ahead.height,
-            &tip,
-            &json,
-        )
-        .unwrap();
+        let out = accept_sync_snapshot(&current, "meshchain-testnet-1", ahead.height, &tip, &json)
+            .unwrap();
         assert_eq!(out.height, ahead.height);
     }
 
@@ -129,9 +122,8 @@ mod tests {
     fn rejects_wrong_chain() {
         let current = sample_state();
         let json = serde_json::to_string(&current).unwrap();
-        let err =
-            accept_sync_snapshot(&current, "other-chain", current.height + 1, "", &json)
-                .unwrap_err();
+        let err = accept_sync_snapshot(&current, "other-chain", current.height + 1, "", &json)
+            .unwrap_err();
         assert!(err.contains("chain_id"));
     }
 

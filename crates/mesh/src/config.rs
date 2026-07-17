@@ -45,7 +45,8 @@ impl MeshConfig {
         fs::create_dir_all(data_dir)?;
         let path = Self::config_path(data_dir);
         let json = serde_json::to_string_pretty(self)?;
-        fs::write(&path, json).with_context(|| format!("Failed to write config to {}", path.display()))?;
+        fs::write(&path, json)
+            .with_context(|| format!("Failed to write config to {}", path.display()))?;
         Ok(path)
     }
 }

@@ -72,7 +72,10 @@ fn handle_client(mut stream: TcpStream, state: AppState) -> Result<()> {
             &[
                 ("Access-Control-Allow-Origin", "*"),
                 ("Access-Control-Allow-Methods", "GET, POST, OPTIONS"),
-                ("Access-Control-Allow-Headers", "Content-Type, Authorization"),
+                (
+                    "Access-Control-Allow-Headers",
+                    "Content-Type, Authorization",
+                ),
             ],
         );
     }
@@ -103,7 +106,13 @@ fn handle_client(mut stream: TcpStream, state: AppState) -> Result<()> {
 
     match (method, path) {
         ("GET", "/") | ("GET", "/index.html") | ("GET", "/scanner") | ("GET", "/scanner/") => {
-            write_response(&mut stream, 200, "text/html; charset=utf-8", ui::INDEX_HTML, &[])
+            write_response(
+                &mut stream,
+                200,
+                "text/html; charset=utf-8",
+                ui::INDEX_HTML,
+                &[],
+            )
         }
         ("GET", "/api/v1/status") => {
             let c = state.chain.read().unwrap();
@@ -163,12 +172,18 @@ fn handle_client(mut stream: TcpStream, state: AppState) -> Result<()> {
             let h = &p["/api/v1/blocks/".len()..];
             let height: u64 = match h.parse() {
                 Ok(v) => v,
-                Err(_) => return write_json(&mut stream, 400, &serde_json::json!({"error":"bad height"})),
+                Err(_) => {
+                    return write_json(&mut stream, 400, &serde_json::json!({"error":"bad height"}))
+                }
             };
             let c = state.chain.read().unwrap();
             match model::find_block(&c, height) {
                 Some(b) => write_json(&mut stream, 200, &b),
-                None => write_json(&mut stream, 404, &serde_json::json!({"error":"block not found"})),
+                None => write_json(
+                    &mut stream,
+                    404,
+                    &serde_json::json!({"error":"block not found"}),
+                ),
             }
         }
         ("GET", "/api/v1/accounts") => {
@@ -193,7 +208,11 @@ fn handle_client(mut stream: TcpStream, state: AppState) -> Result<()> {
             let c = state.chain.read().unwrap();
             match model::resolve_account_query(&id, &c) {
                 Some(a) => write_json(&mut stream, 200, &a),
-                None => write_json(&mut stream, 404, &serde_json::json!({"error":"account not found"})),
+                None => write_json(
+                    &mut stream,
+                    404,
+                    &serde_json::json!({"error":"account not found"}),
+                ),
             }
         }
         ("GET", "/api/v1/search") => {
@@ -340,11 +359,7 @@ fn urlencoding_decode(s: &str) -> String {
     out
 }
 
-fn write_json<T: serde::Serialize>(
-    stream: &mut TcpStream,
-    status: u16,
-    val: &T,
-) -> Result<()> {
+fn write_json<T: serde::Serialize>(stream: &mut TcpStream, status: u16, val: &T) -> Result<()> {
     let body = serde_json::to_string_pretty(val)?;
     write_response(
         stream,

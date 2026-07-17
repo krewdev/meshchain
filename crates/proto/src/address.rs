@@ -80,7 +80,10 @@ pub fn parse_mesh_name(s: &str) -> Result<ShortId, String> {
 /// Accept either mesh name (`M4K7X-…`) or raw 16-char hex short id.
 pub fn parse_recipient(s: &str) -> Result<ShortId, String> {
     let raw = s.trim();
-    let compact: String = raw.chars().filter(|c| !c.is_whitespace() && *c != '-').collect();
+    let compact: String = raw
+        .chars()
+        .filter(|c| !c.is_whitespace() && *c != '-')
+        .collect();
     // Hex short id: exactly 16 hex chars
     if compact.len() == 16 && compact.chars().all(|c| c.is_ascii_hexdigit()) {
         return parse_short_id_hex(&compact);
