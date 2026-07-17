@@ -139,10 +139,16 @@ function searchLocal(q, chain) {
 }
 
 function renderStats(s) {
-  $("authBadge").textContent =
-    MODE === "live"
-      ? `live · ${s.auth_mode || "open"}`
-      : "snapshot · open (public)";
+  const pulse = $("pulseDot");
+  const authText = $("authText");
+  if (MODE === "live") {
+    pulse.className = "pulse-dot pulse-live";
+    authText.textContent = `live · ${s.auth_mode || "open"}`;
+  } else {
+    pulse.className = "pulse-dot pulse-snap";
+    authText.textContent = "snapshot · open (public)";
+  }
+
   $("stats").innerHTML = [
     ["Height", s.height],
     ["Supply (tMESH)", fmtMesh(s.total_supply)],
@@ -172,7 +178,7 @@ function renderBlocks(blocks) {
         (b) => `<tr>
       <td><a href="#" data-q="${b.height}">${b.height}</a></td>
       <td>${b.tx_count}</td>
-      <td><code>${(b.hash_hex || "").slice(0, 18)}…</code></td>
+      <td><code style="cursor:pointer" data-q="${b.height}">${(b.hash_hex || "").slice(0, 18)}…</code></td>
     </tr>`
       )
       .join("")}
@@ -197,19 +203,66 @@ function renderAccounts(rows) {
   </table>`;
 }
 
+let validatorsCache = [];
 function renderValidators(rows) {
+  validatorsCache = rows;
   $("validators").innerHTML = `<table>
     <tr><th>#</th><th>Mesh name</th><th>Pubkey</th></tr>
     ${rows
       .map(
         (v) => `<tr>
       <td>${v.index}</td>
-      <td><code>${v.mesh_name}</code></td>
-      <td><code>${(v.pubkey_hex || "").slice(0, 18)}…</code></td>
+      <td><a href="#" class="val-link" data-val-idx="${v.index}"><code>${v.mesh_name}</code></a></td>
+      <td><code style="cursor:pointer" class="val-link" data-val-idx="${v.index}">${(v.pubkey_hex || "").slice(0, 18)}…</code></td>
     </tr>`
       )
       .join("")}
   </table>`;
+}
+
+window.copyToClipboard = function(text, btn) {
+  navigator.clipboard.writeText(text).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = "Copied!";
+    setTimeout(() => btn.textContent = orig, 1200);
+  }).catch(() => {
+    alert("Copy failed.");
+  });
+};
+
+function showDetailsCard(type, data) {
+  const card = $("detailsCard");
+  const title = $("detailsTitle");
+  const body = $("detailsBody");
+  
+  card.style.display = "block";
+  card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  
+  if (type === "account") {
+    title.textContent = `Account: ${data.mesh_name}`;
+    body.innerHTML = `
+      <div class="detail-row"><span class="lbl">Mesh Name</span><span class="val"><code>${data.mesh_name}</code></span></div>
+      <div class="detail-row"><span class="lbl">Short ID (Hex)</span><span class="val"><code>${data.short_id_hex}</code> <button class="btn-copy" onclick="copyToClipboard('${data.short_id_hex}', this)">Copy</button></span></div>
+      <div class="detail-row"><span class="lbl">Balance</span><span class="val"><strong>${Number(data.balance_tmesh).toFixed(6)} tMESH</strong></span></div>
+      <div class="detail-row"><span class="lbl">Nonce</span><span class="val">${data.nonce}</span></div>
+      <div class="detail-row"><span class="lbl">Has Cold Key (PQ)</span><span class="val">${data.has_cold_key ? "<span class='ok'>Yes</span>" : "No"}</span></div>
+      <div class="detail-row"><span class="lbl">Public Key (Ed25519)</span><span class="val"><code>${data.pubkey_hex || "n/a"}</code> <button class="btn-copy" onclick="copyToClipboard('${data.pubkey_hex}', this)">Copy</button></span></div>
+    `;
+  } else if (type === "block") {
+    title.textContent = `Block #${data.height}`;
+    body.innerHTML = `
+      <div class="detail-row"><span class="lbl">Height</span><span class="val"><strong>${data.height}</strong></span></div>
+      <div class="detail-row"><span class="lbl">Block Hash</span><span class="val"><code>${data.hash_hex}</code> <button class="btn-copy" onclick="copyToClipboard('${data.hash_hex}', this)">Copy</button></span></div>
+      <div class="detail-row"><span class="lbl">Transaction Count</span><span class="val">${data.tx_count}</span></div>
+    `;
+  } else if (type === "validator") {
+    title.textContent = `Validator: ${data.mesh_name}`;
+    body.innerHTML = `
+      <div class="detail-row"><span class="lbl">Index</span><span class="val"><strong>${data.index}</strong></span></div>
+      <div class="detail-row"><span class="lbl">Mesh Name</span><span class="val"><code>${data.mesh_name}</code></span></div>
+      <div class="detail-row"><span class="lbl">Public Key</span><span class="val"><code>${data.pubkey_hex}</code> <button class="btn-copy" onclick="copyToClipboard('${data.pubkey_hex}', this)">Copy</button></span></div>
+    `;
+  }
 }
 
 async function loadLive() {
@@ -295,13 +348,11 @@ async function doSearch() {
         `${LIVE_API}/api/v1/search?q=${encodeURIComponent(q)}`
       );
       if (r.kind === "account" && r.account) {
-        const a = r.account;
-        out.innerHTML = `<span class="ok">Account</span> <code>${a.mesh_name}</code><br>
-          Balance: <strong>${Number(a.balance_tmesh).toFixed(6)} tMESH</strong> · nonce ${a.nonce}<br>
-          Hex: <code>${a.short_id_hex}</code>`;
+        showDetailsCard("account", r.account);
+        out.innerHTML = `<span class="ok">Found account:</span> <code>${r.account.mesh_name}</code>`;
       } else if (r.kind === "block" && r.block) {
-        const b = r.block;
-        out.innerHTML = `<span class="ok">Block</span> #${b.height} · ${b.tx_count} tx · <code>${b.hash_hex}</code>`;
+        showDetailsCard("block", r.block);
+        out.innerHTML = `<span class="ok">Found block:</span> #${r.block.height}`;
       } else {
         out.innerHTML = `<span class="err">${r.message || "Not found"}</span>`;
       }
@@ -309,13 +360,11 @@ async function doSearch() {
     }
     const r = searchLocal(q, CHAIN);
     if (r.kind === "account" && r.account) {
-      const a = r.account;
-      out.innerHTML = `<span class="ok">Account</span> <code>${a.mesh_name}</code><br>
-        Balance: <strong>${a.balance_tmesh.toFixed(6)} tMESH</strong> · nonce ${a.nonce}<br>
-        Hex: <code>${a.short_id_hex}</code>`;
+      showDetailsCard("account", r.account);
+      out.innerHTML = `<span class="ok">Found account:</span> <code>${r.account.mesh_name}</code>`;
     } else if (r.kind === "block" && r.block) {
-      const b = r.block;
-      out.innerHTML = `<span class="ok">Block</span> #${b.height} · ${b.tx_count} tx · <code>${b.hash_hex}</code>`;
+      showDetailsCard("block", r.block);
+      out.innerHTML = `<span class="ok">Found block:</span> #${r.block.height}`;
     } else {
       out.innerHTML = `<span class="err">${r.message || "Not found"}</span>`;
     }
@@ -324,12 +373,80 @@ async function doSearch() {
   }
 }
 
-document.addEventListener("click", (ev) => {
-  const a = ev.target.closest("a[data-q]");
-  if (!a) return;
-  ev.preventDefault();
-  $("q").value = a.getAttribute("data-q");
-  doSearch();
+document.addEventListener("click", async (ev) => {
+  const a = ev.target.closest("a[data-q], code[data-q]");
+  if (a) {
+    ev.preventDefault();
+    const query = a.getAttribute("data-q");
+    $("q").value = query;
+    
+    try {
+      if (MODE === "live" && LIVE_API) {
+        const r = await loadJson(`${LIVE_API}/api/v1/search?q=${encodeURIComponent(query)}`);
+        if (r.kind === "account" && r.account) {
+          showDetailsCard("account", r.account);
+        } else if (r.kind === "block" && r.block) {
+          showDetailsCard("block", r.block);
+        }
+      } else if (CHAIN) {
+        const r = searchLocal(query, CHAIN);
+        if (r.kind === "account" && r.account) {
+          showDetailsCard("account", r.account);
+        } else if (r.kind === "block" && r.block) {
+          showDetailsCard("block", r.block);
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return;
+  }
+
+  const valEl = ev.target.closest(".val-link");
+  if (valEl) {
+    ev.preventDefault();
+    const idx = parseInt(valEl.getAttribute("data-val-idx"), 10);
+    const valData = validatorsCache.find(v => v.index === idx);
+    if (valData) {
+      showDetailsCard("validator", valData);
+    }
+  }
+});
+
+$("q").addEventListener("input", () => {
+  const q = $("q").value.trim().toLowerCase();
+  const out = $("searchOut");
+  if (!q) {
+    out.innerHTML = "";
+    return;
+  }
+  
+  if (CHAIN) {
+    const matches = accountRowsFromChain(CHAIN, 1000).filter(a => 
+      a.mesh_name.toLowerCase().includes(q) || a.short_id_hex.toLowerCase().includes(q)
+    );
+    const blockMatches = (CHAIN.applied || []).filter(b => 
+      String(b.height).includes(q) || b.hash_hex.toLowerCase().includes(q)
+    );
+    
+    if (matches.length > 0 || blockMatches.length > 0) {
+      let html = `<div style="font-size:0.8rem;margin-bottom:0.3rem;color:var(--muted)">Suggestions:</div><div style="display:flex;gap:0.4rem;flex-wrap:wrap">`;
+      blockMatches.slice(0, 3).forEach(b => {
+        html += `<a href="#" class="btn-ghost" style="padding:0.25rem 0.5rem;font-size:0.75rem" data-q="${b.height}">Block #${b.height}</a>`;
+      });
+      matches.slice(0, 4).forEach(a => {
+        html += `<a href="#" class="btn-ghost" style="padding:0.25rem 0.5rem;font-size:0.75rem" data-q="${a.mesh_name}"><code>${a.mesh_name}</code></a>`;
+      });
+      html += `</div>`;
+      out.innerHTML = html;
+    } else {
+      out.innerHTML = "";
+    }
+  }
+});
+
+$("btnDetailsClose").addEventListener("click", () => {
+  $("detailsCard").style.display = "none";
 });
 
 $("btnSearch").addEventListener("click", doSearch);
