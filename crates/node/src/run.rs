@@ -138,6 +138,22 @@ pub fn run_validator(cfg: RunConfig) -> Result<()> {
 
     let hub = GossipHub::start(cfg.listen, cfg.peers.clone())?;
 
+    let mut radio_transport = None;
+    if let Some(ref port) = cfg.radio_port {
+        println!("Initializing Meshtastic radio stdio bridge on port {port}...");
+        match meshchain_transport::MeshtasticStdioTransport::spawn("tools/meshtastic_bridge.py", port, 0) {
+            Ok(t) => {
+                radio_transport = Some(t);
+                println!("✅ Radio bridge initialized successfully.");
+            }
+            Err(e) => {
+                eprintln!("❌ Failed to start radio bridge: {e}");
+            }
+        }
+    }
+    let mut last_radio_tip = now_secs();
+
+
     // --- Solana Bridge Relayer Daemon Setup ---
     if my_index.is_some() {
         let relayer_script = PathBuf::from("programs-mesh-bridge/scripts/relayer_daemon.ts");
@@ -231,6 +247,7 @@ pub fn run_validator(cfg: RunConfig) -> Result<()> {
                             n,
                             &state_path,
                             &cfg.data_dir,
+                            radio_transport.as_mut(),
                         )?;
                     }
                     Err(e) => eprintln!("genesis produce error: {e}"),
@@ -245,7 +262,12 @@ pub fn run_validator(cfg: RunConfig) -> Result<()> {
                 GossipMsg::Tx { tx } => {
                     if tx.verify().is_ok() && state.can_apply_tx(&tx) {
                         if mempool.insert(tx.clone()) {
-                            let _ = hub.broadcast(&GossipMsg::Tx { tx });
+                            let _ = hub.broadcast(&GossipMsg::Tx { tx: tx.clone() });
+                            if let Some(ref mut radio) = radio_transport {
+                                if let Ok(raw) = meshchain_transport::frame::encode_tx(&tx) {
+                                    let _ = radio.send_raw(&raw);
+                                }
+                            }
                         }
                     }
                 }
@@ -260,7 +282,12 @@ pub fn run_validator(cfg: RunConfig) -> Result<()> {
                                         "air: accepted Tx {} into mempool",
                                         &id[..16.min(id.len())]
                                     );
-                                    let _ = hub.broadcast(&GossipMsg::Tx { tx });
+                                    let _ = hub.broadcast(&GossipMsg::Tx { tx: tx.clone() });
+                                    if let Some(ref mut radio) = radio_transport {
+                                        if let Ok(raw) = meshchain_transport::frame::encode_tx(&tx) {
+                                            let _ = radio.send_raw(&raw);
+                                        }
+                                    }
                                 }
                             }
                             Ok(_) => eprintln!("air: tx rejected (verify/apply)"),
@@ -291,6 +318,7 @@ pub fn run_validator(cfg: RunConfig) -> Result<()> {
                                         n,
                                         &state_path,
                                         &cfg.data_dir,
+                                        radio_transport.as_mut(),
                                     )?;
                                 }
                             }
@@ -325,6 +353,7 @@ pub fn run_validator(cfg: RunConfig) -> Result<()> {
                         n,
                         &state_path,
                         &cfg.data_dir,
+                        radio_transport.as_mut(),
                     )?;
                 }
                 GossipMsg::BlockAck {
@@ -435,7 +464,7 @@ pub fn run_validator(cfg: RunConfig) -> Result<()> {
                             finality = FinalityTracker::new();
                             seen_at_height.clear();
                             if let Err(e) = state.save_json(&state_path) {
-                                eprintln!("sync: save failed: {e}");
+                                  eprintln!("sync: save failed: {e}");
                             }
                         }
                         Err(e) => {
@@ -527,7 +556,111 @@ pub fn run_validator(cfg: RunConfig) -> Result<()> {
             }
         }
 
+        // Poll incoming Radio messages
+        if let Some(ref mut radio) = radio_transport {
+            while let Ok(Some(frame)) = radio.try_recv_frame() {
+                match frame.msg_type {
+                    meshchain_transport::frame::MsgType::Tx => {
+                        if let Ok(tx) = meshchain_transport::frame::decode_tx(&frame) {
+                            if tx.verify().is_ok() && state.can_apply_tx(&tx) {
+                                if mempool.insert(tx.clone()) {
+                                    println!("Radio RX: accepted Tx {} into mempool", tx.txid_hex());
+                                    let _ = hub.broadcast(&GossipMsg::Tx { tx: tx.clone() });
+                                }
+                            }
+                        }
+                    }
+                    meshchain_transport::frame::MsgType::Block => {
+                        if let Ok(block) = meshchain_transport::frame::decode_block(&frame) {
+                            println!("Radio RX: received block height={}", block.header.height);
+                            on_block(
+                                &mut state,
+                                &mut finality,
+                                &mut pending,
+                                &mut seen_at_height,
+                                &hub,
+                                keypair.as_ref(),
+                                &authorized,
+                                block,
+                                n,
+                                &state_path,
+                                &cfg.data_dir,
+                                Some(radio),
+                            )?;
+                        }
+                    }
+                    meshchain_transport::frame::MsgType::BlockAck => {
+                        if let Ok(ack) = meshchain_transport::frame::decode_block_ack(&frame) {
+                            let block_hash_hex = ack.block_hash_hex.clone();
+                            let validator_pubkey_hex = ack.validator_pubkey_hex.clone();
+                            let signature_hex = ack.signature_hex.clone();
+                            println!("Radio RX: received BlockAck height={} from {}", ack.height, &validator_pubkey_hex[..8]);
+                            
+                            if let Ok(pk_bytes) = hex::decode(&validator_pubkey_hex) {
+                                if pk_bytes.len() == 32 {
+                                    let mut pk = [0u8; 32];
+                                    pk.copy_from_slice(&pk_bytes);
+                                    if authorized.contains(&pk)
+                                        && verify_block_ack(&pk, &block_hash_hex, &signature_hex)
+                                    {
+                                        finality.ack(&block_hash_hex, pk);
+                                        let _ = hub.broadcast(&GossipMsg::BlockAck {
+                                            height: ack.height,
+                                            block_hash_hex: block_hash_hex.clone(),
+                                            validator_pubkey_hex,
+                                            signature_hex,
+                                        });
+                                    }
+                                }
+                            }
+                            try_finalize(
+                                &mut state,
+                                &mut finality,
+                                &mut pending,
+                                &block_hash_hex,
+                                n,
+                                &state_path,
+                                &cfg.data_dir,
+                            )?;
+                        }
+                    }
+                    meshchain_transport::frame::MsgType::Tip => {
+                        if let Ok(tip) = meshchain_transport::frame::decode_tip(&frame) {
+                            let chain_id_str = tip.chain_id;
+                            let tip_hash_hex = tip.tip_hash_hex;
+                            if chain_id_str == state.chain_id && tip.height > state.height {
+                                println!(
+                                    "Radio RX: air tip: peer height={} tip={} (local {})",
+                                    tip.height,
+                                    &tip_hash_hex[..tip_hash_hex.len().min(16)],
+                                    state.height
+                                );
+                                request_blocks_catchup(&hub, &state, &cfg.data_dir);
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+
         let now = now_secs();
+
+        // Periodic Tip advertisement over radio
+        if let Some(ref mut radio) = radio_transport {
+            if now.saturating_sub(last_radio_tip) >= 10 {
+                last_radio_tip = now;
+                let tip_payload = meshchain_transport::frame::TipPayload {
+                    chain_id: state.chain_id.clone(),
+                    height: state.height,
+                    tip_hash_hex: hex::encode(state.tip_hash),
+                };
+                if let Ok(raw) = meshchain_transport::frame::encode_tip(&tip_payload) {
+                    let _ = radio.send_raw(&raw);
+                }
+            }
+        }
+
         // Periodic catch-up for lagging producers and observers.
         if now.saturating_sub(last_blocks_req) >= 15 && hub.peer_count() > 0 {
             last_blocks_req = now;
@@ -605,6 +738,13 @@ pub fn run_validator(cfg: RunConfig) -> Result<()> {
                                 let _ = hub.broadcast(&GossipMsg::Block {
                                     block: block.clone(),
                                 });
+                                if let Some(ref mut radio) = radio_transport {
+                                    if block.txs.len() <= meshchain_transport::frame::AIR_MAX_TXS_PER_BLOCK {
+                                        if let Ok(raw) = meshchain_transport::frame::encode_block(&block) {
+                                            let _ = radio.send_raw(&raw);
+                                        }
+                                    }
+                                }
                                 on_block(
                                     &mut state,
                                     &mut finality,
@@ -617,6 +757,7 @@ pub fn run_validator(cfg: RunConfig) -> Result<()> {
                                     n,
                                     &state_path,
                                     &cfg.data_dir,
+                                    radio_transport.as_mut(),
                                 )?;
                             }
                             Err(e) => eprintln!("produce error: {e}"),
@@ -673,6 +814,7 @@ fn on_block(
     n_validators: usize,
     state_path: &Path,
     data_dir: &Path,
+    mut radio: Option<&mut meshchain_transport::MeshtasticStdioTransport>,
 ) -> Result<()> {
     if block.verify_producer_sig().is_err() {
         return Ok(());
@@ -702,6 +844,13 @@ fn on_block(
         let _ = hub.broadcast(&GossipMsg::Block {
             block: block.clone(),
         });
+        if let Some(ref mut r) = radio {
+            if block.txs.len() <= meshchain_transport::frame::AIR_MAX_TXS_PER_BLOCK {
+                if let Ok(raw) = meshchain_transport::frame::encode_block(&block) {
+                    let _ = r.send_raw(&raw);
+                }
+            }
+        }
     }
 
     // Producer signature on the block counts as their ACK (documented).
@@ -711,12 +860,24 @@ fn on_block(
     if let Some(kp) = me {
         if authorized.contains(&kp.public_key()) {
             finality.ack(&hash_hex, kp.public_key());
+            let signature_hex = sign_block_ack(kp, &hash_hex);
             let _ = hub.broadcast(&GossipMsg::BlockAck {
                 height: block.header.height,
                 block_hash_hex: hash_hex.clone(),
                 validator_pubkey_hex: hex::encode(kp.public_key()),
-                signature_hex: sign_block_ack(kp, &hash_hex),
+                signature_hex: signature_hex.clone(),
             });
+            if let Some(ref mut r) = radio {
+                let ack_payload = meshchain_transport::frame::BlockAckPayload {
+                    height: block.header.height,
+                    block_hash_hex: hash_hex.clone(),
+                    validator_pubkey_hex: hex::encode(kp.public_key()),
+                    signature_hex: signature_hex.clone(),
+                };
+                if let Ok(raw) = meshchain_transport::frame::encode_block_ack(&ack_payload) {
+                    let _ = r.send_raw(&raw);
+                }
+            }
         }
     }
 

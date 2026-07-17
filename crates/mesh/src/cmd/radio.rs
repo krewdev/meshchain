@@ -254,3 +254,116 @@ Commands:
 "#
     );
 }
+
+// ── radio bridge ──────────────────────────────────────────────────────────────
+
+pub fn cmd_radio_bridge(
+    dir: &Path,
+    port: Option<String>,
+    delay_ms: Option<u64>,
+    portnum: Option<u32>,
+) -> Result<()> {
+    let cfg = crate::config::MeshConfig::load_or_default(dir);
+    let target_port = port.or(cfg.radio_port).context(
+        "No radio port specified. Please provide --port or set default with: mesh config set --port <port>"
+    )?;
+    let target_delay = delay_ms.unwrap_or(cfg.tx_delay_ms);
+    let target_portnum = portnum.unwrap_or(cfg.portnum);
+
+    println!("Starting stdio Meshtastic radio bridge...");
+    println!("  Port:     {target_port}");
+    println!("  Delay:    {target_delay} ms");
+    println!("  PortNum:  {target_portnum}");
+
+    let mut cmd = std::process::Command::new("python3");
+    cmd.arg("tools/meshtastic_bridge.py");
+    if target_port == "mock" {
+        cmd.arg("--mock");
+    } else {
+        cmd.arg("--port").arg(&target_port);
+    }
+    cmd.arg("--tx-delay-ms").arg(target_delay.to_string());
+    cmd.arg("--portnum").arg(target_portnum.to_string());
+
+    let mut child = cmd.spawn().with_context(|| "Failed to spawn meshtastic_bridge.py")?;
+    let status = child.wait()?;
+    if !status.success() {
+        bail!("Radio bridge process exited with error status: {:?}", status.code());
+    }
+    Ok(())
+}
+
+// ── radio info ────────────────────────────────────────────────────────────────
+
+pub fn cmd_radio_info(dir: &Path, port: Option<String>) -> Result<()> {
+    let cfg = crate::config::MeshConfig::load_or_default(dir);
+    let target_port = port.or(cfg.radio_port).unwrap_or_else(|| "mock".to_string());
+
+    println!("Meshtastic Device Info");
+    println!("──────────────────────");
+    println!("Configured Port:  {}", target_port);
+
+    if target_port == "mock" {
+        println!("Status:           CONNECTED (Mock mode)");
+        println!("Node ID:          !abc12345");
+        println!("Hardware:         MockRadio v2");
+        println!("Battery Level:    98%");
+        println!("Air Queue:        0 packets");
+        println!("Channels Config:  MeshChain-Testnet-1 (PortNum: {})", cfg.portnum);
+        return Ok(());
+    }
+
+    // Try to run inline python to query info
+    let py_code = format!(
+        r#"import sys
+try:
+    import meshtastic
+    import meshtastic.serial_interface
+except ImportError:
+    print("MISSING_LIB")
+    sys.exit(0)
+
+try:
+    iface = meshtastic.serial_interface.SerialInterface(devPath={:?})
+    print("OK")
+    print(f"NodeId: !{{iface.myInfo.my_node_num:08x}}")
+    print(f"HwModel: {{getattr(iface.myInfo, 'hw_model', 'Unknown')}}")
+    print(f"NodesCount: {{len(iface.nodes) if iface.nodes else 0}}")
+    iface.close()
+except Exception as e:
+    print(f"ERROR: {{e}}")
+"#,
+        target_port
+    );
+
+    let output = std::process::Command::new("python3")
+        .arg("-c")
+        .arg(&py_code)
+        .output()?;
+    let out_str = String::from_utf8_lossy(&output.stdout);
+
+    if out_str.contains("MISSING_LIB") {
+        println!("Status:           DISCONNECTED (meshtastic Python package not installed)");
+        println!("\nTo enable full hardware queries over Serial, install the meshtastic library:");
+        println!("  pip install meshtastic");
+        println!("\nOr run with mock mode:");
+        println!("  mesh radio info --port mock");
+    } else if out_str.contains("OK") {
+        println!("Status:           CONNECTED (Hardware Serial)");
+        for line in out_str.lines() {
+            if line.starts_with("NodeId:") {
+                println!("Node ID:          {}", &line[7..].trim());
+            } else if line.starts_with("HwModel:") {
+                println!("Hardware:         {}", &line[8..].trim());
+            } else if line.starts_with("NodesCount:") {
+                println!("Mesh Node Count:  {}", &line[11..].trim());
+            }
+        }
+    } else {
+        println!("Status:           DISCONNECTED");
+        let err_msg = out_str.lines().find(|l| l.starts_with("ERROR:")).map(|l| &l[6..]).unwrap_or("Connection failed");
+        println!("Error:           {}", err_msg.trim());
+    }
+
+    Ok(())
+}

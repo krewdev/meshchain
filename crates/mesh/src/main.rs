@@ -19,7 +19,7 @@
 //!
 //! Shared utilities (path helpers, HTTP, amount parsing) are in `helpers.rs`.
 
-use anyhow::{bail, Result};
+use anyhow::Result;
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
@@ -427,9 +427,48 @@ fn main() -> Result<()> {
 
     match cli.cmd {
         Commands::Config { action } => run_config_cmd(&dir, action)?,
-        Commands::Radio { .. } => bail!("Radio commands not implemented yet"),
-        Commands::Doctor => bail!("Doctor not implemented yet"),
-        Commands::Monitor => bail!("Monitor not implemented yet"),
+        Commands::Radio { action } => match action {
+            RadioAction::Bridge {
+                port,
+                delay_ms,
+                portnum,
+            } => {
+                cmd::radio::cmd_radio_bridge(&dir, port, delay_ms, portnum)?;
+            }
+            RadioAction::Info { port } => {
+                cmd::radio::cmd_radio_info(&dir, port)?;
+            }
+            RadioAction::Send {
+                to,
+                amount,
+                wallet,
+                cold,
+                port,
+            } => {
+                let wallet_str = wallet.unwrap_or_else(|| "wallet.json".to_string());
+                let cold_str = cold.unwrap_or_else(|| "cold.json".to_string());
+                let port_str = port.unwrap_or_default();
+                cmd::radio::cmd_send(
+                    &dir,
+                    &to,
+                    &amount,
+                    &wallet_str,
+                    &cold_str,
+                    "0",
+                    None,
+                    None,
+                    true,
+                    true,
+                    &port_str,
+                )?;
+            }
+        },
+        Commands::Doctor => {
+            cmd::doctor::cmd_doctor(&dir)?;
+        }
+        Commands::Monitor => {
+            cmd::monitor::cmd_monitor(&dir)?;
+        }
 
         Commands::TestnetSetup { validators } => {
             cmd::network::cmd_testnet_setup(&dir, validators)?;
