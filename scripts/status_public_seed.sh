@@ -28,16 +28,9 @@ check "scanner HTTPS" "${HTTPS_SCANNER}/api/v1/status"
 check "chain_state"  "${HTTPS_SCANNER}/api/v1/chain_state"
 
 for p in 9100 9101 9102; do
-  peer_ok=0
-  for attempt in {1..3}; do
-    if nc -z -w 5 "$IP" "$p" 2>/dev/null; then
-      echo "OK  peer :$p"
-      peer_ok=1
-      break
-    fi
-    sleep 1
-  done
-  if [[ $peer_ok -eq 0 ]]; then
+  if python3 -c "import socket, sys; s=socket.create_connection(('$IP', $p), timeout=3); s.close()" 2>/dev/null; then
+    echo "OK  peer :$p"
+  else
     echo "FAIL peer :$p"
     ok=1
   fi
