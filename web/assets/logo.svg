@@ -1,25 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
   <defs>
-    <linearGradient id="g" x1="16" y1="8" x2="112" y2="120" gradientUnits="userSpaceOnUse">
+    <linearGradient id="g" x1="0" y1="0" x2="128" y2="128" gradientUnits="userSpaceOnUse">
       <stop stop-color="#22d3ee"/>
-      <stop offset="0.55" stop-color="#34d399"/>
-      <stop offset="1" stop-color="#a78bfa"/>
+      <stop offset="1" stop-color="#34d399"/>
     </linearGradient>
-    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
-      <feGaussianBlur stdDeviation="2.2" result="b"/>
-      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
   </defs>
-  <rect width="128" height="128" rx="28" fill="#070b12"/>
-  <path d="M64 14 L108 40 V88 L64 114 L20 88 V40 Z" stroke="url(#g)" stroke-width="3.5" fill="rgba(34,211,153,0.06)" filter="url(#glow)"/>
-  <circle cx="64" cy="64" r="7" fill="url(#g)"/>
-  <circle cx="40" cy="48" r="4.5" fill="#22d3ee"/>
-  <circle cx="88" cy="48" r="4.5" fill="#34d399"/>
-  <circle cx="40" cy="80" r="4.5" fill="#a78bfa"/>
-  <circle cx="88" cy="80" r="4.5" fill="#22d3ee"/>
-  <circle cx="64" cy="36" r="3.5" fill="#34d399"/>
-  <circle cx="64" cy="92" r="3.5" fill="#22d3ee"/>
-  <path d="M64 57 L40 48 M64 57 L88 48 M64 71 L40 80 M64 71 L88 80 M40 48 L64 36 L88 48 M40 80 L64 92 L88 80" stroke="url(#g)" stroke-width="1.8" opacity="0.9"/>
-  <path d="M28 52 C40 28, 88 28, 100 52" stroke="#22d3ee" stroke-width="1.4" opacity="0.45" stroke-linecap="round"/>
-  <path d="M24 58 C40 30, 88 30, 104 58" stroke="#34d399" stroke-width="1.2" opacity="0.3" stroke-linecap="round"/>
+  <rect width="128" height="128" rx="32" fill="url(#g)"/>
+  <path d="M64 34 L92 50 V78 L64 94 L36 78 V50 Z" stroke="#03060c" stroke-width="7" stroke-linejoin="round" fill="none"/>
+  <circle cx="64" cy="64" r="8" fill="#03060c"/>
+  <circle cx="36" cy="50" r="5" fill="#03060c"/>
+  <circle cx="92" cy="50" r="5" fill="#03060c"/>
+  <circle cx="36" cy="78" r="5" fill="#03060c"/>
+  <circle cx="92" cy="78" r="5" fill="#03060c"/>
 </svg>
