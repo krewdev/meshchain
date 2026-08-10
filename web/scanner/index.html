@@ -98,8 +98,9 @@
       <nav class="nav-links" id="navLinks">
         <a href="/">Home</a>
         <a class="active" href="/scanner/">Scanner</a>
-        <a href="/docs/?doc=TESTNET">Testnet</a>
+        <a href="/faucet/">Faucet</a>
         <a href="/docs/">Docs</a>
+        <a href="https://discord.gg/9YXVtXf2yX" target="_blank" rel="noopener">Discord</a>
         <a href="https://github.com/krewdev/meshchain" target="_blank" rel="noopener">GitHub</a>
       </nav>
       <button class="nav-toggle" id="navToggle" aria-expanded="false" aria-controls="navLinks" aria-label="Open navigation">
@@ -161,28 +162,20 @@
       <div id="validators" class="muted">Loading…</div>
     </div>
 
-    <div class="panel">
-      <h2>Mesh 2FA (later)</h2>
-      <p class="muted" style="margin-top:0">
-        This Vercel deployment is <strong>public (open)</strong>. For live chain data + mesh 2FA, run the Rust scanner and open
-        <code>/scanner/?api=https://YOUR_HOST:8787</code>
-      </p>
-      <button class="btn-ghost" type="button" id="btnChallenge">Get challenge info</button>
-      <pre id="challenge" class="muted" style="white-space:pre-wrap;font-size:.8rem"></pre>
-    </div>
-
     <p class="muted">
-      Data: <code>/scanner/data/chain_state.json</code> ·
+      Live seed API: <code>https://34.172.103.125.sslip.io</code> ·
       Docs: <a href="/docs/?doc=SCANNER">Scanner guide</a> ·
-      Network: <a href="/testnet/network.json">network.json</a>
+      Snapshot fallback: <a href="/scanner/data/chain_state.json">chain_state.json</a>
     </p>
   </main>
 
   <footer class="footer">
     <div class="wrap footer-inner">
       <div>MeshChain Scanner · TESTNET</div>
-      <div>
-        <a href="/">Home</a> ·
+      <div class="footer-links">
+        <a href="/">Home</a>
+        <a href="/faucet/">Faucet</a>
+        <a href="/docs/">Docs</a>
         <a href="https://github.com/krewdev/meshchain">GitHub</a>
       </div>
     </div>

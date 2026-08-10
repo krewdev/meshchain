@@ -4,16 +4,19 @@ use crate::frame::{decode_frame, Frame, FrameError};
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
+type Inbox = Arc<Mutex<VecDeque<Vec<u8>>>>;
+type Bus = Arc<Mutex<Vec<Inbox>>>;
+
 #[derive(Clone, Default)]
 pub struct SimTransport {
-    inbox: Arc<Mutex<VecDeque<Vec<u8>>>>,
+    inbox: Inbox,
     /// Shared bus: all peers' inboxes
-    bus: Arc<Mutex<Vec<Arc<Mutex<VecDeque<Vec<u8>>>>>>>,
+    bus: Bus,
 }
 
 impl SimTransport {
     pub fn new_network(n: usize) -> Vec<Self> {
-        let bus: Arc<Mutex<Vec<Arc<Mutex<VecDeque<Vec<u8>>>>>>> = Arc::new(Mutex::new(Vec::new()));
+        let bus: Bus = Arc::new(Mutex::new(Vec::new()));
         let mut peers = Vec::new();
         for _ in 0..n {
             let inbox = Arc::new(Mutex::new(VecDeque::new()));

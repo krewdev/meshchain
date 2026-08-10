@@ -436,7 +436,7 @@ fn mint_for_deposit(
         let vfile: meshchain_proto::crypto::KeypairFile =
             serde_json::from_str(&fs::read_to_string(&vkey_path)?)?;
         let vk = Keypair::from_file(&vfile).map_err(|e| anyhow::anyhow!(e.to_string()))?;
-        let gblock = produce_block(&state, &vk, idx as u8, now_secs(), vec![])
+        let gblock = produce_block(&state, &vk, idx, now_secs(), vec![])
             .map_err(|e| anyhow::anyhow!(e.to_string()))?;
         state
             .apply_block(&gblock)
@@ -449,7 +449,7 @@ fn mint_for_deposit(
     let vfile: meshchain_proto::crypto::KeypairFile =
         serde_json::from_str(&fs::read_to_string(&vkey_path)?)?;
     let producer = Keypair::from_file(&vfile).map_err(|e| anyhow::anyhow!(e.to_string()))?;
-    let block = produce_block(&state, &producer, idx as u8, now_secs(), vec![tx])
+    let block = produce_block(&state, &producer, idx, now_secs(), vec![tx])
         .map_err(|e| anyhow::anyhow!(e.to_string()))?;
 
     let mut finality = FinalityTracker::new();
@@ -541,7 +541,7 @@ fn burn_for_withdraw(
     let vfile: meshchain_proto::crypto::KeypairFile =
         serde_json::from_str(&fs::read_to_string(&vkey_path)?)?;
     let producer = Keypair::from_file(&vfile).map_err(|e| anyhow::anyhow!(e.to_string()))?;
-    let block = produce_block(&state, &producer, idx as u8, now_secs(), vec![tx])
+    let block = produce_block(&state, &producer, idx, now_secs(), vec![tx])
         .map_err(|e| anyhow::anyhow!(e.to_string()))?;
 
     let mut finality = FinalityTracker::new();

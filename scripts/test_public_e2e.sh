@@ -28,12 +28,23 @@ echo "== 3) faucet-drip =="
 "$MESH" --dir "$DIR" faucet-drip --wallet e2e.json
 
 echo
-echo "== 4) balance =="
+echo "== 4) balance (polling for up to 60s) =="
+BAL="0.0"
+for i in {1..20}; do
+  echo "Polling balance (attempt $i)..."
+  "$MESH" --dir "$DIR" sync-state 2>/dev/null || true
+  OUT=$("$MESH" --dir "$DIR" balance --wallet e2e.json)
+  BAL=$(echo "$OUT" | awk '/^Balance:/{print $2}')
+  if [[ -n "$BAL" ]] && python3 -c "import sys; sys.exit(0 if float(sys.argv[1]) >= 99.0 else 1)" "$BAL"; then
+    echo "Success! Balance is $BAL MESH"
+    break
+  fi
+  sleep 3
+done
+
 OUT=$("$MESH" --dir "$DIR" balance --wallet e2e.json)
 echo "$OUT"
 
-# Parse "Balance:   X.YYYYYY MESH"
-BAL=$(echo "$OUT" | awk '/^Balance:/{print $2}')
 python3 - "$BAL" <<'PY'
 import sys
 bal = float(sys.argv[1])

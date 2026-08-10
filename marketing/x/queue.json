@@ -1,0 +1,67 @@
+{
+  "account_handle_hint": "@MeshChain",
+  "notes": "All posts ≤280 chars. Post with: python3 scripts/x_post.py --queue marketing/x/queue.json --limit 1",
+  "links": {
+    "site": "https://meshchain-sigma.vercel.app",
+    "scanner": "https://34.172.103.125.sslip.io/",
+    "faucet": "https://meshchain-sigma.vercel.app/faucet/",
+    "github": "https://github.com/krewdev/meshchain",
+    "discord": "https://discord.gg/9YXVtXf2yX"
+  },
+  "posts": [
+    {
+      "id": "links-site-scanner-github",
+      "type": "tweet",
+      "when": "now",
+      "text": "Pardon my shill.\n\nMoney that moves when the internet doesn’t.\n\nMeshChain — open-source Meshtastic LoRa ledger. Public testnet live.\n\n🌐 https://meshchain-sigma.vercel.app\n🔍 https://34.172.103.125.sslip.io/\n📦 https://github.com/krewdev/meshchain\n\ntMESH has no cash value · not official Meshtastic"
+    },
+    {
+      "id": "day1-launch-thread",
+      "type": "thread",
+      "when": "day1",
+      "posts": [
+        "Money that moves when the internet doesn’t.\n\nMeshChain: open-source mesh ledger for Meshtastic LoRa.\n\n• Offline settlement over radio\n• Hybrid Solana vaults (internet alone fails)\n• Public testnet live\n\ntMESH has no cash value · not official Meshtastic\n\n🧵",
+        "Proof, not vapor:\n\n🔍 Scanner → https://34.172.103.125.sslip.io/\n💧 Faucet → https://meshchain-sigma.vercel.app/faucet/\n📡 Seed → 34.172.103.125:9100\n📦 Repo → https://github.com/krewdev/meshchain",
+        "Builders path:\n\ngit clone https://github.com/krewdev/meshchain.git\ncargo build -p mesh\n./target/debug/mesh join-public\n./target/debug/mesh new-wallet --name me.json --publish\n./target/debug/mesh faucet-drip --wallet me.json",
+        "Why hybrid?\n\nSOL on Solana *devnet* can bind to a mesh identity.\nUnlock needs mesh proof + multi-attestor co-sign.\n\nInternet alone is designed to fail.\nDual-control custody experiments, not yield farming.",
+        "Meshtastic / privacy / Solana builders:\n\n1. Open scanner\n2. Claim faucet tMESH\n3. Discord → https://discord.gg/9YXVtXf2yX\n4. Star / roast on GitHub\n\nhttps://meshchain-sigma.vercel.app\n\nFeedback > hype."
+      ]
+    },
+    {
+      "id": "day2-scanner",
+      "type": "tweet",
+      "when": "day2",
+      "text": "Height is ticking on the public MeshChain scanner.\n\nmeshchain-testnet-1 — accounts, tip hash, supply — in the open.\n\n→ https://34.172.103.125.sslip.io/\n\nPublic testnet · tMESH has no cash value · Not official Meshtastic"
+    },
+    {
+      "id": "day3-faucet",
+      "type": "tweet",
+      "when": "day3",
+      "text": "Claim free testnet tMESH (no cash value):\n\nhttps://meshchain-sigma.vercel.app/faucet/\n\nThen check your mesh name on the scanner.\nDiscord: https://discord.gg/9YXVtXf2yX\n\nBuilders only. State may be wiped."
+    },
+    {
+      "id": "day4-security",
+      "type": "tweet",
+      "when": "day4",
+      "text": "What MeshChain is *not*:\n\n• Not a mainnet coin sale\n• Not official Meshtastic\n• Not Tor-on-LoRa\n• Not set-and-forget custody\n\nIt *is* an open testnet for mesh settlement + hybrid vaults.\n\nhttps://meshchain-sigma.vercel.app/docs/?doc=SECURITY_HARDENING"
+    },
+    {
+      "id": "day5-discord",
+      "type": "tweet",
+      "when": "day5",
+      "text": "MeshChain Discord is open.\n\nhttps://discord.gg/9YXVtXf2yX\n\n• #support — install help\n• #meshtastic-radio — LoRa / airtime\n• #validators — seed ops\n• #dev — protocol debate\n\nCome break the testnet with us."
+    },
+    {
+      "id": "day6-github",
+      "type": "tweet",
+      "when": "day6",
+      "text": "Clone, run, roast:\n\nhttps://github.com/krewdev/meshchain\n\n`mesh join-public` → faucet → watch the scanner.\n\nMIT · public testnet · tMESH has no cash value."
+    },
+    {
+      "id": "day7-recap",
+      "type": "tweet",
+      "when": "day7",
+      "text": "Week-1 MeshChain testnet:\n\n• Site → https://meshchain-sigma.vercel.app\n• Scanner → https://34.172.103.125.sslip.io/\n• Discord → https://discord.gg/9YXVtXf2yX\n• Repo → https://github.com/krewdev/meshchain\n\nMoney that moves when the internet doesn’t.\n(Testnet only.)"
+    }
+  ]
+}

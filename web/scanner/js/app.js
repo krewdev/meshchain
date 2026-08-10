@@ -454,27 +454,22 @@ $("q").addEventListener("keydown", (e) => {
   if (e.key === "Enter") doSearch();
 });
 $("btnRefresh").addEventListener("click", loadAll);
-$("btnChallenge").addEventListener("click", async () => {
-  if (LIVE_API) {
-    try {
-      const c = await loadJson(`${LIVE_API}/api/v1/auth/challenge`);
-      $("challenge").textContent = JSON.stringify(c, null, 2);
-      return;
-    } catch (_) {}
-  }
-  $("challenge").textContent = JSON.stringify(
-    {
-      how_to_auto_update: [
-        "1) BEST: Run meshchain-scanner on a VPS and set web/scanner/data/config.json live_api",
-        "2) Or open /scanner/?api=https://YOUR_HOST:8787",
-        "3) Or GitHub Action syncs snapshot every N minutes (see .github/workflows/scanner-snapshot.yml)",
-      ],
-      mesh2fa: "Enable on live scanner with --auth mesh2fa",
-    },
-    null,
-    2
-  );
-});
+const btnChallenge = $("btnChallenge");
+if (btnChallenge) {
+  btnChallenge.addEventListener("click", async () => {
+    const out = $("challenge");
+    if (LIVE_API) {
+      try {
+        const c = await loadJson(`${LIVE_API}/api/v1/auth/challenge`);
+        if (out) out.textContent = JSON.stringify(c, null, 2);
+        return;
+      } catch (_) {}
+    }
+    if (out) {
+      out.textContent = "Live API: " + (LIVE_API || "(none)") + " · mesh2fa optional on the seed scanner.";
+    }
+  });
+}
 
 loadAll().then(() => {
   setInterval(loadAll, POLL_SECS * 1000);

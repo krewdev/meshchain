@@ -285,10 +285,15 @@ pub fn cmd_radio_bridge(
     cmd.arg("--tx-delay-ms").arg(target_delay.to_string());
     cmd.arg("--portnum").arg(target_portnum.to_string());
 
-    let mut child = cmd.spawn().with_context(|| "Failed to spawn meshtastic_bridge.py")?;
+    let mut child = cmd
+        .spawn()
+        .with_context(|| "Failed to spawn meshtastic_bridge.py")?;
     let status = child.wait()?;
     if !status.success() {
-        bail!("Radio bridge process exited with error status: {:?}", status.code());
+        bail!(
+            "Radio bridge process exited with error status: {:?}",
+            status.code()
+        );
     }
     Ok(())
 }
@@ -297,7 +302,9 @@ pub fn cmd_radio_bridge(
 
 pub fn cmd_radio_info(dir: &Path, port: Option<String>) -> Result<()> {
     let cfg = crate::config::MeshConfig::load_or_default(dir);
-    let target_port = port.or(cfg.radio_port).unwrap_or_else(|| "mock".to_string());
+    let target_port = port
+        .or(cfg.radio_port)
+        .unwrap_or_else(|| "mock".to_string());
 
     println!("Meshtastic Device Info");
     println!("──────────────────────");
@@ -309,7 +316,10 @@ pub fn cmd_radio_info(dir: &Path, port: Option<String>) -> Result<()> {
         println!("Hardware:         MockRadio v2");
         println!("Battery Level:    98%");
         println!("Air Queue:        0 packets");
-        println!("Channels Config:  MeshChain-Testnet-1 (PortNum: {})", cfg.portnum);
+        println!(
+            "Channels Config:  MeshChain-Testnet-1 (PortNum: {})",
+            cfg.portnum
+        );
         return Ok(());
     }
 
@@ -351,17 +361,21 @@ except Exception as e:
     } else if out_str.contains("OK") {
         println!("Status:           CONNECTED (Hardware Serial)");
         for line in out_str.lines() {
-            if line.starts_with("NodeId:") {
-                println!("Node ID:          {}", &line[7..].trim());
-            } else if line.starts_with("HwModel:") {
-                println!("Hardware:         {}", &line[8..].trim());
-            } else if line.starts_with("NodesCount:") {
-                println!("Mesh Node Count:  {}", &line[11..].trim());
+            if let Some(rest) = line.strip_prefix("NodeId:") {
+                println!("Node ID:          {}", rest.trim());
+            } else if let Some(rest) = line.strip_prefix("HwModel:") {
+                println!("Hardware:         {}", rest.trim());
+            } else if let Some(rest) = line.strip_prefix("NodesCount:") {
+                println!("Mesh Node Count:  {}", rest.trim());
             }
         }
     } else {
         println!("Status:           DISCONNECTED");
-        let err_msg = out_str.lines().find(|l| l.starts_with("ERROR:")).map(|l| &l[6..]).unwrap_or("Connection failed");
+        let err_msg = out_str
+            .lines()
+            .find(|l| l.starts_with("ERROR:"))
+            .map(|l| &l[6..])
+            .unwrap_or("Connection failed");
         println!("Error:           {}", err_msg.trim());
     }
 

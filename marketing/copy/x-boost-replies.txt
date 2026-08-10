@@ -1,0 +1,49 @@
+# Paste-ready boosts for https://x.com/RealEyedropz/status/2085953042260578638
+
+## 1) First reply under your own post (do this now — pin it)
+
+Fastest path (testers + builders):
+
+site     → https://meshchain-sigma.vercel.app
+scanner  → https://34.172.103.125.sslip.io/
+github   → https://github.com/krewdev/meshchain
+faucet   → https://meshchain-sigma.vercel.app/faucet/
+discord  → https://discord.gg/9YXVtXf2yX
+
+Public testnet only — tMESH has no cash value.
+Not official Meshtastic. Feedback > hype.
+
+#Meshtastic #LoRa #OffGrid #OpenSource
+
+## 2) Quote-tweet from your own account (same day, different hook)
+
+Meshtastic already proved off-grid chat.
+
+This is the experimental value layer on top — public testnet, open source.
+
+Try the scanner, then roast the repo.
+
+https://x.com/RealEyedropz/status/2085953042260578638
+
+## 3) Discord #announcements
+
+Launch post is live → https://x.com/RealEyedropz/status/2085953042260578638
+
+Like / RT / reply if you run radios. Quote with a node photo if you have one.
+
+Site https://meshchain-sigma.vercel.app
+Scanner https://34.172.103.125.sslip.io/
+Repo https://github.com/krewdev/meshchain
+
+TESTNET ONLY — tMESH has no cash value. Not official Meshtastic.
+
+## 4) Optional relevant reply (OccupytheWeb / similar “internet gets cut” posts)
+
+This is exactly why we stood up MeshChain — experimental settlement on Meshtastic LoRa.
+
+Public testnet, open source, tMESH has no cash value.
+
+Scanner → https://34.172.103.125.sslip.io/
+Code → https://github.com/krewdev/meshchain
+
+Not official Meshtastic. Testers + builders welcome.

@@ -27,7 +27,8 @@
   <div class="testnet-banner">
     PUBLIC TESTNET · <code>meshchain-testnet-1</code> · tMESH has no cash value ·
     <a href="/docs/?doc=TESTNET">Guide</a> ·
-    <a href="/faucet/">Faucet</a>
+    <a href="/faucet/">Faucet</a> ·
+    <a href="https://34.172.103.125.sslip.io/" target="_blank" rel="noopener">Live scanner</a>
   </div>
 
   <header class="nav">
@@ -38,14 +39,12 @@
       </a>
       <nav class="nav-links" id="navLinks">
         <a href="#privacy">Privacy</a>
-        <a href="#features">Protocol</a>
-        <a href="#wallets">Wallets</a>
         <a href="#testnet">Testnet</a>
         <a href="/scanner/">Scanner</a>
-        <a href="/faucet/">Faucet</a>
         <a href="/docs/">Docs</a>
+        <a href="https://discord.gg/9YXVtXf2yX" target="_blank" rel="noopener">Discord</a>
         <a href="https://github.com/krewdev/meshchain" target="_blank" rel="noopener">GitHub</a>
-        <a class="btn btn-primary" href="/docs/?doc=GETTING_STARTED">Launch CLI</a>
+        <a class="btn btn-primary" href="/faucet/">Claim faucet</a>
       </nav>
       <button class="nav-toggle" id="navToggle" aria-expanded="false" aria-controls="navLinks" aria-label="Open navigation">
         <span></span><span></span><span></span>
@@ -66,10 +65,43 @@
             Hybrid vaults refuse internet-only unlocks.
           </p>
           <div class="hero-actions">
-            <a class="btn btn-primary" href="/docs/?doc=GETTING_STARTED">Get started</a>
-            <a class="btn btn-ghost" href="/docs/?doc=SECURITY_HARDENING">Security model</a>
-            <a class="btn btn-ghost" href="https://github.com/krewdev/meshchain" target="_blank" rel="noopener">Source</a>
+            <a class="btn btn-primary" href="/faucet/">Claim faucet tMESH</a>
+            <a class="btn btn-ghost" href="/scanner/">Scanner</a>
+            <a class="btn btn-ghost" href="/docs/?doc=TESTNET">Join testnet</a>
           </div>
+
+          <div class="live-stats" id="liveStats" aria-live="polite">
+            <div class="live-stats-head">
+              <span class="live-dot" aria-hidden="true"></span>
+              <span class="live-stats-label">Public seed status</span>
+              <span class="live-stats-meta" id="liveStatsMeta">loading…</span>
+            </div>
+            <div class="live-stats-grid">
+              <div class="live-stat">
+                <span class="live-stat-value" id="statHeight">—</span>
+                <span class="live-stat-key">Height</span>
+              </div>
+              <div class="live-stat">
+                <span class="live-stat-value" id="statAccounts">—</span>
+                <span class="live-stat-key">Accounts</span>
+              </div>
+              <div class="live-stat">
+                <span class="live-stat-value" id="statValidators">—</span>
+                <span class="live-stat-key">Validators</span>
+              </div>
+              <div class="live-stat">
+                <span class="live-stat-value" id="statSupply">—</span>
+                <span class="live-stat-key">tMESH supply</span>
+              </div>
+            </div>
+            <div class="live-stats-links">
+              <a href="/scanner/">Explorer</a>
+              <a href="/faucet/">Faucet</a>
+              <a href="/docs/?doc=GETTING_STARTED">CLI</a>
+              <a href="/docs/?doc=SECURITY_HARDENING">Security</a>
+            </div>
+          </div>
+
           <div class="privacy-strip">
             <div><strong>No cell required</strong>Hold value with radio powered off</div>
             <div><strong>Hybrid dual-control</strong>Vault unlock needs mesh proof</div>
@@ -77,7 +109,8 @@
             <div><strong>Mesh names</strong>M3SQRT-XTA1Y-ZJ6 style IDs</div>
           </div>
           <p class="meta" style="margin-top:1.25rem">
-            Community software for Meshtastic · Not an official Meshtastic product
+            Community software for Meshtastic · Not an official Meshtastic product ·
+            <a href="https://discord.gg/9YXVtXf2yX" target="_blank" rel="noopener">Discord</a>
           </p>
         </div>
 
@@ -94,13 +127,17 @@
           </div>
           <div class="panel code-wrap" aria-label="CLI preview" style="width:100%;max-width:340px">
             <button class="copy-btn" data-target="hero-cli">copy</button>
-<pre id="hero-cli"><span class="cmt"># privacy-first wallet CLI</span>
-<span class="prompt">$</span> <span class="cmd">mesh testnet-setup</span>
-<span class="prompt">$</span> <span class="cmd">mesh new-wallet</span>
-<span class="cmt"># → M3SQRT-XTA1Y-ZJ6</span>
-<span class="prompt">$</span> <span class="cmd">mesh new-cold-key</span>
-<span class="prompt">$</span> <span class="cmd">mesh security</span></pre>
+<pre id="hero-cli"><span class="cmt"># join public testnet in minutes</span>
+<span class="prompt">$</span> <span class="cmd">git clone https://github.com/krewdev/meshchain.git</span>
+<span class="prompt">$</span> <span class="cmd">cargo build -p mesh &amp;&amp; ./target/debug/mesh join-public</span>
+<span class="prompt">$</span> <span class="cmd">./target/debug/mesh new-wallet --name me.json --publish</span>
+<span class="prompt">$</span> <span class="cmd">./target/debug/mesh faucet-drip --wallet me.json</span>
+<span class="cmt"># → mesh name like M3SQRT-XTA1Y-ZJ6</span></pre>
           </div>
+          <p class="launch-note">
+            <a href="https://x.com/RealEyedropz/status/2085953042260578638" target="_blank" rel="noopener">Launch post on X</a>
+            · <a href="https://discord.gg/9YXVtXf2yX" target="_blank" rel="noopener">Discord</a>
+          </p>
         </div>
       </div>
     </section>
@@ -207,9 +244,11 @@
             <tbody>
               <tr><td>chain_id</td><td><code>meshchain-testnet-1</code></td></tr>
               <tr><td>Token</td><td>tMESH (no cash value)</td></tr>
+              <tr><td>Seed peer</td><td><code>34.172.103.125:9100</code></td></tr>
+              <tr><td>Scanner</td><td><a href="/scanner/">meshchain-sigma.vercel.app/scanner</a></td></tr>
+              <tr><td>Faucet</td><td><a href="/faucet/">/faucet/</a></td></tr>
               <tr><td>Meshtastic channel</td><td><code>MeshChain-Testnet-1</code></td></tr>
               <tr><td>Solana program</td><td><code>CBRQcjk5…3Vkx</code> (devnet)</td></tr>
-              <tr><td>Params</td><td><a href="/testnet/network.json">network.json</a></td></tr>
             </tbody>
           </table>
         </div>
@@ -221,12 +260,11 @@
 <span class="prompt">$</span> <span class="cmd">./target/debug/mesh new-wallet --name me.json --publish</span>
 <span class="prompt">$</span> <span class="cmd">./target/debug/mesh faucet-drip --wallet me.json</span></pre>
         </div>
-        <p style="margin-top:1.25rem">
-          <a class="btn btn-primary" href="/docs/?doc=RUN_A_NODE">Run a node</a>
-          <a class="btn btn-ghost" href="https://34.172.103.125.sslip.io/" style="margin-left:0.5rem">Live scanner</a>
-          <a class="btn btn-ghost" href="https://faucet.34.172.103.125.sslip.io/info" style="margin-left:0.5rem">Live faucet</a>
-          <a class="btn btn-ghost" href="/docs/?doc=TESTNET" style="margin-left:0.5rem">Testnet guide</a>
-        </p>
+        <div class="cta-row" style="margin-top:1.25rem">
+          <a class="btn btn-primary" href="/faucet/">Claim faucet</a>
+          <a class="btn btn-ghost" href="/scanner/">Scanner</a>
+          <a class="btn btn-ghost" href="/docs/?doc=RUN_A_NODE">Run a node</a>
+        </div>
       </div>
     </section>
 
@@ -333,11 +371,13 @@
           MIT · Off-grid · Privacy-forward
         </div>
       </div>
-      <div>
-        <a href="https://github.com/krewdev/meshchain">GitHub</a> ·
-        <a href="https://meshtastic.org/">Meshtastic</a> ·
-        <a href="/docs/">Docs</a> ·
-        <a href="/faucet/">Faucet</a> ·
+      <div class="footer-links">
+        <a href="https://github.com/krewdev/meshchain">GitHub</a>
+        <a href="/scanner/">Scanner</a>
+        <a href="/faucet/">Faucet</a>
+        <a href="/docs/">Docs</a>
+        <a href="https://discord.gg/9YXVtXf2yX" target="_blank" rel="noopener">Discord</a>
+        <a href="https://meshtastic.org/" target="_blank" rel="noopener">Meshtastic</a>
         <a href="/#donate">Donate</a>
       </div>
     </div>
@@ -353,7 +393,6 @@
     toggle.setAttribute('aria-expanded', open);
     toggle.setAttribute('aria-label', open ? 'Close navigation' : 'Open navigation');
   });
-  // Close nav when a link is clicked (mobile)
   navLinks.querySelectorAll('a').forEach(a => {
     a.addEventListener('click', () => {
       navLinks.classList.remove('open');
@@ -386,7 +425,6 @@
       try {
         await navigator.clipboard.writeText(text);
       } catch {
-        // Fallback for older browsers
         const ta = document.createElement('textarea');
         ta.value = text;
         ta.style.position = 'fixed';
@@ -401,5 +439,47 @@
       setTimeout(() => { btn.textContent = 'copy'; btn.classList.remove('copied'); }, 1800);
     });
   });
+
+  // --- Live public seed stats ---
+  (function loadLiveStats() {
+    const SCANNER = 'https://34.172.103.125.sslip.io/api/v1/status';
+    const meta = document.getElementById('liveStatsMeta');
+    const set = (id, val) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = val;
+    };
+    const fmt = (n) => {
+      if (n == null || Number.isNaN(n)) return '—';
+      return Number(n).toLocaleString(undefined, { maximumFractionDigits: 1 });
+    };
+    fetch(SCANNER, { mode: 'cors', cache: 'no-store' })
+      .then((r) => {
+        if (!r.ok) throw new Error('status ' + r.status);
+        return r.json();
+      })
+      .then((d) => {
+        set('statHeight', fmt(d.height));
+        set('statAccounts', fmt(d.account_count));
+        set('statValidators', fmt(d.validators));
+        const supply = d.total_supply_tmesh != null
+          ? d.total_supply_tmesh
+          : (d.total_supply != null ? d.total_supply / 1e6 : null);
+        set('statSupply', supply != null ? fmt(supply) : '—');
+        if (meta) {
+          const upH = d.uptime_secs != null ? Math.floor(d.uptime_secs / 3600) + 'h uptime' : 'live';
+          meta.textContent = (d.chain_id || 'meshchain-testnet-1') + ' · ' + upH;
+        }
+        document.getElementById('liveStats')?.classList.add('is-live');
+      })
+      .catch(() => {
+        // Static fallbacks from last known good snapshot
+        set('statHeight', '653');
+        set('statAccounts', '218');
+        set('statValidators', '3');
+        set('statSupply', '1,031,265');
+        if (meta) meta.textContent = 'cached snapshot · scanner unreachable';
+        document.getElementById('liveStats')?.classList.add('is-stale');
+      });
+  })();
 </script>
 </html>

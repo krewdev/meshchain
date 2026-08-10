@@ -1,0 +1,29 @@
+Pardon my shill.
+
+Money that moves when the internet doesn’t.
+
+MeshChain is an open-source mesh-native ledger for Meshtastic LoRa — settlement when cell, ISP, and sequencers are gone.
+
+Not another L1. Not a memecoin. Public testnet, live now.
+
+🌐 Official site
+https://meshchain-sigma.vercel.app
+
+🔍 Live scanner
+https://34.172.103.125.sslip.io/
+
+📦 GitHub
+https://github.com/krewdev/meshchain
+
+Right now on meshchain-testnet-1:
+• height 635+
+• 200 accounts
+• 3 PoA validators
+• tip hash public on the scanner
+
+TESTNET ONLY — tMESH has no cash value and can be wiped.
+Not an official Meshtastic product. Do not put real money on unaudited software.
+
+clone → mesh join-public → faucet → roast us on Issues.
+
+Feedback > hype.

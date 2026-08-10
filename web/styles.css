@@ -295,7 +295,8 @@ h1 {
   font-weight: 400;
   line-height: 1.7;
 }
-.hero-actions { display: flex; flex-wrap: wrap; gap: 0.8rem; margin-bottom: 1.35rem; }
+.hero-actions { display: flex; flex-wrap: wrap; gap: 0.8rem; margin-bottom: 1.1rem; }
+.cta-row { display: flex; flex-wrap: wrap; gap: 0.65rem; align-items: center; }
 .meta {
   color: var(--muted);
   font-size: 0.86rem;
@@ -303,6 +304,118 @@ h1 {
 }
 .meta a { color: var(--muted); }
 .meta a:hover { color: var(--accent); }
+
+/* Live public seed stats (hero) */
+.live-stats {
+  margin: 0 0 1.35rem;
+  padding: 1rem 1.1rem 0.95rem;
+  border-radius: 16px;
+  border: 1px solid var(--border-strong);
+  background:
+    linear-gradient(145deg, rgba(34, 211, 238, 0.06), rgba(52, 211, 153, 0.03)),
+    rgba(8, 14, 26, 0.72);
+  box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.04), 0 12px 40px rgba(0, 0, 0, 0.25);
+  max-width: 36rem;
+}
+.live-stats.is-live { border-color: rgba(52, 211, 153, 0.35); }
+.live-stats.is-stale { border-color: rgba(251, 191, 36, 0.35); }
+.live-stats-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.7rem;
+  margin-bottom: 0.85rem;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+  box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.4);
+}
+.live-stats.is-live .live-dot {
+  background: var(--accent2);
+  box-shadow: 0 0 10px var(--accent2);
+  animation: pulse 2s infinite;
+}
+.live-stats.is-stale .live-dot { background: var(--warn); }
+.live-stats-label { color: var(--text); font-weight: 600; }
+.live-stats-meta { margin-left: auto; opacity: 0.9; text-transform: none; letter-spacing: 0; }
+.live-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+@media (max-width: 560px) {
+  .live-stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.live-stat {
+  padding: 0.55rem 0.6rem;
+  border-radius: 12px;
+  background: rgba(3, 6, 12, 0.45);
+  border: 1px solid var(--border);
+  min-width: 0;
+}
+.live-stat-value {
+  display: block;
+  font-family: var(--mono);
+  font-weight: 600;
+  font-size: 1.05rem;
+  color: var(--accent);
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.live-stat-key {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.7rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+.live-stats-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem 0.9rem;
+  margin-top: 0.85rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.84rem;
+  font-weight: 500;
+}
+.live-stats-links a { color: var(--accent2); }
+.live-stats-links a:hover { color: #6ee7b7; }
+
+.launch-note {
+  margin: 0;
+  font-size: 0.84rem;
+  color: var(--muted);
+  font-family: var(--mono);
+}
+.launch-note a { color: var(--accent2); font-weight: 600; }
+.launch-note a:hover { color: #6ee7b7; }
+
+.faucet-advanced {
+  margin-top: 1rem;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+.faucet-advanced summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--muted);
+}
+.faucet-advanced summary:hover { color: var(--text); }
+.faucet-advanced .form-input { margin-top: 0.75rem; margin-bottom: 0; }
 
 .hero-visual {
   display: grid;
@@ -534,6 +647,14 @@ td code, .inline-code {
   height: 32px;
   border-radius: 8px;
 }
+.footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem 1rem;
+  align-items: center;
+}
+.footer-links a { color: var(--muted); font-weight: 500; }
+.footer-links a:hover { color: var(--accent); }
 
 /* Docs layout */
 .docs-layout {
@@ -558,13 +679,14 @@ td code, .inline-code {
   backdrop-filter: blur(12px);
 }
 .sidebar h4 {
-  margin: 0 0 0.85rem;
+  margin: 1.15rem 0 0.45rem;
   font-size: 0.7rem;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: var(--muted);
   font-family: var(--mono);
 }
+.sidebar h4:first-child { margin-top: 0; }
 .sidebar a {
   display: block;
   padding: 0.42rem 0.6rem;

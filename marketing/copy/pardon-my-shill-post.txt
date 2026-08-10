@@ -1,0 +1,72 @@
+Pardon my shill.
+
+Money that moves when the internet doesn’t.
+
+I’ve been heads-down on MeshChain — an open-source ledger built for Meshtastic LoRa.
+
+Not another L1. Not a memecoin. Not a “trust me bro” vault UI.
+
+A value layer that can settle when cell towers, ISPs, and sequencers are gone.
+
+Why it exists:
+
+Meshtastic already proved peer-to-peer messaging without a SIM.
+Crypto still assumes Wi-Fi, a browser, and a hot wallet on the same network that just failed.
+
+So I asked a simple question:
+
+If the radio still works… why can’t money?
+
+What it actually is:
+
+• Mesh-native testnet ledger (`meshchain-testnet-1`)
+• CLI wallets with names you can say out loud (`M3SQRT-XTA1Y-ZJ6`)
+• Offline / air submit path over LoRa
+• Quantum-resistant cold keys (ML-DSA-65) for large moves
+• Hybrid Solana *devnet* vaults: internet alone is designed to fail
+
+That last part matters.
+
+You can lock value on Solana bound to a mesh identity.
+Unlock needs:
+
+1. matching mesh id
+2. a unique mesh burn
+3. multi-attestor co-sign from validators who saw that burn
+
+Compromise the website → still locked.
+Steal one relayer → still locked.
+Internet-only attacker → still locked.
+
+That’s dual-control custody, not yield farming.
+
+Public testnet is live. Not vapor.
+
+🔍 Scanner → https://34.172.103.125.sslip.io/
+💧 Faucet → https://meshchain-sigma.vercel.app/faucet/
+🌐 Site → https://meshchain-sigma.vercel.app
+📦 Repo → https://github.com/krewdev/meshchain
+💬 Discord → https://discord.gg/9YXVtXf2yX
+
+Right now on the shared seed:
+
+• height 635+
+• 200 accounts
+• 3 PoA validators
+• tip hash public on the scanner
+
+Honest limits (read these):
+
+• TESTNET ONLY — tMESH has **no cash value** and can be wiped
+• Not an official Meshtastic product
+• RF is not Tor
+• PoA seats, not open consensus
+• Do not put real money on unaudited software
+
+If you run Meshtastic nodes, privacy tooling, or Solana bridges:
+
+clone → `mesh join-public` → faucet → roast us on Issues.
+
+Feedback > hype. Builders only.
+
+Pardon the shill. This one actually works offline.

@@ -144,7 +144,7 @@ pub fn resolve_account_query(q: &str, state: &ChainState) -> Option<AccountView>
     }
     // Partial mesh name / hex contains
     let q_up = q.to_uppercase().replace('-', "");
-    for (k, _) in &state.accounts {
+    for k in state.accounts.keys() {
         if let Ok(sid) = parse_short_id_hex(k) {
             let name = mesh_name(&sid).replace('-', "");
             if name.contains(&q_up) || k.contains(&q.to_lowercase()) {

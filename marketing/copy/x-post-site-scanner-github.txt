@@ -1,0 +1,11 @@
+Pardon my shill.
+
+Money that moves when the internet doesn’t.
+
+MeshChain — open-source Meshtastic LoRa ledger. Public testnet live.
+
+🌐 https://meshchain-sigma.vercel.app
+🔍 https://34.172.103.125.sslip.io/
+📦 https://github.com/krewdev/meshchain
+
+tMESH has no cash value · not official Meshtastic

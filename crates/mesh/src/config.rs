@@ -59,9 +59,11 @@ mod tests {
     fn test_config_init_and_roundtrip() {
         let tmp = std::env::temp_dir().join("meshchain_test_cfg_roundtrip");
         let _ = fs::remove_dir_all(&tmp);
-        let mut cfg = MeshConfig::default();
-        cfg.radio_port = Some("/dev/ttyACM0".to_string());
-        cfg.tx_delay_ms = 200;
+        let cfg = MeshConfig {
+            radio_port: Some("/dev/ttyACM0".to_string()),
+            tx_delay_ms: 200,
+            ..MeshConfig::default()
+        };
         let saved_path = cfg.save(&tmp).unwrap();
         assert!(saved_path.exists());
 

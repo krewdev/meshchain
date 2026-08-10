@@ -119,22 +119,18 @@ enum RadioAction {
 #[derive(Subcommand)]
 enum Commands {
     /// Manage persistent zero-config settings (default port, delay, wallet)
+    #[command(next_help_heading = "Setup")]
     Config {
         #[command(subcommand)]
         action: ConfigAction,
     },
 
-    /// Manage attached LoRa radio (bridge, device info, send direct)
-    Radio {
-        #[command(subcommand)]
-        action: RadioAction,
+    /// Create a local DEV network (not the public testnet)
+    Setup {
+        /// How many validator computers (default 3)
+        #[arg(long, default_value_t = 3)]
+        validators: u8,
     },
-
-    /// Run automated hardware, environment, and key diagnostics
-    Doctor,
-
-    /// Live terminal dashboard of blockchain status and radio metrics
-    Monitor,
 
     /// Set up the public TESTNET profile (tMESH — no real value)
     #[command(name = "testnet-setup")]
@@ -173,21 +169,20 @@ enum Commands {
         faucet: String,
     },
 
-    /// Create a local DEV network (not the public testnet)
-    Setup {
-        /// How many validator computers (default 3)
-        #[arg(long, default_value_t = 3)]
-        validators: u8,
-    },
-
     /// Run a full demo: transfers, safety checks, vault mint/burn
     Demo {
         #[arg(long, default_value_t = 5)]
         transfers: u32,
     },
 
+    /// Run automated hardware, environment, and key diagnostics
+    Doctor,
+
+    /// Live terminal dashboard of blockchain status and radio metrics
+    Monitor,
+
     /// Make a new everyday wallet (save the file somewhere safe)
-    #[command(name = "new-wallet")]
+    #[command(name = "new-wallet", next_help_heading = "Wallet")]
     NewWallet {
         /// Optional name for the key file (default: wallet.json)
         #[arg(long, default_value = "wallet.json")]
@@ -236,6 +231,7 @@ enum Commands {
     },
 
     /// Send MESH to someone (mesh name like M4K7X-J9P2Q-R3W, or hex)
+    #[command(next_help_heading = "Payments")]
     Send {
         /// Their mesh name (M4K7X-J9P2Q-R3W) or 16-char hex
         to: String,
@@ -280,7 +276,14 @@ enum Commands {
         relay: String,
     },
 
+    /// Manage attached LoRa radio (bridge, device info, send direct)
+    Radio {
+        #[command(subcommand)]
+        action: RadioAction,
+    },
+
     /// Show network height and total MESH
+    #[command(next_help_heading = "Network")]
     Status,
 
     /// Quantum cold-storage radio demo (splits a big signature into small radio packets)
@@ -304,7 +307,7 @@ enum Commands {
     },
 
     /// Extend genesis with new validator public keys (coordinator tool; testnet restack)
-    #[command(name = "genesis-extend")]
+    #[command(name = "genesis-extend", alias = "genesis-add")]
     GenesisExtend {
         /// Existing genesis.json
         #[arg(long)]
@@ -315,20 +318,6 @@ enum Commands {
         /// Output path
         #[arg(long)]
         out: PathBuf,
-    },
-
-    /// Coordinator: append public_hex validators to a genesis file (PoA set change)
-    #[command(name = "genesis-add")]
-    GenesisAdd {
-        /// Input genesis.json
-        #[arg(long)]
-        genesis: PathBuf,
-        /// Output path for new genesis
-        #[arg(long)]
-        out: PathBuf,
-        /// public_hex to add (repeatable)
-        #[arg(long = "add")]
-        add: Vec<String>,
     },
 
     /// Run a testnet validator (must be listed in shared genesis)
@@ -507,8 +496,7 @@ fn main() -> Result<()> {
         Commands::TestnetAttestors => {
             cmd::network::cmd_testnet_attestors()?;
         }
-        Commands::GenesisExtend { genesis, add, out }
-        | Commands::GenesisAdd { genesis, out, add } => {
+        Commands::GenesisExtend { genesis, add, out } => {
             cmd::network::cmd_genesis_modify(&genesis, &add, &out)?;
         }
 

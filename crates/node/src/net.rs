@@ -264,7 +264,7 @@ fn read_peer(
     rate_key: String,
 ) {
     let reader = BufReader::new(stream);
-    for line in reader.lines().flatten() {
+    for line in reader.lines().map_while(Result::ok) {
         let line = line.trim();
         if line.is_empty() {
             continue;
@@ -370,11 +370,13 @@ impl MeshRadioBridge {
 
 /// High-level radio network manager that maintains fragment reassembly, retransmission caching (`FragCache`),
 /// and selective ARQ (`FragNack`) for LoRa node gossip.
+#[allow(dead_code)]
 pub struct MeshRadioHub {
     pub assembler: FragAssembler,
     pub cache: FragCache,
 }
 
+#[allow(dead_code)]
 impl MeshRadioHub {
     pub fn new() -> Self {
         Self {
@@ -386,6 +388,7 @@ impl MeshRadioHub {
     /// Process raw incoming LoRa wire bytes.
     /// Returns `Ok(Some(completed_payload))` when a multi-chunk session finishes reassembly.
     /// Returns `Ok(None)` if more chunks are needed or if handled internally (e.g. NACK retransmissions generated).
+    #[allow(clippy::type_complexity)]
     pub fn process_incoming_raw(
         &mut self,
         raw_frame: &[u8],

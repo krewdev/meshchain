@@ -61,8 +61,7 @@ pub fn parse_mesh_name(s: &str) -> Result<ShortId, String> {
         .collect();
     // Normalize lookalikes
     t = t
-        .replace('I', "1")
-        .replace('L', "1")
+        .replace(['I', 'L'], "1")
         .replace('O', "0")
         .replace('U', "V");
     if let Some(rest) = t.strip_prefix('M') {

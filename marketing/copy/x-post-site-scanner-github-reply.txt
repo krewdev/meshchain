@@ -1,0 +1,8 @@
+Fastest path:
+
+site     → https://meshchain-sigma.vercel.app
+scanner  → https://34.172.103.125.sslip.io/
+github   → https://github.com/krewdev/meshchain
+faucet   → https://meshchain-sigma.vercel.app/faucet/
+
+tMESH has no cash value.

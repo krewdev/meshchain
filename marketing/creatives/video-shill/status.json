@@ -1,0 +1,24 @@
+{
+  "ok": true,
+  "service": "meshchain-scanner",
+  "auth_mode": "open",
+  "chain_id": "meshchain-testnet-1",
+  "height": 565,
+  "tip_hash_hex": "9cd23b9269adaca8d2423c606a81c128139c8a7b190fca39fc4718a8eca8d619",
+  "total_supply": 1022456500000,
+  "total_supply_tmesh": 1022456.5,
+  "account_count": 130,
+  "block_count": 566,
+  "block_reward": 100000,
+  "pq_required_above": 100000000,
+  "validators": 3,
+  "is_testnet": true,
+  "warning": "TESTNET ONLY — tMESH has no cash value",
+  "uptime_secs": 698924,
+  "mesh_2fa": {
+    "enforced": false,
+    "challenge_path": "/api/v1/auth/challenge",
+    "verify_path": "/api/v1/auth/verify",
+    "status": "available_not_enforced"
+  }
+}

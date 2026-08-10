@@ -1,0 +1,12 @@
+Fastest try (no CLI):
+
+scanner → https://34.172.103.125.sslip.io/
+faucet  → https://meshchain-sigma.vercel.app/faucet/
+discord → https://discord.gg/9YXVtXf2yX
+
+Builders:
+git clone https://github.com/krewdev/meshchain.git
+cargo build -p mesh -p meshchain-node
+./target/debug/mesh join-public
+
+Video VO: Grok Voice (Altair). tMESH has no cash value.

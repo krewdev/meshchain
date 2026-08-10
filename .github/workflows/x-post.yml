@@ -1,0 +1,68 @@
+# Optional: auto-post next item from marketing/x/queue.json once per day.
+# Requires repo secrets (Settings → Secrets and variables → Actions):
+#   X_API_KEY, X_API_SECRET, X_ACCESS_TOKEN, X_ACCESS_SECRET
+#
+# Disabled by default schedule safety: only runs if secrets exist.
+# Trigger manually: Actions → "X queue post" → Run workflow
+name: X queue post
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (no post)'
+        type: boolean
+        default: false
+      limit:
+        description: 'How many queue items'
+        type: string
+        default: '1'
+  # Uncomment after secrets are set and you want daily posts:
+  # schedule:
+  #   - cron: '0 15 * * *'   # 15:00 UTC daily
+
+permissions:
+  contents: read
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check secrets
+        id: check
+        env:
+          X_API_KEY: ${{ secrets.X_API_KEY }}
+        run: |
+          if [ -z "$X_API_KEY" ]; then
+            echo "missing=1" >> "$GITHUB_OUTPUT"
+            echo "X_API_KEY not configured — skip"
+          else
+            echo "missing=0" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Post from queue
+        if: steps.check.outputs.missing == '0'
+        env:
+          X_API_KEY: ${{ secrets.X_API_KEY }}
+          X_API_SECRET: ${{ secrets.X_API_SECRET }}
+          X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
+          X_ACCESS_SECRET: ${{ secrets.X_ACCESS_SECRET }}
+        run: |
+          EXTRA=""
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            EXTRA="--dry-run"
+          fi
+          LIMIT="${{ github.event.inputs.limit }}"
+          LIMIT="${LIMIT:-1}"
+          python3 scripts/x_post.py --queue marketing/x/queue.json --limit "$LIMIT" $EXTRA
+
+      # Persist posted_ids so we don't repost after re-runs
+      - name: Upload post state
+        if: steps.check.outputs.missing == '0' && github.event.inputs.dry_run != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: x-post-state
+          path: data/x_post_state.json
+          if-no-files-found: ignore

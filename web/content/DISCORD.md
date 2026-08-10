@@ -3,11 +3,32 @@
 Discord servers must be created in the **Discord app** (or discord.com) by a logged-in account.  
 This doc is a complete blueprint so the MeshChain community can be stood up in ~10 minutes.
 
+**Paste-ready pack (topics, pins, roles, reaction roles):**  
+[`marketing/copy/discord-ready.md`](../marketing/copy/discord-ready.md)
+
+**Automated launch (recommended):** create a Discord bot token, then:
+
+```bash
+export DISCORD_BOT_TOKEN='...'
+./scripts/discord_bootstrap.sh
+```
+
+This creates the MeshChain guild, roles, channels, welcome/links posts, and a permanent invite → `data/discord_server.json`.
+
 **Official product note:** MeshChain is community software for the Meshtastic ecosystem — **not** an official Meshtastic Foundation product. Say that in the server description and `#welcome`.
 
 ---
 
 ## 1. Create the server (you do this)
+
+### Option A — Script (fast)
+
+1. https://discord.com/developers/applications → **New Application** → `MeshChain`
+2. **Bot** → Add Bot → **Reset Token** → copy
+3. `export DISCORD_BOT_TOKEN='...' && ./scripts/discord_bootstrap.sh`
+4. Open the printed invite, join as **your** user, then **Transfer Ownership** to yourself
+
+### Option B — Manual
 
 1. Open [Discord](https://discord.com/app) → **+** → **Create My Own** → **For a club or community**.
 2. Name: **MeshChain**
@@ -36,15 +57,17 @@ Server Settings → **Invites** → Create invite:
 Save the link as:
 
 ```text
-https://discord.gg/YOUR_CODE
+https://discord.gg/9YXVtXf2yX
 ```
 
-Add it to:
+**Live invite (bootstrap):** https://discord.gg/9YXVtXf2yX
 
-- [ ] GitHub README  
-- [ ] https://meshchain-sigma.vercel.app  
-- [ ] `docs/GETTING_STARTED.md` / site footer  
+Add / keep it on:
+
+- [x] GitHub README  
+- [x] Site footer  
 - [ ] Twitter / X bio  
+- [ ] Day-1 launch posts when you publish
 
 ---
 
@@ -116,7 +139,9 @@ Bot role: place **above** roles the bot must assign.
 • Testnet: https://meshchain-sigma.vercel.app/docs/?doc=TESTNET
 • GitHub: https://github.com/krewdev/meshchain
 • Faucet UI: https://meshchain-sigma.vercel.app/faucet/
-• Scanner: (your cloud/public URL when live)
+• Live scanner: https://34.172.103.125.sslip.io/
+• Live faucet API: https://faucet.34.172.103.125.sslip.io/
+• Seed peer: `34.172.103.125:9100`
 
 ## Rules (short)
 1. Be respectful — no scams, no phishing, no “send me your seed.”
@@ -138,10 +163,13 @@ Accept the rules (Community onboarding) to unlock the rest of the server.
 
 ```markdown
 GitHub:     https://github.com/krewdev/meshchain
-Validator:  https://github.com/krewdev/meshchain-validator  (if published)
 Site:       https://meshchain-sigma.vercel.app
+Scanner:    https://34.172.103.125.sslip.io/
+Faucet:     https://meshchain-sigma.vercel.app/faucet/
 Testnet:    chain_id = meshchain-testnet-1
+Seed:       34.172.103.125:9100
 Channel:    MeshChain-Testnet-1 (private Meshtastic — not LongFast for funds)
+Invite:     https://discord.gg/9YXVtXf2yX
 ```
 
 ---
@@ -206,10 +234,3 @@ Suggested README badge:
 - [ ] You (Admin) + 1 backup Admin 2FA  
 
 ---
-
-## What I (the agent) cannot do
-
-- Create the Discord server or own an invite without your Discord login  
-- Join Discord as your bot without a **bot token** you create at https://discord.com/developers/applications  
-
-If you create a **bot application** and paste a token into a local env (never commit it), we can later add a small status bot (testnet height → `#testnet-status`). Say if you want that next.

@@ -56,7 +56,7 @@ impl MeshtasticStdioTransport {
 
         thread::spawn(move || {
             let reader = BufReader::new(stdout);
-            for line in reader.lines().flatten() {
+            for line in reader.lines().map_while(Result::ok) {
                 let _ = tx.send(line);
             }
         });

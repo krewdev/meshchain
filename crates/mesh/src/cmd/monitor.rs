@@ -1,11 +1,11 @@
 use anyhow::Result;
 use meshchain_ledger::state::ChainState;
 
+use crate::helpers::{best_chain_state_path, fmt_mesh};
+use std::net::TcpStream;
 use std::path::Path;
 use std::thread;
 use std::time::Duration;
-use std::net::TcpStream;
-use crate::helpers::{best_chain_state_path, fmt_mesh};
 
 pub fn cmd_monitor(dir: &Path) -> Result<()> {
     let state_path = best_chain_state_path(dir);
@@ -36,7 +36,11 @@ pub fn cmd_monitor(dir: &Path) -> Result<()> {
                         let leader_pk = state.validators[leader_idx];
                         let leader_hex = hex::encode(leader_pk);
                         println!(" Validators:     {}", n);
-                        println!(" Current Leader: {} (index {})", &leader_hex[..16], leader_idx);
+                        println!(
+                            " Current Leader: {} (index {})",
+                            &leader_hex[..16],
+                            leader_idx
+                        );
                     }
                 }
                 Err(e) => {
@@ -51,18 +55,28 @@ pub fn cmd_monitor(dir: &Path) -> Result<()> {
         println!("----------------------------------------------------------");
         println!(" RADIO BRIDGE CONFIGURATION                               ");
         println!("----------------------------------------------------------");
-        
+
         let cfg = crate::config::MeshConfig::load_or_default(dir);
         println!(" Default Wallet:   {}", cfg.default_wallet);
-        println!(" Radio Port:       {}", cfg.radio_port.as_deref().unwrap_or("None"));
+        println!(
+            " Radio Port:       {}",
+            cfg.radio_port.as_deref().unwrap_or("None")
+        );
         println!(" Transmit Delay:   {} ms", cfg.tx_delay_ms);
         println!(" Meshtastic App:   PortNum {}", cfg.portnum);
-        println!(" Frame Compression: {}", if cfg.compression { "Enabled" } else { "Disabled" });
+        println!(
+            " Frame Compression: {}",
+            if cfg.compression {
+                "Enabled"
+            } else {
+                "Disabled"
+            }
+        );
 
         println!("----------------------------------------------------------");
         println!(" LOCAL PROCESS HEALTH                                     ");
         println!("----------------------------------------------------------");
-        
+
         // Check local validator status
         let local_val = match TcpStream::connect_timeout(
             &"127.0.0.1:9100".parse().unwrap(),
@@ -85,7 +99,7 @@ pub fn cmd_monitor(dir: &Path) -> Result<()> {
 
         println!("==========================================================");
         println!(" Press Ctrl+C to exit. Refreshing every 1.5 seconds...");
-        
+
         std::io::Write::flush(&mut std::io::stdout())?;
         thread::sleep(Duration::from_millis(1500));
     }

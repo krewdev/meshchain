@@ -57,10 +57,12 @@ fn now_secs() -> u64 {
         .unwrap_or(0)
 }
 
+/// session -> (total chunks, chunk map, last activity unix secs)
+type FragSession = (u16, HashMap<u16, Vec<u8>>, u64);
+
 #[derive(Default)]
 pub struct FragAssembler {
-    /// session -> (total, chunks, last_activity_unix_secs)
-    pending: HashMap<[u8; 8], (u16, HashMap<u16, Vec<u8>>, u64)>,
+    pending: HashMap<[u8; 8], FragSession>,
 }
 
 impl FragAssembler {

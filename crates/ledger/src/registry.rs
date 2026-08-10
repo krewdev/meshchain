@@ -11,7 +11,7 @@ pub struct Registry {
 impl Registry {
     pub fn from_state(state: &ChainState) -> Self {
         let mut names = HashMap::new();
-        for (sid, _acc) in &state.accounts {
+        for sid in state.accounts.keys() {
             if let Ok(bytes) = hex::decode(sid) {
                 if bytes.len() == 8 {
                     let mut short = [0u8; 8];

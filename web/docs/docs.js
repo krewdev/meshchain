@@ -1,26 +1,41 @@
 /* MeshChain docs viewer — loads markdown from /content/ */
 (function () {
   const DOCS = [
-    { id: "TESTNET", title: "Public testnet" },
-    { id: "SCANNER", title: "Blockchain scanner" },
-    { id: "SCANNER_AUTO_UPDATE", title: "Scanner auto-update" },
-    { id: "E2E_TESTNET", title: "E2E results" },
-    { id: "HOST_OPS", title: "Host ops" },
-    { id: "VPS_PUBLIC", title: "VPS & tunnel" },
-    { id: "MULTI_VALIDATOR", title: "Multi-validator" },
+    { group: "Start" },
     { id: "GETTING_STARTED", title: "Getting started" },
+    { id: "TESTNET", title: "Public testnet" },
+    { id: "RUN_A_NODE", title: "Run a node" },
+    { id: "SCANNER", title: "Blockchain scanner" },
+    { id: "HARDWARE", title: "Hardware" },
+    { id: "MESHTASTIC", title: "Meshtastic air path" },
+    { id: "DISCORD", title: "Discord" },
     { id: "DONATE", title: "Donate" },
-    { id: "HYBRID_LOCK", title: "Hybrid lock" },
+
+    { group: "Protocol" },
+    { id: "PROTOCOL", title: "Protocol" },
     { id: "SECURITY_HARDENING", title: "Security hardening" },
     { id: "SECURITY", title: "Security summary" },
+    { id: "HYBRID_LOCK", title: "Hybrid lock" },
     { id: "QUANTUM_COLD_STORAGE", title: "Quantum cold storage" },
-    { id: "PROTOCOL", title: "Protocol" },
+    { id: "TRUTH_MODEL", title: "Truth model" },
+
+    { group: "Ops" },
+    { id: "HOST_OPS", title: "Host ops" },
+    { id: "MULTI_VALIDATOR", title: "Multi-validator" },
+    { id: "MULTI_OPERATOR", title: "Multi-operator" },
+    { id: "VPS_PUBLIC", title: "VPS & tunnel" },
+    { id: "CLOUD", title: "Cloud" },
+    { id: "SCANNER_AUTO_UPDATE", title: "Scanner auto-update" },
+    { id: "AUDIT_AND_TEST", title: "Audit & test" },
+
+    { group: "Bridge" },
     { id: "SOLANA_BRIDGE", title: "Solana bridge" },
     { id: "SOLANA_DEVNET", title: "Solana devnet" },
     { id: "BTC_VAULT", title: "BTC vault design" },
-    { id: "TRUTH_MODEL", title: "Truth model" },
-    { id: "HARDWARE", title: "Hardware" },
+    { id: "E2E_TESTNET", title: "E2E results" },
   ];
+
+  const PAGES = DOCS.filter((d) => d.id);
 
   function qs(name) {
     return new URLSearchParams(window.location.search).get(name);
@@ -33,7 +48,6 @@
   }
 
   function rewriteDocLinks(html) {
-    // Convert markdown links like (SECURITY_HARDENING.md) to docs SPA links
     return html
       .replace(/href="\.\/?([A-Z0-9_]+)\.md"/gi, 'href="/docs/?doc=$1"')
       .replace(/href="([A-Z0-9_]+)\.md"/gi, 'href="/docs/?doc=$1"');
@@ -41,7 +55,7 @@
 
   async function loadDoc(id) {
     const el = document.getElementById("doc");
-    const meta = DOCS.find((d) => d.id === id) || DOCS[0];
+    const meta = PAGES.find((d) => d.id === id) || PAGES[0];
     id = meta.id;
     setActive(id);
     el.innerHTML = '<p class="loading">Loading…</p>';
@@ -57,12 +71,10 @@
         '<p class="doc-meta"><a href="/docs/">Docs</a> / ' +
         meta.title +
         ' · <a href="https://github.com/krewdev/meshchain/blob/main/docs/' +
-        (id === "GETTING_STARTED" ? "../web/content/" : "") +
         id +
         '.md">Edit on GitHub</a></p>' +
         html;
       history.replaceState(null, "", "/docs/?doc=" + id);
-      // scroll to hash if present
       if (location.hash) {
         const t = document.querySelector(location.hash);
         if (t) t.scrollIntoView();
@@ -79,11 +91,14 @@
 
   function buildSidebar() {
     const side = document.getElementById("sidebar");
-    const h = document.createElement("h4");
-    h.textContent = "Documentation";
     side.innerHTML = "";
-    side.appendChild(h);
     DOCS.forEach((d) => {
+      if (d.group) {
+        const h = document.createElement("h4");
+        h.textContent = d.group;
+        side.appendChild(h);
+        return;
+      }
       const a = document.createElement("a");
       a.href = "/docs/?doc=" + d.id;
       a.textContent = d.title;

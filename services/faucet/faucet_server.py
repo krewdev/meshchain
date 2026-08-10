@@ -224,24 +224,31 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
 
-    def _json(self, code: int, obj: dict):
+    def _json(self, code: int, obj: dict, head: bool = False):
         body = json.dumps(obj).encode()
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
         self._cors()
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
-        self.wfile.write(body)
+        if not head:
+            self.wfile.write(body)
 
     def do_OPTIONS(self):
         self.send_response(204)
         self._cors()
         self.end_headers()
 
+    def do_HEAD(self):
+        self._handle_get(head=True)
+
     def do_GET(self):
+        self._handle_get(head=False)
+
+    def _handle_get(self, head: bool):
         path = urlparse(self.path).path
         if path in ("/health", "/"):
-            self._json(200, {"ok": True, "service": "meshchain-faucet", "testnet": True})
+            self._json(200, {"ok": True, "service": "meshchain-faucet", "testnet": True}, head=head)
             return
         if path == "/info":
             st = load_state()
@@ -250,19 +257,21 @@ class Handler(BaseHTTPRequestHandler):
             self._json(
                 200,
                 {
+                    "ok": True,
+                    "service": "meshchain-faucet",
                     "chain_hint": "meshchain-testnet-1",
                     "amount_tmesh": AMOUNT / 1_000_000,
                     "cooldown_secs": COOLDOWN,
                     "global_cooldown_secs": GLOBAL_COOLDOWN,
                     "daily_cap_tmesh": DAILY_CAP / 1_000_000,
                     "daily_minted_tmesh": minted / 1_000_000,
-                    "data_dir": str(DATA),
                     "token": "tMESH (no cash value)",
                     "mint_via": "peer" if os.environ.get("MESH_ALLOW_OFFLINE_MINT") != "1" else "offline",
                 },
+                head=head,
             )
             return
-        self._json(404, {"ok": False, "error": "not found"})
+        self._json(404, {"ok": False, "error": "not found"}, head=head)
 
     def do_POST(self):
         path = urlparse(self.path).path

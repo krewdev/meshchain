@@ -1,8 +1,8 @@
 use anyhow::Result;
 use std::fs;
+use std::net::TcpStream;
 use std::path::Path;
 use std::process::Command;
-use std::net::TcpStream;
 use std::time::Duration;
 
 pub fn cmd_doctor(dir: &Path) -> Result<()> {
@@ -31,7 +31,7 @@ pub fn cmd_doctor(dir: &Path) -> Result<()> {
     // 2. Python Meshtastic Package Check
     print!("[*] Checking Python 'meshtastic' library... ");
     let py_mesh = Command::new("python3")
-        .args(&["-c", "import meshtastic"])
+        .args(["-c", "import meshtastic"])
         .output();
     match py_mesh {
         Ok(out) if out.status.success() => {
@@ -51,8 +51,11 @@ pub fn cmd_doctor(dir: &Path) -> Result<()> {
     if let Ok(entries) = fs::read_dir("/dev") {
         for entry in entries.flatten() {
             let name = entry.file_name().to_string_lossy().into_owned();
-            if name.starts_with("cu.usbserial") || name.starts_with("cu.usbmodem") ||
-               name.starts_with("ttyUSB") || name.starts_with("ttyACM") {
+            if name.starts_with("cu.usbserial")
+                || name.starts_with("cu.usbmodem")
+                || name.starts_with("ttyUSB")
+                || name.starts_with("ttyACM")
+            {
                 serial_devices.push(format!("/dev/{}", name));
             }
         }
@@ -77,7 +80,10 @@ pub fn cmd_doctor(dir: &Path) -> Result<()> {
                 Ok(cfg) => {
                     println!("PASS");
                     println!("    ├─ Default Wallet: {}", cfg.default_wallet);
-                    println!("    ├─ Radio Port:     {}", cfg.radio_port.as_deref().unwrap_or("None"));
+                    println!(
+                        "    ├─ Radio Port:     {}",
+                        cfg.radio_port.as_deref().unwrap_or("None")
+                    );
                     println!("    ├─ Tx Delay:       {} ms", cfg.tx_delay_ms);
                     println!("    └─ PortNum:        {}", cfg.portnum);
                     checks_passed += 1;
@@ -104,7 +110,10 @@ pub fn cmd_doctor(dir: &Path) -> Result<()> {
         let keys_exist = keys_dir.exists() && keys_dir.is_dir();
         println!("PASS");
         println!("    ├─ Genesis file: FOUND");
-        println!("    └─ Keys directory: {}", if keys_exist { "FOUND" } else { "NOT FOUND" });
+        println!(
+            "    └─ Keys directory: {}",
+            if keys_exist { "FOUND" } else { "NOT FOUND" }
+        );
         checks_passed += 1;
     } else {
         println!("WARNING (No network files found. Run: mesh setup)");

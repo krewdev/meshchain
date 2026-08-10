@@ -71,8 +71,9 @@
     "scanner_docs": "https://meshchain-sigma.vercel.app/docs/?doc=SCANNER",
     "faucet_ui": "https://meshchain-sigma.vercel.app/faucet/",
     "faucet_api_local": "http://127.0.0.1:8787",
-    "faucet_api": "https://circuit-adipex-coffee-manual.trycloudflare.com",
-    "tunnel_note": "Cloudflare quick tunnel; re-run scripts/start_public_tunnel.sh if dead"
+    "faucet_api": "https://faucet.34.172.103.125.sslip.io",
+    "tunnel_note": "Public seed uses stable sslip.io. FORCE_TUNNEL=1 only for lab laptops.",
+    "scanner_api": "https://34.172.103.125.sslip.io"
   },
   "how_to_join": [
     "Clone https://github.com/krewdev/meshchain",

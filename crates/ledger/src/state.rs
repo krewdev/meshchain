@@ -52,16 +52,12 @@ fn default_pq_threshold_state() -> u64 {
 
 impl ChainState {
     pub fn from_genesis(genesis: &GenesisConfig) -> Result<Self, LedgerError> {
-        let validators = genesis
-            .validator_keys()
-            .map_err(|e| LedgerError::State(e))?;
+        let validators = genesis.validator_keys().map_err(LedgerError::State)?;
         if validators.is_empty() {
             return Err(LedgerError::State("at least one validator required".into()));
         }
-        let minters = genesis.minter_set().map_err(|e| LedgerError::State(e))?;
-        let initial = genesis
-            .initial_accounts()
-            .map_err(|e| LedgerError::State(e))?;
+        let minters = genesis.minter_set().map_err(LedgerError::State)?;
+        let initial = genesis.initial_accounts().map_err(LedgerError::State)?;
 
         let mut accounts = HashMap::new();
         let mut total_supply = 0u64;

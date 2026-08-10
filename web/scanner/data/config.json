@@ -1,11 +1,10 @@
 {
-  "live_api": "https://immune-exhibition-tower-solomon.trycloudflare.com",
+  "live_api": "https://34.172.103.125.sslip.io",
   "poll_secs": 15,
   "fallback_to_snapshot": true,
   "notes": [
-    "live_api set by scripts/start_scanner_live.sh (Cloudflare tunnel)",
-    "Vercel UI polls this URL every poll_secs \u2014 no redeploy needed for chain changes",
-    "Tunnel URL changes on restart \u2014 re-run start_scanner_live.sh"
+    "Stable public seed scanner (sslip.io). Do not point this at ephemeral Cloudflare tunnels.",
+    "Vercel UI polls live_api every poll_secs and falls back to snapshot JSON if the seed is down."
   ],
-  "updated": "2026-07-14T12:21Z"
+  "updated": "2026-08-10T11:10Z"
 }

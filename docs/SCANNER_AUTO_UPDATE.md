@@ -12,27 +12,22 @@ The Vercel page **polls a live Rust scanner every 15s** — **no redeploy** when
 ### One command (this machine)
 
 ```bash
-./scripts/host_bootstrap.sh          # once: build + genesis
-./scripts/start_testnet_host.sh      # validators + faucet :8787 + scanner :8788
-./scripts/start_scanner_live.sh      # Cloudflare tunnel + config live_api + vercel deploy
+# Default: point the site at the stable public seed scanner
+./scripts/start_scanner_live.sh
+
+# Lab only (laptop + Cloudflare tunnel):
+FORCE_TUNNEL=1 ./scripts/start_scanner_live.sh
 ```
 
 Then open: **https://meshchain-sigma.vercel.app/scanner/**
 
 | Piece | Port / URL |
 |-------|------------|
-| Scanner API (local) | `http://127.0.0.1:8788` |
-| Public tunnel | `https://….trycloudflare.com` (printed by script) |
+| Public seed scanner | `https://34.172.103.125.sslip.io` |
+| Public faucet | `https://faucet.34.172.103.125.sslip.io` |
 | Vercel UI | polls `live_api` from `web/scanner/data/config.json` |
 
-Stop:
-
-```bash
-./scripts/stop_scanner_live.sh
-./scripts/stop_testnet_host.sh
-```
-
-> Cloudflare quick-tunnel URLs change when the tunnel restarts — re-run `start_scanner_live.sh`.
+> The public seed already has HTTPS. Do not overwrite `live_api` with an ephemeral trycloudflare URL unless you are running a private lab.
 
 ### Manual VPS (fixed domain)
 

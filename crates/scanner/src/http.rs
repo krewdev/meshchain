@@ -71,14 +71,19 @@ fn handle_client(mut stream: TcpStream, state: AppState) -> Result<()> {
             "",
             &[
                 ("Access-Control-Allow-Origin", "*"),
-                ("Access-Control-Allow-Methods", "GET, POST, OPTIONS"),
+                ("Access-Control-Allow-Methods", "GET, HEAD, POST, OPTIONS"),
                 (
                     "Access-Control-Allow-Headers",
                     "Content-Type, Authorization",
                 ),
             ],
+            false,
         );
     }
+
+    // HEAD uses the same routes as GET, without a body (uptime / curl -I).
+    let head_only = method == "HEAD";
+    let method = if head_only { "GET" } else { method };
 
     // Auth gate for API (except public health + challenge endpoints)
     let public = matches!(
@@ -101,7 +106,7 @@ fn handle_client(mut stream: TcpStream, state: AppState) -> Result<()> {
             "message": "Scanner is in mesh2fa mode. Complete mesh challenge first.",
             "challenge": ch,
         });
-        return write_json(&mut stream, 401, &json);
+        return write_json(&mut stream, 401, &json, head_only);
     }
 
     match (method, path) {
@@ -112,6 +117,7 @@ fn handle_client(mut stream: TcpStream, state: AppState) -> Result<()> {
                 "text/html; charset=utf-8",
                 ui::INDEX_HTML,
                 &[],
+                head_only,
             )
         }
         ("GET", "/api/v1/status") => {
@@ -144,16 +150,16 @@ fn handle_client(mut stream: TcpStream, state: AppState) -> Result<()> {
                     },
                 },
             };
-            write_json(&mut stream, 200, &body)
+            write_json(&mut stream, 200, &body, head_only)
         }
         ("GET", "/api/v1/network") => {
             let meta = state.network_meta.read().unwrap().clone();
-            write_json(&mut stream, 200, &meta)
+            write_json(&mut stream, 200, &meta, head_only)
         }
         // Full ledger snapshot for light clients / mesh sync-state
         ("GET", "/api/v1/chain_state") => {
             let c = state.chain.read().unwrap();
-            write_json(&mut stream, 200, &*c)
+            write_json(&mut stream, 200, &*c, head_only)
         }
         ("GET", "/api/v1/blocks") => {
             let limit = query_param(query, "limit")
@@ -166,6 +172,7 @@ fn handle_client(mut stream: TcpStream, state: AppState) -> Result<()> {
                 &mut stream,
                 200,
                 &serde_json::json!({ "blocks": blocks, "count": blocks.len() }),
+                head_only,
             )
         }
         ("GET", p) if p.starts_with("/api/v1/blocks/") => {
@@ -173,16 +180,22 @@ fn handle_client(mut stream: TcpStream, state: AppState) -> Result<()> {
             let height: u64 = match h.parse() {
                 Ok(v) => v,
                 Err(_) => {
-                    return write_json(&mut stream, 400, &serde_json::json!({"error":"bad height"}))
+                    return write_json(
+                        &mut stream,
+                        400,
+                        &serde_json::json!({"error":"bad height"}),
+                        head_only,
+                    )
                 }
             };
             let c = state.chain.read().unwrap();
             match model::find_block(&c, height) {
-                Some(b) => write_json(&mut stream, 200, &b),
+                Some(b) => write_json(&mut stream, 200, &b, head_only),
                 None => write_json(
                     &mut stream,
                     404,
                     &serde_json::json!({"error":"block not found"}),
+                    head_only,
                 ),
             }
         }
@@ -200,6 +213,7 @@ fn handle_client(mut stream: TcpStream, state: AppState) -> Result<()> {
                 &mut stream,
                 200,
                 &serde_json::json!({ "accounts": accounts, "count": accounts.len() }),
+                head_only,
             )
         }
         ("GET", p) if p.starts_with("/api/v1/accounts/") => {
@@ -207,11 +221,12 @@ fn handle_client(mut stream: TcpStream, state: AppState) -> Result<()> {
             let id = urlencoding_decode(id);
             let c = state.chain.read().unwrap();
             match model::resolve_account_query(&id, &c) {
-                Some(a) => write_json(&mut stream, 200, &a),
+                Some(a) => write_json(&mut stream, 200, &a, head_only),
                 None => write_json(
                     &mut stream,
                     404,
                     &serde_json::json!({"error":"account not found"}),
+                    head_only,
                 ),
             }
         }
@@ -219,7 +234,7 @@ fn handle_client(mut stream: TcpStream, state: AppState) -> Result<()> {
             let q = query_param(query, "q").unwrap_or_default();
             let c = state.chain.read().unwrap();
             let res = model::search(&q, &c);
-            write_json(&mut stream, 200, &res)
+            write_json(&mut stream, 200, &res, head_only)
         }
         ("GET", "/api/v1/validators") => {
             let c = state.chain.read().unwrap();
@@ -237,7 +252,12 @@ fn handle_client(mut stream: TcpStream, state: AppState) -> Result<()> {
                     })
                 })
                 .collect();
-            write_json(&mut stream, 200, &serde_json::json!({ "validators": vals }))
+            write_json(
+                &mut stream,
+                200,
+                &serde_json::json!({ "validators": vals }),
+                head_only,
+            )
         }
         ("GET", "/api/v1/auth/mode") => write_json(
             &mut stream,
@@ -247,6 +267,7 @@ fn handle_client(mut stream: TcpStream, state: AppState) -> Result<()> {
                 "mesh2fa_enforced": state.auth_mode == AuthMode::Mesh2fa,
                 "note": "Internet open for testnet. Switch to --auth mesh2fa later for mesh identity gate."
             }),
+            head_only,
         ),
         ("GET", "/api/v1/auth/challenge") => {
             let ch = auth::issue_challenge(now(), 300);
@@ -254,7 +275,7 @@ fn handle_client(mut stream: TcpStream, state: AppState) -> Result<()> {
                 g.retain(|(_, _, exp)| *exp > now());
                 g.push((ch.challenge_id.clone(), ch.message.clone(), ch.expires_unix));
             }
-            write_json(&mut stream, 200, &ch)
+            write_json(&mut stream, 200, &ch, head_only)
         }
         ("POST", "/api/v1/auth/verify") => {
             let resp: auth::MeshChallengeResponse = match serde_json::from_str(&body) {
@@ -264,6 +285,7 @@ fn handle_client(mut stream: TcpStream, state: AppState) -> Result<()> {
                         &mut stream,
                         400,
                         &serde_json::json!({"error": format!("bad json: {e}")}),
+                        head_only,
                     );
                 }
             };
@@ -278,6 +300,7 @@ fn handle_client(mut stream: TcpStream, state: AppState) -> Result<()> {
                     &mut stream,
                     400,
                     &serde_json::json!({"error": "unknown or expired challenge"}),
+                    head_only,
                 );
             };
             match auth::verify_challenge(&resp, &message) {
@@ -299,16 +322,20 @@ fn handle_client(mut stream: TcpStream, state: AppState) -> Result<()> {
                             "session": "stub-session-token",
                             "note": "Session issuance is stubbed; wire cookies when enforcing mesh2fa."
                         }),
+                        head_only,
                     )
                 }
                 Err(e) => write_json(
                     &mut stream,
                     401,
                     &serde_json::json!({"error": e.to_string()}),
+                    head_only,
                 ),
             }
         }
-        ("GET", "/favicon.ico") => write_response(&mut stream, 204, "text/plain", "", &[]),
+        ("GET", "/favicon.ico") => {
+            write_response(&mut stream, 204, "text/plain", "", &[], head_only)
+        }
         _ => write_json(
             &mut stream,
             404,
@@ -321,11 +348,12 @@ fn handle_client(mut stream: TcpStream, state: AppState) -> Result<()> {
                     "/api/v1/auth/challenge","/api/v1/auth/verify"
                 ]
             }),
+            head_only,
         ),
     }
 }
 
-fn query_param<'a>(query: &'a str, key: &str) -> Option<String> {
+fn query_param(query: &str, key: &str) -> Option<String> {
     for pair in query.split('&') {
         if let Some((k, v)) = pair.split_once('=') {
             if k == key {
@@ -359,7 +387,12 @@ fn urlencoding_decode(s: &str) -> String {
     out
 }
 
-fn write_json<T: serde::Serialize>(stream: &mut TcpStream, status: u16, val: &T) -> Result<()> {
+fn write_json<T: serde::Serialize>(
+    stream: &mut TcpStream,
+    status: u16,
+    val: &T,
+    head_only: bool,
+) -> Result<()> {
     let body = serde_json::to_string_pretty(val)?;
     write_response(
         stream,
@@ -367,6 +400,7 @@ fn write_json<T: serde::Serialize>(stream: &mut TcpStream, status: u16, val: &T)
         "application/json; charset=utf-8",
         &body,
         &[("Access-Control-Allow-Origin", "*")],
+        head_only,
     )
 }
 
@@ -376,6 +410,7 @@ fn write_response(
     content_type: &str,
     body: &str,
     extra: &[(&str, &str)],
+    head_only: bool,
 ) -> Result<()> {
     let reason = match status {
         200 => "OK",
@@ -394,7 +429,9 @@ fn write_response(
     }
     head.push_str("\r\n");
     stream.write_all(head.as_bytes())?;
-    stream.write_all(body.as_bytes())?;
+    if !head_only {
+        stream.write_all(body.as_bytes())?;
+    }
     stream.flush()?;
     Ok(())
 }
