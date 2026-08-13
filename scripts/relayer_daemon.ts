@@ -3,12 +3,16 @@
  * Monitors the Solana vault program for new deposits, resolves the recipient's
  * public key via the registry, and submits mint transactions to the MeshChain ledger.
  *
- * To run:
- *   cd /Users/krewdev/meshchain/programs-mesh-bridge
+ * Production (public seed): systemd unit deploy/meshchain-relayer.service
+ *
+ * Manual:
+ *   cd programs-mesh-bridge
  *   ANCHOR_PROVIDER_URL=https://api.devnet.solana.com \
  *   ANCHOR_WALLET=$HOME/.config/solana/id.json \
+ *   MESHCHAIN_ROOT=/opt/meshchain \
+ *   MESH_MINT_PEER=127.0.0.1:9100 \
  *   npx ts-node --compiler-options '{"module":"commonjs","esModuleInterop":true,"resolveJsonModule":true}' \
- *     ../scripts/relayer_daemon.ts
+ *     scripts/relayer_daemon.ts
  */
 
 import * as anchor from "@coral-xyz/anchor";
@@ -17,27 +21,59 @@ import { PublicKey } from "@solana/web3.js";
 import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
 
 const PROGRAM_ID = new PublicKey("CBRQcjk5DLJh1HcW3XF5TmUxZsBumhiABJa6M15r3Vkx");
 
-const ROOT = path.resolve(__dirname, "..");
-const DATA = path.join(ROOT, "data/host");
-const IDL_PATH = path.join(ROOT, "programs-mesh-bridge/target/idl/programs_mesh_bridge.json");
-const BIN = path.join(ROOT, "target/release/meshchain-node");
+/** Repo root (…/meshchain). Override with MESHCHAIN_ROOT. */
+function defaultRoot(): string {
+  // programs-mesh-bridge/scripts → ../.. ; repo scripts/ → ..
+  const parent = path.basename(path.dirname(__dirname));
+  if (parent === "programs-mesh-bridge") {
+    return path.resolve(__dirname, "../..");
+  }
+  return path.resolve(__dirname, "..");
+}
+const ROOT = process.env.MESHCHAIN_ROOT
+  ? path.resolve(process.env.MESHCHAIN_ROOT)
+  : defaultRoot();
 
-// Helper to calculate sha256 hash
+/** Host data dir with v0/chain_state.json (public seed: data/host). */
+const DATA = process.env.MESHCHAIN_DATA
+  ? path.resolve(process.env.MESHCHAIN_DATA)
+  : path.join(ROOT, "data/host");
+
+const IDL_CANDIDATES = [
+  process.env.MESH_BRIDGE_IDL,
+  path.join(ROOT, "programs-mesh-bridge/idl/programs_mesh_bridge.json"),
+  path.join(ROOT, "programs-mesh-bridge/target/idl/programs_mesh_bridge.json"),
+].filter(Boolean) as string[];
+
+const BIN_CANDIDATES = [
+  process.env.MESHCHAIN_BIN,
+  path.join(ROOT, "target/release/meshchain-node"),
+  path.join(ROOT, "target/debug/meshchain-node"),
+].filter(Boolean) as string[];
+
+/** Gossip peer for mint (required on multi-validator public seed). */
+const MINT_PEER =
+  process.env.MESH_MINT_PEER || process.env.MESH_SUBMIT_PEER || "127.0.0.1:9100";
+
+const VALIDATOR_INDEX = process.env.MESH_MINT_VALIDATOR_INDEX || "0";
+
 function sha256(buf: Buffer): Buffer {
   return crypto.createHash("sha256").update(buf).digest();
 }
 
-// Relayer state persistence to prevent double-minting
 const STATE_FILE = path.join(DATA, "relayer_state.json");
+
 function loadRelayerState(): { processedSeqs: number[] } {
   if (fs.existsSync(STATE_FILE)) {
     try {
       return JSON.parse(fs.readFileSync(STATE_FILE, "utf8"));
-    } catch (e) {}
+    } catch {
+      /* ignore */
+    }
   }
   return { processedSeqs: [] };
 }
@@ -47,28 +83,74 @@ function saveRelayerState(state: { processedSeqs: number[] }) {
   fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
 }
 
-// Lookup recipient's full public key from ledger chain_state or faucet registry
+function findIdl(): string {
+  for (const p of IDL_CANDIDATES) {
+    if (p && fs.existsSync(p)) return p;
+  }
+  throw new Error(
+    `IDL not found. Tried:\n  ${IDL_CANDIDATES.join("\n  ")}\n` +
+      `Copy idl/programs_mesh_bridge.json or set MESH_BRIDGE_IDL.`
+  );
+}
+
+function findNodeBin(): string {
+  for (const p of BIN_CANDIDATES) {
+    if (p && fs.existsSync(p)) return p;
+  }
+  throw new Error(
+    `meshchain-node binary not found. Tried:\n  ${BIN_CANDIDATES.join("\n  ")}`
+  );
+}
+
+/** Lookup recipient full public key from registry or chain_state. */
 function resolvePublicKey(shortHex: string): string | null {
-  // 1. Try registry.json (from faucet)
-  const regPath = path.join(DATA, "v0/registry.json");
-  if (fs.existsSync(regPath)) {
+  const sid = shortHex.toLowerCase();
+
+  const regCandidates = [
+    path.join(DATA, "v0/registry.json"),
+    path.join(DATA, "registry.json"),
+  ];
+  for (const regPath of regCandidates) {
+    if (!fs.existsSync(regPath)) continue;
     try {
       const reg = JSON.parse(fs.readFileSync(regPath, "utf8"));
-      if (reg[shortHex]) return reg[shortHex];
-    } catch (e) {}
+      // map short_id_hex -> pubkey hex, or nested
+      if (reg[sid]) {
+        const v = reg[sid];
+        if (typeof v === "string") return v.replace(/^0x/, "");
+        if (v && typeof v.pubkey === "string") return v.pubkey.replace(/^0x/, "");
+        if (v && typeof v.public_key_hex === "string")
+          return v.public_key_hex.replace(/^0x/, "");
+      }
+      if (reg.names && reg.names[sid]) {
+        const v = reg.names[sid];
+        if (typeof v === "string") return v.replace(/^0x/, "");
+      }
+    } catch {
+      /* ignore */
+    }
   }
 
-  // 2. Try chain_state.json
-  const statePath = path.join(DATA, "v0/chain_state.json");
-  if (fs.existsSync(statePath)) {
+  const stateCandidates = [
+    path.join(DATA, "v0/chain_state.json"),
+    path.join(DATA, "chain_state.json"),
+  ];
+  for (const statePath of stateCandidates) {
+    if (!fs.existsSync(statePath)) continue;
     try {
       const st = JSON.parse(fs.readFileSync(statePath, "utf8"));
-      const acc = st.accounts?.[shortHex];
+      const acc = st.accounts?.[sid];
       if (acc && acc.pubkey) {
-        if (typeof acc.pubkey === "string") return acc.pubkey;
-        if (Array.isArray(acc.pubkey)) return Buffer.from(acc.pubkey).toString("hex");
+        if (typeof acc.pubkey === "string") return acc.pubkey.replace(/^0x/, "");
+        if (Array.isArray(acc.pubkey))
+          return Buffer.from(acc.pubkey).toString("hex");
       }
-    } catch (e) {}
+      if (acc && acc.public_key_hex) {
+        return String(acc.public_key_hex).replace(/^0x/, "");
+      }
+    } catch {
+      /* ignore */
+    }
   }
 
   return null;
@@ -93,26 +175,49 @@ async function processDeposit(event: any, signature: string) {
   console.log(`  Amount Net: ${amountNet} base units`);
   console.log(`  Solana Tx:  ${signature}`);
 
-  // Resolve full public key
   const toPubkeyHex = resolvePublicKey(shortHex);
   if (!toPubkeyHex) {
-    console.warn(`⚠️ [Relayer] Could not resolve public key for short ID ${shortHex}. Deposit deferred.`);
+    console.warn(
+      `⚠️ [Relayer] Could not resolve public key for short ID ${shortHex}. ` +
+        `Register the wallet on mesh first (mesh register / faucet drip). Deposit deferred.`
+    );
     return;
   }
 
-  // 16-byte external ref hash from Solana signature to enforce idempotency
   const extRef = sha256(Buffer.from(signature)).subarray(0, 16).toString("hex");
+  const nodeBin = findNodeBin();
+  const dataDir = fs.existsSync(path.join(DATA, "v0"))
+    ? path.join(DATA, "v0")
+    : DATA;
 
-  // Determine correct binary
-  const nodeBin = fs.existsSync(BIN) ? BIN : path.join(ROOT, "target/debug/meshchain-node");
-
-  console.log(`[Relayer] Minting tMESH on MeshChain ledger...`);
+  console.log(`[Relayer] Minting tMESH via peer ${MINT_PEER}…`);
   try {
-    const cmd = `"${nodeBin}" mint-for-deposit --data-dir "${path.join(DATA, "v0")}" --to-pubkey ${toPubkeyHex} --amount ${amountNet} --external-ref-hex ${extRef} --validator-index 0`;
-    execSync(cmd, { stdio: "inherit" });
-    
-    // Save to processed list
+    // Use execFileSync so args are not shell-interpolated.
+    execFileSync(
+      nodeBin,
+      [
+        "mint-for-deposit",
+        "--data-dir",
+        dataDir,
+        "--to-pubkey",
+        toPubkeyHex,
+        "--amount",
+        amountNet,
+        "--external-ref-hex",
+        extRef,
+        "--validator-index",
+        VALIDATOR_INDEX,
+        "--peer",
+        MINT_PEER,
+      ],
+      { stdio: "inherit" }
+    );
+
     state.processedSeqs.push(seq);
+    // Bound growth
+    if (state.processedSeqs.length > 10_000) {
+      state.processedSeqs = state.processedSeqs.slice(-5_000);
+    }
     saveRelayerState(state);
     console.log(`✅ [Relayer] Successfully processed deposit seq=${seq}\n`);
   } catch (err) {
@@ -124,25 +229,47 @@ async function main() {
   console.log("╔══════════════════════════════════════════════════╗");
   console.log("║    MeshChain ↔ Solana Bridge Relayer Daemon      ║");
   console.log("╚══════════════════════════════════════════════════╝");
+  console.log(`ROOT=${ROOT}`);
+  console.log(`DATA=${DATA}`);
+  console.log(`MINT_PEER=${MINT_PEER}`);
 
-  if (!fs.existsSync(IDL_PATH)) {
-    console.error(`IDL file not found at ${IDL_PATH}. Build programs-mesh-bridge first.`);
+  const idlPath = findIdl();
+  console.log(`IDL=${idlPath}`);
+  findNodeBin(); // fail fast
+
+  if (!process.env.ANCHOR_PROVIDER_URL) {
+    console.warn(
+      "ANCHOR_PROVIDER_URL unset — defaulting Anchor to cluster from env if any"
+    );
+  }
+  if (!process.env.ANCHOR_WALLET) {
+    console.error(
+      "ANCHOR_WALLET required (path to Solana keypair JSON). Example: ~/.config/solana/id.json"
+    );
     process.exit(1);
   }
 
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
-  const idl = JSON.parse(fs.readFileSync(IDL_PATH, "utf8"));
-  const program = new Program(idl, provider);
+  const idl = JSON.parse(fs.readFileSync(idlPath, "utf8"));
+  // Anchor 0.30+ Program(idl, provider); older: Program(idl, programId, provider)
+  let program: Program;
+  try {
+    program = new Program(idl, provider);
+  } catch {
+    program = new Program(idl, PROGRAM_ID, provider);
+  }
 
-  console.log(`Subscribing to DepositEvents from program ${PROGRAM_ID.toBase58()}...`);
+  console.log(
+    `Subscribing to DepositEvents from program ${PROGRAM_ID.toBase58()}…`
+  );
+  console.log(`RPC: ${provider.connection.rpcEndpoint}`);
+  console.log(`Wallet: ${provider.wallet.publicKey.toBase58()}`);
 
-  // Subscribe to live events
-  program.addEventListener("DepositEvent", (event: any, slot: number, signature: string) => {
+  program.addEventListener("DepositEvent", (event: any, _slot: number, signature: string) => {
     processDeposit(event, signature).catch((e) => console.error(e));
   });
 
-  // Keep process alive
   console.log("Relayer Daemon online and listening.");
 }
 

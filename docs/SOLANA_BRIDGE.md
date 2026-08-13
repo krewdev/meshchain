@@ -118,5 +118,47 @@ WithdrawRecord PDA (per mesh burn txid):
 1. Mesh sim: Mint/Burn working (done in ledger + sim)  
 2. Anchor `mesh_bridge` program with deposit/withdraw  
 3. Relayer daemon: Solana RPC ↔ meshchain-node API / Meshtastic  
+
+## Public seed relayer ops
+
+**Do not** rely on the embedded `meshchain-node` spawn. It is **off by default** (`MESH_RELAYER=1` to enable lab mode). Run **one** systemd unit:
+
+```bash
+# On seed host
+sudo cp deploy/meshchain-relayer.service /etc/systemd/system/
+sudo cp deploy/relayer.env.example /etc/meshchain/relayer.env
+# edit ANCHOR_WALLET path; generate key if needed:
+#   sudo -u meshchain solana-keygen new -o /home/meshchain/.config/solana/id.json
+sudo chmod 600 /etc/meshchain/relayer.env
+sudo systemctl daemon-reload
+sudo systemctl enable --now meshchain-relayer
+sudo journalctl -u meshchain-relayer -f
+# or: tail -f /var/log/meshchain/relayer.log
+```
+
+Env (see `deploy/relayer.env.example`):
+
+| Var | Purpose |
+|-----|---------|
+| `ANCHOR_PROVIDER_URL` | Solana RPC (devnet) |
+| `ANCHOR_WALLET` | Hot keypair for Anchor provider |
+| `MESHCHAIN_DATA` | Host data dir (`…/data/host`) |
+| `MESH_MINT_PEER` | Gossip peer for `mint-for-deposit` (`127.0.0.1:9100`) |
+
+IDL ships at `programs-mesh-bridge/idl/programs_mesh_bridge.json` (no Anchor rebuild required on the seed).
+
+Manual mint (mesh side only, no Solana deposit):
+
+```bash
+meshchain-node mint-for-deposit \
+  --data-dir /opt/meshchain/data/host/v0 \
+  --to-pubkey <32-byte-hex> \
+  --amount 1000000 \
+  --external-ref-hex $(openssl rand -hex 16) \
+  --validator-index 0 \
+  --peer 127.0.0.1:9100
+```
+
+Recipient must already be on-chain (register / faucet) so the relayer can resolve short id → full pubkey.
 4. Multisig minter + withdraw attestation  
 5. Hardening + optional ZK deposit pool  

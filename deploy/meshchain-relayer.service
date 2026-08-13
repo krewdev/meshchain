@@ -1,0 +1,27 @@
+[Unit]
+Description=MeshChain Solana bridge relayer (devnet deposits → tMESH mint)
+After=network-online.target
+Wants=network-online.target
+# Prefer validators up so mint-for-deposit --peer works immediately
+After=network-online.target
+
+[Service]
+Type=simple
+User=meshchain
+Group=meshchain
+WorkingDirectory=/opt/meshchain/programs-mesh-bridge
+EnvironmentFile=-/etc/meshchain/relayer.env
+Environment=MESHCHAIN_ROOT=/opt/meshchain
+Environment=MESHCHAIN_DATA=/opt/meshchain/data/host
+Environment=MESH_MINT_PEER=127.0.0.1:9100
+Environment=ANCHOR_PROVIDER_URL=https://api.devnet.solana.com
+# Set ANCHOR_WALLET in /etc/meshchain/relayer.env (do not commit secrets)
+Environment=PATH=/usr/local/bin:/usr/bin:/bin:/home/meshchain/.local/share/solana/install/active_release/bin
+ExecStart=/opt/meshchain/scripts/start_relayer.sh
+Restart=always
+RestartSec=10
+StandardOutput=append:/var/log/meshchain/relayer.log
+StandardError=append:/var/log/meshchain/relayer.log
+
+[Install]
+WantedBy=multi-user.target

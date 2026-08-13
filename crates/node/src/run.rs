@@ -41,6 +41,17 @@ fn now_secs() -> u64 {
         .unwrap_or(0)
 }
 
+fn which_bin(name: &str) -> bool {
+    std::env::var_os("PATH")
+        .map(|paths| {
+            std::env::split_paths(&paths).any(|dir| {
+                let p = dir.join(name);
+                p.is_file()
+            })
+        })
+        .unwrap_or(false)
+}
+
 fn genesis_validator_list(genesis: &GenesisConfig) -> Result<Vec<PublicKey>> {
     let mut out = Vec::with_capacity(genesis.validators.len());
     for h in &genesis.validators {
@@ -160,35 +171,71 @@ pub fn run_validator(cfg: RunConfig) -> Result<()> {
     }
     let mut last_radio_tip = now_secs();
 
-    // --- Solana Bridge Relayer Daemon Setup ---
+    // --- Solana Bridge Relayer (opt-in only) ---
+    // Production: run a single systemd unit (deploy/meshchain-relayer.service).
+    // Embedded spawn is lab-only and disabled unless MESH_RELAYER=1.
     if my_index.is_some() {
-        let relayer_script = PathBuf::from("programs-mesh-bridge/scripts/relayer_daemon.ts");
-        if relayer_script.exists() {
-            println!("Starting Solana-MeshChain Bridge Relayer daemon...");
-            let bridge_dir = PathBuf::from("programs-mesh-bridge");
-            thread::spawn(move || loop {
-                let res = std::process::Command::new("deno")
-                    .arg("run")
-                    .arg("--allow-net")
-                    .arg("--allow-read")
-                    .arg("--allow-write")
-                    .arg("scripts/relayer_daemon.ts")
-                    .current_dir(&bridge_dir)
-                    .output();
+        let relayer_on = std::env::var("MESH_RELAYER")
+            .map(|v| matches!(v.as_str(), "1" | "true" | "yes" | "on"))
+            .unwrap_or(false);
+        if relayer_on {
+            let relayer_script = PathBuf::from("programs-mesh-bridge/scripts/relayer_daemon.ts");
+            if relayer_script.exists() {
+                println!(
+                    "MESH_RELAYER=1 — starting embedded bridge relayer (prefer systemd on public seed)"
+                );
+                let bridge_dir = PathBuf::from("programs-mesh-bridge");
+                thread::spawn(move || loop {
+                    // Prefer npx ts-node (matches scripts); fall back to deno if present.
+                    let res = if which_bin("npx") {
+                        std::process::Command::new("npx")
+                            .args([
+                                "ts-node",
+                                "--compiler-options",
+                                r#"{"module":"commonjs","esModuleInterop":true,"resolveJsonModule":true}"#,
+                                "scripts/relayer_daemon.ts",
+                            ])
+                            .current_dir(&bridge_dir)
+                            .output()
+                    } else if which_bin("deno") {
+                        std::process::Command::new("deno")
+                            .args([
+                                "run",
+                                "--allow-net",
+                                "--allow-read",
+                                "--allow-write",
+                                "scripts/relayer_daemon.ts",
+                            ])
+                            .current_dir(&bridge_dir)
+                            .output()
+                    } else {
+                        eprintln!(
+                            "[Relayer] MESH_RELAYER=1 but neither npx nor deno found; \
+                             install Node or use deploy/meshchain-relayer.service"
+                        );
+                        thread::sleep(RELAYER_POLL_INTERVAL);
+                        continue;
+                    };
 
-                match res {
-                    Ok(out) => {
-                        if !out.status.success() {
-                            let err = String::from_utf8_lossy(&out.stderr);
-                            eprintln!("[Relayer] Bridge Daemon error: {}", err);
+                    match res {
+                        Ok(out) => {
+                            if !out.status.success() {
+                                let err = String::from_utf8_lossy(&out.stderr);
+                                eprintln!("[Relayer] Bridge Daemon error: {}", err);
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("[Relayer] Failed to execute relayer: {}", e);
                         }
                     }
-                    Err(e) => {
-                        eprintln!("[Relayer] Failed to execute relayer: {}", e);
-                    }
-                }
-                thread::sleep(RELAYER_POLL_INTERVAL);
-            });
+                    thread::sleep(RELAYER_POLL_INTERVAL);
+                });
+            } else {
+                eprintln!(
+                    "[Relayer] MESH_RELAYER=1 but {} missing",
+                    relayer_script.display()
+                );
+            }
         }
     }
     let mut finality = FinalityTracker::new();

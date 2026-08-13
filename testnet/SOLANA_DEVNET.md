@@ -23,6 +23,18 @@ ANCHOR_WALLET=~/.config/solana/id.json \
 npx ts-node scripts/initialize_devnet.ts
 ```
 
+## Relayer (public seed)
+
+```bash
+# Prefer systemd (one process) — see docs/SOLANA_BRIDGE.md
+sudo systemctl status meshchain-relayer
+# Lab only: MESH_RELAYER=1 on a single node (not recommended for 3× producers)
+```
+
+Devnet program listens for `DepositEvent`; relayer mints tMESH with:
+
+`mint-for-deposit … --peer 127.0.0.1:9100`
+
 ## Hybrid unlock reminder
 
 Withdraw needs:
