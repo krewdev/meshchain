@@ -3,13 +3,18 @@
  *
  * Auto-update strategies (in priority order):
  * 1. ?api=https://host:8787  — force live Rust scanner
- * 2. config.json live_api    — always-on host (no Vercel redeploy)
- * 3. Snapshot JSON under /scanner/data/ — updated via GitHub Action / sync script
+ * 2. config.json live_api    — public seed (preferred; no redeploy needed)
+ * 3. Built-in DEFAULT_LIVE_API — hard fallback if config missing
+ * 4. Snapshot JSON under /scanner/data/ — only if live API is unreachable
+ *
+ * Snapshot is intentionally a last resort and should never be treated as tip.
  */
 import { meshNameFromShortHex, tipHashHex, bytesToHex } from "./meshname.js";
 
 const params = new URLSearchParams(location.search);
 const DATA_BASE = "/scanner/data";
+/** Public seed scanner — keep in sync with testnet/network.json endpoints.scanner_ui */
+const DEFAULT_LIVE_API = "https://34.172.103.125.sslip.io";
 
 const $ = (id) => document.getElementById(id);
 
@@ -17,6 +22,7 @@ let LIVE_API = (params.get("api") || "").replace(/\/$/, "");
 let POLL_SECS = 15;
 let CHAIN = null;
 let MODE = "snapshot"; // snapshot | live
+let FALLBACK_TO_SNAPSHOT = true;
 
 async function loadJson(url) {
   const r = await fetch(url, { cache: "no-cache" });
@@ -33,9 +39,16 @@ async function loadConfig() {
     if (cfg.poll_secs && Number(cfg.poll_secs) > 0) {
       POLL_SECS = Number(cfg.poll_secs);
     }
+    if (typeof cfg.fallback_to_snapshot === "boolean") {
+      FALLBACK_TO_SNAPSHOT = cfg.fallback_to_snapshot;
+    }
     return cfg;
   } catch {
     return {};
+  } finally {
+    if (!LIVE_API) {
+      LIVE_API = DEFAULT_LIVE_API;
+    }
   }
 }
 
@@ -166,18 +179,29 @@ function renderStats(s) {
     .join("");
 }
 
+function fmtSlotTime(t) {
+  if (t == null || t === "") return "—";
+  try {
+    return new Date(Number(t) * 1000).toISOString().replace(".000Z", "Z");
+  } catch {
+    return String(t);
+  }
+}
+
 function renderBlocks(blocks) {
   if (!blocks.length) {
     $("blocks").textContent = "No blocks yet.";
     return;
   }
   $("blocks").innerHTML = `<table>
-    <tr><th>Height</th><th>Txs</th><th>Hash</th></tr>
+    <tr><th>Height</th><th>Txs</th><th>Leader</th><th>Slot time</th><th>Hash</th></tr>
     ${blocks
       .map(
         (b) => `<tr>
       <td><a href="#" data-q="${b.height}">${b.height}</a></td>
       <td>${b.tx_count}</td>
+      <td>${b.producer_index != null ? b.producer_index : "—"}</td>
+      <td style="font-size:.8em">${fmtSlotTime(b.slot_time)}</td>
       <td><code style="cursor:pointer" data-q="${b.height}">${(b.hash_hex || "").slice(0, 18)}…</code></td>
     </tr>`
       )
@@ -250,10 +274,25 @@ function showDetailsCard(type, data) {
     `;
   } else if (type === "block") {
     title.textContent = `Block #${data.height}`;
+    const when = fmtSlotTime(data.slot_time);
+    const lead = data.producer_index != null ? String(data.producer_index) : "—";
+    const prod = data.producer_pubkey_hex
+      ? `<code>${data.producer_pubkey_hex}</code> <button class="btn-copy" onclick="copyToClipboard('${data.producer_pubkey_hex}', this)">Copy</button>`
+      : "—";
+    const src =
+      data.from_archive === true
+        ? "archive (slot_time from disk)"
+        : data.from_archive === false
+          ? "schedule only (no archive file)"
+          : "—";
     body.innerHTML = `
       <div class="detail-row"><span class="lbl">Height</span><span class="val"><strong>${data.height}</strong></span></div>
       <div class="detail-row"><span class="lbl">Block Hash</span><span class="val"><code>${data.hash_hex}</code> <button class="btn-copy" onclick="copyToClipboard('${data.hash_hex}', this)">Copy</button></span></div>
       <div class="detail-row"><span class="lbl">Transaction Count</span><span class="val">${data.tx_count}</span></div>
+      <div class="detail-row"><span class="lbl">Producer index</span><span class="val">${lead}</span></div>
+      <div class="detail-row"><span class="lbl">Slot time (UTC)</span><span class="val">${when}</span></div>
+      <div class="detail-row"><span class="lbl">Producer pubkey</span><span class="val">${prod}</span></div>
+      <div class="detail-row"><span class="lbl">Source</span><span class="val">${src}</span></div>
     `;
   } else if (type === "validator") {
     title.textContent = `Validator: ${data.mesh_name}`;
@@ -316,19 +355,29 @@ async function loadSnapshot() {
   const when = meta.snapshot_unix
     ? new Date(meta.snapshot_unix * 1000).toISOString()
     : "unknown";
+  const ageDays =
+    meta.snapshot_unix != null
+      ? ((Date.now() / 1000 - Number(meta.snapshot_unix)) / 86400).toFixed(1)
+      : "?";
   $("snapMeta").textContent =
-    `Snapshot ${when} · auto-refresh page every ${POLL_SECS}s · ` +
-    (LIVE_API
-      ? `live API unreachable (${LIVE_API}), using snapshot`
-      : "set live_api in config.json for real-time updates without redeploy");
-  $("errBanner").textContent = "";
+    `FALLBACK SNAPSHOT · height ${chain.height} · taken ${when} (~${ageDays}d old) · ` +
+    `not chain tip · live API unreachable (${LIVE_API || "unset"}) · retry every ${POLL_SECS}s`;
+  $("errBanner").textContent =
+    `Showing stale snapshot (height ${chain.height}). Live scanner preferred: ${LIVE_API || DEFAULT_LIVE_API}`;
 }
 
 async function loadAll() {
   try {
     await loadConfig();
     const liveOk = await loadLive();
-    if (!liveOk) await loadSnapshot();
+    if (!liveOk) {
+      if (FALLBACK_TO_SNAPSHOT) {
+        await loadSnapshot();
+      } else {
+        $("errBanner").textContent =
+          `Live scanner unreachable (${LIVE_API || DEFAULT_LIVE_API}) and snapshot fallback is disabled.`;
+      }
+    }
   } catch (e) {
     console.error(e);
     $("errBanner").textContent = String(e);

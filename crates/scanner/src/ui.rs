@@ -119,11 +119,14 @@ pub const INDEX_HTML: &str = r##"<!DOCTYPE html>
         document.getElementById('blocks').textContent = 'No blocks yet.';
         return;
       }
+      const fmtTime = (t) => t == null ? '—' : new Date(t * 1000).toISOString().replace('.000Z','Z');
       document.getElementById('blocks').innerHTML = `<table>
-        <tr><th>Height</th><th>Txs</th><th>Hash</th></tr>
+        <tr><th>Height</th><th>Txs</th><th>Leader</th><th>Slot time</th><th>Hash</th></tr>
         ${d.blocks.map(b => `<tr>
           <td><a href="#" onclick="showBlock(${b.height});return false">${b.height}</a></td>
           <td>${b.tx_count}</td>
+          <td>${b.producer_index != null ? b.producer_index : '—'}</td>
+          <td style="font-size:.8em">${fmtTime(b.slot_time)}</td>
           <td><code>${b.hash_hex.slice(0,16)}…</code></td>
         </tr>`).join('')}
       </table>`;
@@ -164,7 +167,9 @@ pub const INDEX_HTML: &str = r##"<!DOCTYPE html>
             Hex: <code>${a.short_id_hex}</code>`;
         } else if (r.kind === 'block' && r.block) {
           const b = r.block;
-          out.innerHTML = `<span class="ok">Block</span> #${b.height} · ${b.tx_count} tx · <code>${b.hash_hex}</code>`;
+          const when = b.slot_time != null ? new Date(b.slot_time * 1000).toISOString() : 'n/a';
+          const lead = b.producer_index != null ? `leader ${b.producer_index}` : 'leader ?';
+          out.innerHTML = `<span class="ok">Block</span> #${b.height} · ${b.tx_count} tx · ${lead} · ${when}<br><code>${b.hash_hex}</code>`;
         } else {
           out.innerHTML = `<span class="err">${r.message || 'Not found'}</span>`;
         }

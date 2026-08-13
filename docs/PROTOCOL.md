@@ -54,9 +54,19 @@ Source of truth for MESH balances is the mesh chain — internet is not required
 - Catch-up: finalized blocks archived and served via `BlocksRequest` / `BlocksResponse`  
 - Genesis field `protocol_version` (currently `1`) advertised in gossip Hello
 
+### Production cadence (demand-driven)
+
+- Genesis `slot_secs` (default **30**) is a **minimum gap / idle tick**, not “mint an empty block every 30s.”  
+- Leaders propose when the **mempool has transactions** (or when sealing height 0).  
+- **Empty idle blocks are skipped** on purpose — avoids reward inflation when the chain has no work.  
+- Mempool non-empty can **fast-path** a proposal without waiting out the full slot.  
+- `slot_time` on the header is wall-clock Unix seconds at propose time (use archive/`GET /api/v1/blocks/{h}` for ops).  
+- A long-flat tip with no txs is **normal** under this policy.
+
 ## Block rewards
 
-- Each block with `height > 0` mints `block_reward` to producer (inflation)
+- Each block with `height > 0` mints `block_reward` to producer (inflation)  
+- Because empty idle blocks are skipped, rewards only accrue when blocks are actually sealed
 
 ## Transport
 

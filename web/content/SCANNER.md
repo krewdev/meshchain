@@ -21,9 +21,15 @@ See **[SCANNER_AUTO_UPDATE.md](./SCANNER_AUTO_UPDATE.md)** — three ways:
 git add web/scanner/data && git commit -m "chore: scanner snapshot" && git push
 ```
 
-### Optional live API
+### Live API (default)
 
-Run the Rust process and point the Vercel UI at it:
+Public Vercel scanner **prefers live API** first:
+
+- `web/scanner/data/config.json` → `"live_api": "https://34.172.103.125.sslip.io"`
+- Hard fallback in `web/scanner/js/app.js` → same URL
+- Snapshot under `/scanner/data/` is **fallback only** when the seed is down (UI labels it stale)
+
+Self-host / override:
 
 ```bash
 cargo build -p meshchain-scanner
@@ -43,12 +49,23 @@ cargo build -p meshchain-scanner
 |------|-------------|
 | `GET /` | Explorer UI |
 | `GET /api/v1/status` | Height, supply, auth |
-| `GET /api/v1/blocks` | Recent blocks |
+| `GET /api/v1/blocks` | Recent blocks (`producer_index`, optional `slot_time` from archive) |
+| `GET /api/v1/blocks/{h}` | One block; `slot_time` when `data/blocks/{h}.json` exists |
 | `GET /api/v1/accounts` | Accounts + mesh names |
 | `GET /api/v1/search?q=` | Name / hex / height |
 | `GET /api/v1/validators` | Validator set |
 | `GET /api/v1/auth/challenge` | Mesh 2FA challenge |
 | `POST /api/v1/auth/verify` | Verify signature |
+
+Block JSON fields (summary):
+
+| Field | Notes |
+|-------|--------|
+| `height`, `hash_hex`, `tx_count` | Always from `chain_state` applied list |
+| `producer_index` | `height % N` (and archive when present) |
+| `slot_time` | Unix seconds — only if archive file exists |
+| `producer_pubkey_hex` | From archive or validator set |
+| `from_archive` | `true` when `data/blocks/{h}.json` was loaded |
 
 ## Vercel static files
 

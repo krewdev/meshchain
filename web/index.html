@@ -472,12 +472,14 @@
         document.getElementById('liveStats')?.classList.add('is-live');
       })
       .catch(() => {
-        // Static fallbacks from last known good snapshot
-        set('statHeight', '653');
-        set('statAccounts', '218');
-        set('statValidators', '3');
-        set('statSupply', '1,031,265');
-        if (meta) meta.textContent = 'cached snapshot · scanner unreachable';
+        // Do not invent tip numbers — show unavailable when the seed is down.
+        set('statHeight', '—');
+        set('statAccounts', '—');
+        set('statValidators', '—');
+        set('statSupply', '—');
+        if (meta) {
+          meta.textContent = 'scanner unreachable · open live scanner';
+        }
         document.getElementById('liveStats')?.classList.add('is-stale');
       });
   })();

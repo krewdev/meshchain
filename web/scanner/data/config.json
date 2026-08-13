@@ -2,9 +2,12 @@
   "live_api": "https://34.172.103.125.sslip.io",
   "poll_secs": 15,
   "fallback_to_snapshot": true,
+  "prefer": "live_api",
   "notes": [
-    "Stable public seed scanner (sslip.io). Do not point this at ephemeral Cloudflare tunnels.",
-    "Vercel UI polls live_api every poll_secs and falls back to snapshot JSON if the seed is down."
+    "DEFAULT: Vercel UI always polls live_api first (public seed scanner).",
+    "Snapshot JSON under this directory is FALLBACK only when the seed is down — never treat it as tip.",
+    "Override: ?api=https://host:8787 on the scanner URL.",
+    "Do not point live_api at ephemeral Cloudflare tunnels."
   ],
-  "updated": "2026-08-10T11:10Z"
+  "updated": "2026-08-13T07:15Z"
 }

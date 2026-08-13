@@ -167,7 +167,7 @@ fn handle_client(mut stream: TcpStream, state: AppState) -> Result<()> {
                 .unwrap_or(50usize)
                 .min(500);
             let c = state.chain.read().unwrap();
-            let blocks = model::block_summaries(&c, limit);
+            let blocks = model::block_summaries(&c, &state.data_dir, limit);
             write_json(
                 &mut stream,
                 200,
@@ -189,7 +189,7 @@ fn handle_client(mut stream: TcpStream, state: AppState) -> Result<()> {
                 }
             };
             let c = state.chain.read().unwrap();
-            match model::find_block(&c, height) {
+            match model::find_block(&c, &state.data_dir, height) {
                 Some(b) => write_json(&mut stream, 200, &b, head_only),
                 None => write_json(
                     &mut stream,
@@ -233,7 +233,7 @@ fn handle_client(mut stream: TcpStream, state: AppState) -> Result<()> {
         ("GET", "/api/v1/search") => {
             let q = query_param(query, "q").unwrap_or_default();
             let c = state.chain.read().unwrap();
-            let res = model::search(&q, &c);
+            let res = model::search(&q, &c, &state.data_dir);
             write_json(&mut stream, 200, &res, head_only)
         }
         ("GET", "/api/v1/validators") => {

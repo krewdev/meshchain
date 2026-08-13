@@ -24,12 +24,16 @@ Site: https://meshchain-sigma.vercel.app/docs/?doc=TESTNET
 | **chain_id** | `meshchain-testnet-1` |
 | **Token** | tMESH (6 decimals) |
 | **Consensus** | PoA, ≥3 validators, `ceil(2N/3)` finality |
+| **Block production** | **Demand-driven** — blocks when mempool has txs; empty idle slots skipped |
+| **slot_secs** | 30 (min gap / idle tick — **not** “empty block every 30s”) |
 | **Meshtastic channel name** | `MeshChain-Testnet-1` |
 | **Frame magic** | `MC` |
 | **Solana bridge** | **devnet only** |
 | **PQ threshold** | ≥ 100 tMESH needs cold key; vault burns always PQ |
 
 Full JSON: `testnet/network.json`.
+
+> **Cadence:** If the tip looks “stuck,” check the faucet / whether any txs are submitting. Height only advances when there is work (plus genesis). See [PROTOCOL.md](./PROTOCOL.md) → Production cadence.
 
 ---
 

@@ -1,7 +1,9 @@
 {
-  "snapshot_unix": 1784031681,
-  "source": "/Users/krewdev/meshchain/data/host/v0/chain_state.json",
-  "note": "Public testnet snapshot for Vercel. Re-run scripts/sync_scanner_snapshot.sh && deploy to refresh.",
+  "snapshot_unix": 1786605236,
+  "source": "https://34.172.103.125.sslip.io/api/v1/chain_state",
+  "height": 675,
+  "note": "FALLBACK only. Vercel scanner prefers live_api (config.json). Re-run: curl live chain_state or scripts/sync_scanner_snapshot.sh",
   "auth": "open",
-  "mesh2fa": "planned"
+  "mesh2fa": "planned",
+  "prefer": "live_api"
 }

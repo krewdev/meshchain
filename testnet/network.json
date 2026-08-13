@@ -24,6 +24,8 @@
     "min_validators": 3,
     "finality": "ceil(2N/3) validator ACKs",
     "block_interval_secs_hint": 30,
+    "block_production": "demand_driven",
+    "block_production_note": "Producers seal a block when the mempool has txs (or genesis). Empty idle slots are skipped — slot_secs is a min gap / idle tick, not a guarantee of empty blocks every 30s.",
     "pq_required_above_mesh": 100,
     "vault_burns_require_pq": true,
     "gossip": "TCP line-JSON; see docs/MULTI_VALIDATOR.md"

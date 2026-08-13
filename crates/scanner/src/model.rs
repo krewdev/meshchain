@@ -2,7 +2,10 @@
 
 use meshchain_ledger::state::{AppliedBlock, ChainState};
 use meshchain_proto::address::{mesh_name, parse_recipient, parse_short_id_hex};
+use meshchain_proto::block::Block;
 use serde::Serialize;
+use std::fs;
+use std::path::Path;
 
 const DECIMALS: f64 = 1_000_000.0;
 
@@ -40,6 +43,18 @@ pub struct BlockSummary {
     pub height: u64,
     pub hash_hex: String,
     pub tx_count: u8,
+    /// Round-robin leader: `height % N` (always present when validators known).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub producer_index: Option<u8>,
+    /// Unix seconds from archived block header (`data/blocks/{h}.json`), if present.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub slot_time: Option<u64>,
+    /// Producer ed25519 pubkey hex from archive or validator set.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub producer_pubkey_hex: Option<String>,
+    /// True when `slot_time` / producer came from on-disk archive.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub from_archive: Option<bool>,
 }
 
 #[derive(Serialize)]
@@ -66,30 +81,71 @@ pub fn tip_hash_hex(state: &ChainState) -> String {
     hex::encode(state.tip_hash)
 }
 
-pub fn block_summaries(state: &ChainState, limit: usize) -> Vec<BlockSummary> {
+/// Load a finalized block from `{data_dir}/blocks/{height}.json` if archived.
+pub fn load_archived_block(data_dir: &Path, height: u64) -> Option<Block> {
+    let path = data_dir.join("blocks").join(format!("{height}.json"));
+    let raw = fs::read_to_string(path).ok()?;
+    serde_json::from_str(&raw).ok()
+}
+
+fn leader_index(height: u64, n_validators: usize) -> Option<u8> {
+    if n_validators == 0 {
+        return None;
+    }
+    Some((height as usize % n_validators) as u8)
+}
+
+fn enrich_block(state: &ChainState, data_dir: &Path, b: &AppliedBlock) -> BlockSummary {
+    let n = state.validators.len();
+    let schedule_idx = leader_index(b.height, n);
+
+    if let Some(full) = load_archived_block(data_dir, b.height) {
+        let pi = full.header.producer_index;
+        return BlockSummary {
+            height: b.height,
+            hash_hex: b.hash_hex.clone(),
+            tx_count: b.tx_count,
+            producer_index: Some(pi),
+            slot_time: Some(full.header.slot_time),
+            producer_pubkey_hex: Some(hex::encode(full.header.producer)),
+            from_archive: Some(true),
+        };
+    }
+
+    let producer_pubkey_hex = schedule_idx.and_then(|i| {
+        state
+            .validators
+            .get(i as usize)
+            .map(|pk| hex::encode(pk))
+    });
+
+    BlockSummary {
+        height: b.height,
+        hash_hex: b.hash_hex.clone(),
+        tx_count: b.tx_count,
+        producer_index: schedule_idx,
+        slot_time: None,
+        producer_pubkey_hex,
+        from_archive: Some(false),
+    }
+}
+
+pub fn block_summaries(state: &ChainState, data_dir: &Path, limit: usize) -> Vec<BlockSummary> {
     state
         .applied
         .iter()
         .rev()
         .take(limit)
-        .map(|b: &AppliedBlock| BlockSummary {
-            height: b.height,
-            hash_hex: b.hash_hex.clone(),
-            tx_count: b.tx_count,
-        })
+        .map(|b: &AppliedBlock| enrich_block(state, data_dir, b))
         .collect()
 }
 
-pub fn find_block(state: &ChainState, height: u64) -> Option<BlockSummary> {
+pub fn find_block(state: &ChainState, data_dir: &Path, height: u64) -> Option<BlockSummary> {
     state
         .applied
         .iter()
         .find(|b| b.height == height)
-        .map(|b| BlockSummary {
-            height: b.height,
-            hash_hex: b.hash_hex.clone(),
-            tx_count: b.tx_count,
-        })
+        .map(|b| enrich_block(state, data_dir, b))
 }
 
 pub fn account_view(short_hex: &str, state: &ChainState) -> Option<AccountView> {
@@ -155,7 +211,7 @@ pub fn resolve_account_query(q: &str, state: &ChainState) -> Option<AccountView>
     None
 }
 
-pub fn search(q: &str, state: &ChainState) -> SearchResult {
+pub fn search(q: &str, state: &ChainState, data_dir: &Path) -> SearchResult {
     let q = q.trim();
     if q.is_empty() {
         return SearchResult {
@@ -167,7 +223,7 @@ pub fn search(q: &str, state: &ChainState) -> SearchResult {
         };
     }
     if let Ok(h) = q.parse::<u64>() {
-        if let Some(b) = find_block(state, h) {
+        if let Some(b) = find_block(state, data_dir, h) {
             return SearchResult {
                 query: q.into(),
                 kind: "block".into(),

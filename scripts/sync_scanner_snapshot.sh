@@ -1,13 +1,26 @@
 #!/usr/bin/env bash
-# Copy local chain_state into web/scanner/data for Vercel public explorer.
+# Copy chain_state into web/scanner/data as FALLBACK snapshot for Vercel.
+# Prefer live_api (config.json) for tip; snapshot is only when the seed is down.
+#
+# Usage:
+#   ./scripts/sync_scanner_snapshot.sh                         # local data/chain_state.json
+#   ./scripts/sync_scanner_snapshot.sh /path/to/chain_state.json
+#   ./scripts/sync_scanner_snapshot.sh --live                   # pull public seed API
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-SRC="${1:-$ROOT/data/chain_state.json}"
 DST_DIR="$ROOT/web/scanner/data"
+LIVE_URL="${MESHCHAIN_CHAIN_STATE_URL:-https://34.172.103.125.sslip.io/api/v1/chain_state}"
 mkdir -p "$DST_DIR"
 
-if [[ ! -f "$SRC" ]]; then
+SRC="${1:-$ROOT/data/chain_state.json}"
+if [[ "${1:-}" == "--live" ]]; then
+  TMP="$(mktemp)"
+  curl -fsSL -A "meshchain-snapshot-sync" "$LIVE_URL" -o "$TMP"
+  SRC="$TMP"
+  trap 'rm -f "$TMP"' EXIT
+elif [[ ! -f "$SRC" ]]; then
   echo "Missing $SRC — run: mesh testnet-setup && mesh demo"
+  echo "Or: $0 --live   # pull $LIVE_URL"
   exit 1
 fi
 
@@ -16,6 +29,13 @@ import json, sys, time
 from pathlib import Path
 src, dst_dir = Path(sys.argv[1]), Path(sys.argv[2])
 d = json.loads(src.read_text())
+minters = d.get("minters")
+if isinstance(minters, list):
+    minters_out = minters
+elif isinstance(minters, dict):
+    minters_out = list(minters.keys()) if minters else []
+else:
+    minters_out = []
 out = {
     "chain_id": d["chain_id"],
     "height": d["height"],
@@ -27,16 +47,18 @@ out = {
     "total_supply": d["total_supply"],
     "applied": d["applied"],
     "pq_required_above": d.get("pq_required_above", 100_000_000),
-    "minters": d["minters"] if isinstance(d.get("minters"), list) else [],
+    "minters": minters_out,
 }
 (dst_dir / "chain_state.json").write_text(json.dumps(out, separators=(",", ":")))
 (dst_dir / "meta.json").write_text(json.dumps({
     "snapshot_unix": int(time.time()),
     "source": str(src),
-    "note": "Public testnet snapshot for Vercel. Re-run scripts/sync_scanner_snapshot.sh && deploy to refresh.",
+    "height": out["height"],
+    "note": "FALLBACK only. Vercel scanner prefers live_api in config.json. Re-run this script (or --live) && deploy.",
     "auth": "open",
     "mesh2fa": "planned",
-}, indent=2))
+    "prefer": "live_api",
+}, indent=2) + "\n")
 print(f"synced height={out['height']} accounts={len(out['accounts'])} → {dst_dir}")
 PY
 
