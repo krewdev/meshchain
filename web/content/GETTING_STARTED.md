@@ -104,12 +104,29 @@ Docs: [MESHTASTIC.md](MESHTASTIC.md) · [AIR_FINALITY.md](AIR_FINALITY.md) · [S
 Deposit SOL into the vault → relayer mints tMESH. Cash-out needs mesh burn + 2 attestors.
 
 ```bash
+# Web: deposit guide + mint watch
+# https://meshchain-sigma.vercel.app/bridge/
+
 # Ops / e2e helpers
-./scripts/e2e_hybrid_roundtrip.sh          # deposit → mint → (burn/withdraw if cold key)
+./scripts/e2e_hybrid_roundtrip.sh          # deposit → mint → burn(peer) → withdraw
 ./scripts/start_relayer.sh                 # or systemd meshchain-relayer on seed
+
+# Peer burn (public seed)
+meshchain-node burn-for-withdraw \
+  --data-dir ./data --wallet ./data/keys/me.json --cold ./data/keys/cold.json \
+  --amount <base_units> --dest-sol <SolPubkey> --asset-id 1 \
+  --peer 34.172.103.125:9100
 ```
 
 See [SOLANA_BRIDGE.md](SOLANA_BRIDGE.md) and [HYBRID_LOCK.md](HYBRID_LOCK.md).
+
+## Seed ops
+
+```bash
+./scripts/status_public_seed.sh    # core HTTP/peer checks
+./scripts/seed_health.sh           # + relayer unit when on host
+./scripts/deploy_public_seed.sh    # pull + release build + restart (no wipe)
+```
 
 ## Safety
 

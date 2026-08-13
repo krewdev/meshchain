@@ -10,6 +10,7 @@
     { id: "HARDWARE", title: "Hardware" },
     { id: "MESHTASTIC", title: "Meshtastic air path" },
     { id: "AIR_FINALITY", title: "Air finality" },
+    { id: "RADIO_HARDWARE", title: "Radio hardware" },
     { id: "DISCORD", title: "Discord" },
     { id: "DONATE", title: "Donate" },
 

@@ -202,5 +202,23 @@ export MESH_MINT_PEER=34.172.103.125:9100       # or 127.0.0.1:9100 on seed
 # deposit only:
 SKIP_WITHDRAW=1 ./scripts/e2e_hybrid_roundtrip.sh
 ```
+
+### Peer-submitted vault burn (public seed)
+
+```bash
+# After join-public + funded wallet + cold key:
+meshchain-node burn-for-withdraw \
+  --data-dir ./data \
+  --wallet ./data/keys/me.json \
+  --cold ./data/keys/cold.json \
+  --amount 24925000 \
+  --dest-sol <YourSolPubkeyBase58> \
+  --asset-id 1 \
+  --peer 34.172.103.125:9100 \
+  --scanner https://34.172.103.125.sslip.io/api/v1/status
+# writes data/last_burn.json → use with e2e_cashout / hybrid withdraw
+```
+
+Web helper (deposit + mint watch): https://meshchain-sigma.vercel.app/bridge/
 4. Multisig minter + withdraw attestation  
 5. Hardening + optional ZK deposit pool  

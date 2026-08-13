@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MeshChain — Solana vault deposit (devnet)</title>
+  <meta name="description" content="Deposit Solana devnet SOL into the MeshChain hybrid vault. Public relayer mints tMESH on testnet." />
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="icon" href="/assets/logo.svg" type="image/svg+xml" />
+  <style>
+    .bridge-card { max-width: 560px; margin: 0 auto; }
+    .bridge-card label { display: block; font-size: 0.85rem; margin-top: 0.75rem; opacity: 0.9; }
+    .bridge-card .form-input { width: 100%; margin: 0.35rem 0 0.5rem; box-sizing: border-box; }
+    .bridge-hint { font-size: 0.92rem; color: var(--muted, #8a93a6); line-height: 1.5; }
+    .bridge-out {
+      margin-top: 1rem; padding: 0.9rem 1rem; border-radius: 10px;
+      background: rgba(0,0,0,0.28); font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.8rem; white-space: pre-wrap; word-break: break-all; min-height: 5rem;
+    }
+    .bridge-out.ok { border: 1px solid rgba(80,200,120,0.45); }
+    .bridge-out.warn { border: 1px solid rgba(220,160,40,0.45); }
+    .bridge-out.err { border: 1px solid rgba(220,80,80,0.5); }
+    .warn-box {
+      margin: 1rem 0; padding: 0.75rem 1rem; border-radius: 10px;
+      background: rgba(220,160,40,0.12); border: 1px solid rgba(220,160,40,0.35);
+      font-size: 0.92rem; line-height: 1.45;
+    }
+    .steps-mini { margin: 1.25rem 0; padding-left: 1.2rem; line-height: 1.55; font-size: 0.95rem; }
+    .steps-mini li { margin: 0.35rem 0; }
+    .mint-panel {
+      margin-top: 1.5rem; padding: 1rem 1.1rem; border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.03);
+    }
+    .mint-panel h3 { margin: 0 0 0.5rem; font-size: 1.05rem; }
+  </style>
+</head>
+<body>
+  <div class="testnet-banner">
+    DEVNET + TESTNET ONLY · tMESH has no cash value · never deposit <strong>mainnet</strong> SOL
+  </div>
+  <header class="nav">
+    <div class="wrap nav-inner">
+      <a class="brand" href="/">
+        <img class="logo-img" src="/assets/logo.svg" width="36" height="36" alt="MeshChain" />
+        MeshChain
+      </a>
+      <nav class="nav-links">
+        <a class="active" href="/bridge/">Bridge</a>
+        <a href="/docs/?doc=SOLANA_BRIDGE">Docs</a>
+        <a href="/faucet/">Faucet</a>
+        <a href="https://34.172.103.125.sslip.io/" target="_blank" rel="noopener">Explorer</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap" style="padding:2rem 1rem 4rem">
+    <div class="bridge-card">
+      <h1 style="margin:0 0 0.35rem;font-size:1.65rem">Hybrid vault deposit</h1>
+      <p class="bridge-hint">
+        Deposit <strong>Solana devnet</strong> SOL bound to your mesh short id.
+        The public seed <strong>relayer</strong> mints tMESH (minus fee). Cash-out later needs mesh burn + attestors.
+      </p>
+
+      <div class="warn-box">
+        <strong>1. Register on mesh first</strong> (or deposits stay deferred):
+        <pre style="margin:0.5rem 0 0;font-size:0.78rem;white-space:pre-wrap">mesh join-public
+mesh new-wallet --name me.json --publish
+mesh faucet-drip --wallet me.json
+mesh address --wallet me.json   # copy the 16-char hex id</pre>
+      </div>
+
+      <ol class="steps-mini">
+        <li>Paste your <strong>16-char hex short id</strong> (from <code>mesh address</code>).</li>
+        <li>Fund a Solana <strong>devnet</strong> wallet, then deposit with CLI (or Anchor script).</li>
+        <li>Watch <strong>mint status</strong> below — balance should jump after the relayer mints.</li>
+      </ol>
+
+      <label for="shortId">Mesh short id (16 hex chars)</label>
+      <input id="shortId" class="form-input" placeholder="939227b0aeba7e67" autocomplete="off" spellcheck="false" />
+
+      <label for="amount">Amount (SOL, devnet)</label>
+      <input id="amount" class="form-input" type="number" min="0.001" step="0.001" value="0.02" />
+
+      <div class="hero-actions" style="margin-top:0.75rem;flex-wrap:wrap;gap:0.5rem">
+        <button class="btn btn-primary" id="btnCli" type="button">Show deposit CLI</button>
+        <button class="btn btn-ghost" id="btnWatch" type="button">Watch mint status</button>
+        <a class="btn btn-ghost" href="https://explorer.solana.com/address/CBRQcjk5DLJh1HcW3XF5TmUxZsBumhiABJa6M15r3Vkx?cluster=devnet" target="_blank" rel="noopener">Program</a>
+      </div>
+
+      <div class="bridge-out" id="out">Paste short id, then show CLI or watch mint.</div>
+
+      <div class="mint-panel">
+        <h3>Mint status (public mesh)</h3>
+        <p class="bridge-hint" style="margin:0 0 0.6rem">
+          Polls live chain state for your short id. After a successful vault deposit + relayer mint, balance rises.
+        </p>
+        <div class="live-stats-grid">
+          <div class="live-stat">
+            <span class="live-stat-value" id="statHeight">—</span>
+            <span class="live-stat-key">Mesh height</span>
+          </div>
+          <div class="live-stat">
+            <span class="live-stat-value" id="statBal">—</span>
+            <span class="live-stat-key">Account tMESH</span>
+          </div>
+          <div class="live-stat">
+            <span class="live-stat-value" id="statNonce">—</span>
+            <span class="live-stat-key">Nonce</span>
+          </div>
+          <div class="live-stat">
+            <span class="live-stat-value" id="statFound">—</span>
+            <span class="live-stat-key">On-chain</span>
+          </div>
+        </div>
+        <p class="bridge-hint" id="watchMeta" style="margin-top:0.75rem">Idle</p>
+      </div>
+
+      <p class="bridge-hint" style="margin-top:1.5rem">
+        Docs:
+        <a href="/docs/?doc=SOLANA_BRIDGE">Solana bridge</a> ·
+        <a href="/docs/?doc=HYBRID_LOCK">Hybrid lock</a> ·
+        <a href="/docs/?doc=GETTING_STARTED">Getting started</a>
+        <br />Program <code>CBRQcjk5DLJh1HcW3XF5TmUxZsBumhiABJa6M15r3Vkx</code> (devnet)
+      </p>
+    </div>
+  </main>
+
+  <script>
+  (function () {
+    const SCANNER = 'https://34.172.103.125.sslip.io';
+    const PROGRAM = 'CBRQcjk5DLJh1HcW3XF5TmUxZsBumhiABJa6M15r3Vkx';
+    const out = document.getElementById('out');
+    let watchTimer = null;
+    let baseline = null;
+
+    function setOut(msg, cls) {
+      out.textContent = msg;
+      out.className = 'bridge-out' + (cls ? ' ' + cls : '');
+    }
+
+    function shortId() {
+      const s = (document.getElementById('shortId').value || '').trim().toLowerCase();
+      if (!/^[0-9a-f]{16}$/.test(s)) {
+        throw new Error('Enter a 16-character hex short id from `mesh address`');
+      }
+      return s;
+    }
+
+    document.getElementById('btnCli').onclick = () => {
+      try {
+        const sid = shortId();
+        const amt = document.getElementById('amount').value || '0.02';
+        setOut(
+`# 1) Ensure mesh account exists
+mesh join-public
+mesh new-wallet --name me.json --publish
+mesh faucet-drip --wallet me.json
+
+# 2) Deposit SOL (devnet) bound to short id ${sid}
+# From monorepo with funded ANCHOR_WALLET:
+export ANCHOR_PROVIDER_URL=https://api.devnet.solana.com
+export ANCHOR_WALLET=$HOME/.config/solana/id.json
+
+# Or use programs-mesh-bridge scripts / e2e helpers:
+#   SKIP_WITHDRAW=1 MESH_MINT_PEER=34.172.103.125:9100 ./scripts/e2e_hybrid_roundtrip.sh
+
+# 3) Relayer on public seed mints tMESH automatically when short id is registered.
+# Watch below or:
+#   mesh balance --wallet me.json
+# Scanner: ${SCANNER}/
+
+# Program: ${PROGRAM}
+# Amount: ${amt} SOL (devnet only)`,
+          'ok'
+        );
+      } catch (e) {
+        setOut(String(e.message || e), 'err');
+      }
+    };
+
+    async function pollOnce() {
+      const sid = shortId();
+      const st = await fetch(SCANNER + '/api/v1/status', { cache: 'no-store' }).then((r) => r.json());
+      document.getElementById('statHeight').textContent = st.height ?? '—';
+
+      // Prefer accounts endpoint if present, else chain_state
+      let acc = null;
+      try {
+        const a = await fetch(SCANNER + '/api/v1/accounts/' + sid, { cache: 'no-store' });
+        if (a.ok) acc = await a.json();
+      } catch (_) {}
+      if (!acc) {
+        const cs = await fetch(SCANNER + '/api/v1/chain_state', { cache: 'no-store' }).then((r) => r.json());
+        const row = (cs.accounts || {})[sid];
+        if (row) {
+          acc = {
+            found: true,
+            balance: row.balance,
+            balance_tmesh: (row.balance || 0) / 1e6,
+            nonce: row.nonce,
+          };
+        }
+      }
+
+      if (acc && (acc.found !== false) && acc.balance != null) {
+        const bal = Number(acc.balance_tmesh != null ? acc.balance_tmesh : acc.balance / 1e6);
+        document.getElementById('statBal').textContent = bal.toFixed(6);
+        document.getElementById('statNonce').textContent = String(acc.nonce ?? '—');
+        document.getElementById('statFound').textContent = 'yes';
+        if (baseline == null) baseline = bal;
+        const delta = bal - baseline;
+        let msg = 'Account ' + sid + ' · ' + bal.toFixed(6) + ' tMESH';
+        if (delta > 0.000001) {
+          msg += ' · +' + delta.toFixed(6) + ' since watch started (mint likely landed)';
+          document.getElementById('watchMeta').textContent = msg;
+          setOut(msg + '\nheight ' + st.height, 'ok');
+        } else {
+          document.getElementById('watchMeta').textContent = msg + ' · waiting for mint…';
+        }
+      } else {
+        document.getElementById('statBal').textContent = '—';
+        document.getElementById('statNonce').textContent = '—';
+        document.getElementById('statFound').textContent = 'no';
+        document.getElementById('watchMeta').textContent =
+          'Short id not on-chain yet — register/faucet first, or wait for relayer.';
+        setOut('Not found on mesh tip yet: ' + sid + '\nRegister with mesh new-wallet --publish', 'warn');
+      }
+    }
+
+    document.getElementById('btnWatch').onclick = async () => {
+      try {
+        baseline = null;
+        if (watchTimer) clearInterval(watchTimer);
+        setOut('Watching ' + shortId() + ' …', 'warn');
+        await pollOnce();
+        watchTimer = setInterval(() => {
+          pollOnce().catch((e) => {
+            document.getElementById('watchMeta').textContent = String(e.message || e);
+          });
+        }, 8000);
+      } catch (e) {
+        setOut(String(e.message || e), 'err');
+      }
+    };
+
+    // tip only
+    fetch(SCANNER + '/api/v1/status', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((d) => {
+        document.getElementById('statHeight').textContent = d.height ?? '—';
+      })
+      .catch(() => {});
+  })();
+  </script>
+</body>
+</html>

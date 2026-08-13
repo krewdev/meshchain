@@ -202,24 +202,14 @@ if [[ -z "${COLD:-}" || ! -f "${COLD:-}" ]]; then
   exit 0
 fi
 
-echo "== 3) burn-for-withdraw (mesh) =="
+echo "== 3) burn-for-withdraw (mesh, peer submit) =="
 DEST_SOL=$(python3 - <<PY
-import json
-from pathlib import Path
-# Solana address from ANCHOR_WALLET secret
-import sys
-try:
-  from solders.keypair import Keypair
-except Exception:
-  pass
-# fallback: use solana-keygen address if present
 import subprocess, os
 w=os.environ.get("ANCHOR_WALLET")
 try:
   out=subprocess.check_output(["solana-keygen","pubkey",w], text=True).strip()
   print(out)
 except Exception:
-  # last resort: ask node web3 if available
   print("")
 PY
 )
@@ -230,23 +220,23 @@ const s=Uint8Array.from(JSON.parse(fs.readFileSync(process.env.ANCHOR_WALLET)));
 console.log(Keypair.fromSecretKey(s).publicKey.toBase58());
 ')
 fi
-echo "  dest_sol=$DEST_SOL amount=$AMOUNT_NET cold=$COLD"
+echo "  dest_sol=$DEST_SOL amount=$AMOUNT_NET cold=$COLD peer=$MESH_MINT_PEER"
+# Prefer peer submit against public seed / local validators (not offline fork).
+BURN_DATA="$DATA"
+if [[ -f "$DATA/v0/chain_state.json" ]]; then BURN_DATA="$DATA/v0"; fi
+# Ensure genesis next to chain_state for burn loader
+if [[ -f "$DATA/genesis.json" && ! -f "$BURN_DATA/genesis.json" ]]; then
+  cp -f "$DATA/genesis.json" "$BURN_DATA/genesis.json" 2>/dev/null || true
+fi
 "$NODE" burn-for-withdraw \
-  --data-dir "${DATA}/v0" \
+  --data-dir "$BURN_DATA" \
   --wallet "$MESH_WALLET" \
   --cold "$COLD" \
   --amount "$AMOUNT_NET" \
   --dest-sol "$DEST_SOL" \
-  --asset-id 1 || {
-  # try data_dir without v0
-  "$NODE" burn-for-withdraw \
-    --data-dir "$DATA" \
-    --wallet "$MESH_WALLET" \
-    --cold "$COLD" \
-    --amount "$AMOUNT_NET" \
-    --dest-sol "$DEST_SOL" \
-    --asset-id 1
-}
+  --asset-id 1 \
+  --peer "$MESH_MINT_PEER" \
+  --scanner "${MESH_SCANNER_STATUS:-https://34.172.103.125.sslip.io/api/v1/status}"
 
 # burn writes last_burn.json under data_dir
 BURN_JSON="${DATA}/v0/last_burn.json"

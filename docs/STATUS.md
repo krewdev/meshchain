@@ -53,6 +53,9 @@ sudo EXTRA_PEERS=35.192.20.103:9100 /opt/meshchain/deploy/remote-bind-public.sh
 | Solana deposit → tMESH mint (PDA poll relayer) | yes (devnet) |
 | Air balance + AirBlockAck framing | yes (`e2e_air_finality.sh`) |
 | Deferred deposit retry until mesh register | yes |
+| Peer-submitted vault burn (`--peer`) | yes |
+| Hybrid withdraw e2e (devnet) | yes (attestors) |
+| Seed deploy / health scripts | `deploy_public_seed.sh` · `seed_health.sh` |
 
 ## Known limitations
 

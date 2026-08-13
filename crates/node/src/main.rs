@@ -124,6 +124,15 @@ enum Commands {
         dest_sol: String,
         #[arg(long, default_value_t = 1)]
         asset_id: u32,
+        /// Submit Burn to a live peer (public seed / multi-validator). Preferred.
+        #[arg(long, default_value = "")]
+        peer: String,
+        /// Offline local finality (LAB ONLY — needs all validator keys in data_dir)
+        #[arg(long, default_value_t = false)]
+        offline: bool,
+        /// After peer submit, poll this scanner status URL for height (optional)
+        #[arg(long, default_value = "")]
+        scanner: String,
     },
 }
 
@@ -326,8 +335,21 @@ fn main() -> Result<()> {
             amount,
             dest_sol,
             asset_id,
+            peer,
+            offline,
+            scanner,
         } => {
-            burn_for_withdraw(&data_dir, &wallet, &cold, amount, &dest_sol, asset_id)?;
+            burn_for_withdraw(
+                &data_dir,
+                &wallet,
+                &cold,
+                amount,
+                &dest_sol,
+                asset_id,
+                &peer,
+                offline,
+                &scanner,
+            )?;
         }
     }
     Ok(())
@@ -492,6 +514,9 @@ fn burn_for_withdraw(
     amount: u64,
     dest_sol: &str,
     asset_id: u32,
+    peer: &str,
+    offline: bool,
+    scanner: &str,
 ) -> Result<()> {
     use crate::consensus::{leader_index, produce_block, FinalityTracker};
     use meshchain_ledger::state::ChainState;
@@ -516,10 +541,14 @@ fn burn_for_withdraw(
     let from = short_id(&wallet.public_key());
     let acc = state
         .account(&from)
-        .ok_or_else(|| anyhow::anyhow!("wallet not on chain"))?
+        .ok_or_else(|| anyhow::anyhow!("wallet not on chain — run mesh join-public + faucet first"))?
         .clone();
     if acc.balance < amount {
-        anyhow::bail!("insufficient balance");
+        anyhow::bail!(
+            "insufficient balance: have {} need {}",
+            acc.balance,
+            amount
+        );
     }
 
     let hint = redeem_hint(b"sol", dest_sol.as_bytes());
@@ -531,8 +560,86 @@ fn burn_for_withdraw(
         asset_id,
     };
     let tx = Tx::sign_with_pq(body, &wallet, &cold).map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    tx.verify().map_err(|e| anyhow::anyhow!(e.to_string()))?;
     let burn_txid = tx.txid();
     let burn_hex = hex::encode(burn_txid);
+
+    let peer = if peer.is_empty() {
+        std::env::var("MESH_MINT_PEER")
+            .or_else(|_| std::env::var("MESH_SUBMIT"))
+            .unwrap_or_default()
+    } else {
+        peer.to_string()
+    };
+
+    // Preferred: submit Burn to live gossip (public seed / multi-validator).
+    if !peer.is_empty() && !offline {
+        let tx_path = data_dir.join("last_burn_tx.json");
+        fs::write(&tx_path, serde_json::to_string_pretty(&tx)?)?;
+        run::submit_tx_file(&tx_path, &peer)?;
+        println!("submitted burn {amount} base units via {peer}");
+        println!("txid: {burn_hex}");
+
+        let mut mesh_height = state.height;
+        let scanner_url = if scanner.is_empty() {
+            std::env::var("MESH_SCANNER_STATUS")
+                .unwrap_or_else(|_| "https://34.172.103.125.sslip.io/api/v1/status".into())
+        } else {
+            scanner.to_string()
+        };
+        // Poll scanner for tip advance (burn inclusion).
+        for i in 0..40 {
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            if let Ok(body) = http_get_text(&scanner_url) {
+                if let Ok(v) = serde_json::from_str::<serde_json::Value>(&body) {
+                    if let Some(h) = v.get("height").and_then(|x| x.as_u64()) {
+                        if h > mesh_height || i == 0 {
+                            mesh_height = h;
+                        }
+                        if i > 2 && h >= state.height {
+                            // After a few polls, accept tip (may already have moved).
+                            mesh_height = h;
+                            if i >= 6 {
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // Prefer height at least one above pre-burn tip if the tip moved.
+        if mesh_height <= state.height {
+            mesh_height = state.height.saturating_add(1);
+        }
+
+        let out = serde_json::json!({
+            "burn_txid_hex": burn_hex,
+            "amount": amount,
+            "mesh_height": mesh_height,
+            "mesh_short_id_hex": short_id_hex(&from),
+            "mesh_name": mesh_name(&from),
+            "dest_sol": dest_sol,
+            "asset_id": asset_id,
+            "submitted_peer": peer,
+            "pending_finality": true,
+            "pre_height": state.height,
+        });
+        let out_path = data_dir.join("last_burn.json");
+        fs::write(&out_path, serde_json::to_string_pretty(&out)?)?;
+        println!("burn submitted; mesh_height≈{mesh_height} (poll scanner for final tip)");
+        println!("mesh name: {}", mesh_name(&from));
+        println!("wrote {}", out_path.display());
+        println!("Next: hybrid withdraw on Solana with DEPOSIT_SEQ + last_burn.json");
+        return Ok(());
+    }
+
+    // Offline lab path: needs local validator keys (can fork multi-host public state).
+    if !offline && peer.is_empty() {
+        anyhow::bail!(
+            "burn-for-withdraw requires --peer HOST:PORT (or MESH_MINT_PEER) for public seed.\n\
+             Lab only: pass --offline with local validator keys in data_dir/keys/."
+        );
+    }
 
     let n = state.validators.len();
     let next = state.height + 1;
@@ -569,10 +676,11 @@ fn burn_for_withdraw(
         "dest_sol": dest_sol,
         "asset_id": asset_id,
         "balance_after": state.balance_of(&from),
+        "offline": true,
     });
     let out_path = data_dir.join("last_burn.json");
     fs::write(&out_path, serde_json::to_string_pretty(&out)?)?;
-    println!("burn finalized height={}", state.height);
+    println!("burn finalized height={} (offline lab)", state.height);
     println!("burn_txid: {burn_hex}");
     println!("mesh name: {}", mesh_name(&from));
     println!(
@@ -581,4 +689,23 @@ fn burn_for_withdraw(
     );
     println!("wrote {}", out_path.display());
     Ok(())
+}
+
+/// Minimal HTTP GET for scanner status (no extra deps).
+fn http_get_text(url: &str) -> Result<String> {
+    // Prefer curl for TLS on public seed; fall back to raw TCP only for http://
+    if url.starts_with("https://") || url.starts_with("http://") {
+        let out = std::process::Command::new("curl")
+            .args(["-fsS", "--max-time", "5", url])
+            .output()
+            .with_context(|| format!("curl {url}"))?;
+        if !out.status.success() {
+            anyhow::bail!(
+                "curl failed: {}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+        }
+        return Ok(String::from_utf8_lossy(&out.stdout).into_owned());
+    }
+    anyhow::bail!("unsupported url: {url}")
 }

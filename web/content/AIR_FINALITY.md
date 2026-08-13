@@ -29,13 +29,17 @@ Same finality threshold as TCP: **ceil(2N/3)** authorized ACKs (producer sig cou
 1. **Lab e2e (shipped)** — `./scripts/e2e_air_finality.sh`  
    3 validators + mock radio relay; asserts multi-node tip finality, air balance, and AirBlockAck framing/bridge.  
    Full “TCP-off” finality still needs `--radio` on each producer (Phase 3).
-2. **Catch-up over air** — BlockHint + selective Frag for missing heights (today tip ads trigger TCP `BlocksRequest`).
-3. **Seed ops** — attach hardware or mock radio on producer hosts; document `--radio` / systemd unit.
+2. **Catch-up (hybrid, current)**  
+   - Air **Tip** / **BlockHint** → lagging node logs tip  
+   - TCP **`BlocksRequest` / `BlocksResponse`** loads archived `data/blocks/{h}.json`  
+   - Full state snapshot via `SyncResponse` (observers)  
+   Selective Frag over air for missing heights is next.
+3. **Hardware runbook** — [RADIO_HARDWARE.md](RADIO_HARDWARE.md)
 4. **Rate limits** — per-name BalQuery already limited; add per-peer air ACK storm guard.
 
 ```bash
 ./scripts/e2e_air_finality.sh
-# also: ./scripts/e2e_air_path.sh   # air submit + balance
+./scripts/e2e_air_path.sh
 ```
 
 ## Phase 3 (later)
