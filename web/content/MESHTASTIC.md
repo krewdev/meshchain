@@ -127,7 +127,10 @@ Public seed `34.172.103.125` remains the internet hub for join/faucet.
 | 8 | BlockHint | height + hash when block too big |
 | 12 | BalQuery | short id + req id (12 B) |
 | 13 | BalReply | balance + nonce + height (37 B) |
+| 14 | AirBlockAck | height + hash + vidx + sig (105 B) — **air finality** |
 | 20 | GossipJson | small JSON hello/tx/ack |
+
+> Hex `BlockAck` (type 3) is ~288 B and **does not fit** LoRa. Use type **14** AirBlockAck. See [AIR_FINALITY.md](AIR_FINALITY.md).
 
 Max payload **200** bytes (+ 6-byte header).
 

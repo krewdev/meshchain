@@ -41,8 +41,8 @@ fn now_secs() -> u64 {
         .unwrap_or(0)
 }
 
-fn genesis_validator_set(genesis: &GenesisConfig) -> Result<HashSet<PublicKey>> {
-    let mut set = HashSet::new();
+fn genesis_validator_list(genesis: &GenesisConfig) -> Result<Vec<PublicKey>> {
+    let mut out = Vec::with_capacity(genesis.validators.len());
     for h in &genesis.validators {
         let b = hex::decode(h).context("bad validator hex in genesis")?;
         if b.len() != 32 {
@@ -50,9 +50,9 @@ fn genesis_validator_set(genesis: &GenesisConfig) -> Result<HashSet<PublicKey>> 
         }
         let mut pk = [0u8; 32];
         pk.copy_from_slice(&b);
-        set.insert(pk);
+        out.push(pk);
     }
-    Ok(set)
+    Ok(out)
 }
 
 fn blocks_dir(data_dir: &Path) -> PathBuf {
@@ -96,7 +96,8 @@ pub fn run_validator(cfg: RunConfig) -> Result<()> {
             .with_context(|| format!("missing {}", genesis_path.display()))?,
     )?;
     let n = genesis.validators.len();
-    let authorized = genesis_validator_set(&genesis)?;
+    let validator_pks = genesis_validator_list(&genesis)?;
+    let authorized: HashSet<PublicKey> = validator_pks.iter().copied().collect();
     let protocol_version = genesis.protocol_version;
 
     let observer = cfg.observer;
@@ -247,6 +248,7 @@ pub fn run_validator(cfg: RunConfig) -> Result<()> {
                             &mut seen_at_height,
                             &hub,
                             Some(kp),
+                            my_index,
                             &authorized,
                             block,
                             n,
@@ -318,6 +320,7 @@ pub fn run_validator(cfg: RunConfig) -> Result<()> {
                                         &mut seen_at_height,
                                         &hub,
                                         keypair.as_ref(),
+                                        my_index,
                                         &authorized,
                                         block,
                                         n,
@@ -353,6 +356,7 @@ pub fn run_validator(cfg: RunConfig) -> Result<()> {
                         &mut seen_at_height,
                         &hub,
                         keypair.as_ref(),
+                        my_index,
                         &authorized,
                         block,
                         n,
@@ -618,6 +622,7 @@ pub fn run_validator(cfg: RunConfig) -> Result<()> {
                                 &mut seen_at_height,
                                 &hub,
                                 keypair.as_ref(),
+                                my_index,
                                 &authorized,
                                 block,
                                 n,
@@ -628,6 +633,7 @@ pub fn run_validator(cfg: RunConfig) -> Result<()> {
                         }
                     }
                     meshchain_transport::frame::MsgType::BlockAck => {
+                        // Legacy fat BlockAck (rarely fits LoRa); still accept if someone sent it.
                         if let Ok(ack) = meshchain_transport::frame::decode_block_ack(&frame) {
                             let block_hash_hex = ack.block_hash_hex.clone();
                             let validator_pubkey_hex = ack.validator_pubkey_hex.clone();
@@ -635,7 +641,7 @@ pub fn run_validator(cfg: RunConfig) -> Result<()> {
                             println!(
                                 "Radio RX: received BlockAck height={} from {}",
                                 ack.height,
-                                &validator_pubkey_hex[..8]
+                                &validator_pubkey_hex[..8.min(validator_pubkey_hex.len())]
                             );
 
                             if let Ok(pk_bytes) = hex::decode(&validator_pubkey_hex) {
@@ -654,6 +660,46 @@ pub fn run_validator(cfg: RunConfig) -> Result<()> {
                                         });
                                     }
                                 }
+                            }
+                            try_finalize(
+                                &mut state,
+                                &mut finality,
+                                &mut pending,
+                                &block_hash_hex,
+                                n,
+                                &state_path,
+                                &cfg.data_dir,
+                            )?;
+                        }
+                    }
+                    meshchain_transport::frame::MsgType::AirBlockAck => {
+                        if let Ok(ack) = meshchain_transport::frame::decode_air_block_ack(&frame) {
+                            let block_hash_hex = ack.block_hash_hex();
+                            let signature_hex = ack.signature_hex();
+                            let Some(pk) = validator_pks.get(ack.validator_index as usize).copied()
+                            else {
+                                eprintln!(
+                                    "Radio RX: air BlockAck bad validator_index={}",
+                                    ack.validator_index
+                                );
+                                continue;
+                            };
+                            println!(
+                                "Radio RX: air BlockAck height={} v{} hash={}",
+                                ack.height,
+                                ack.validator_index,
+                                &block_hash_hex[..16.min(block_hash_hex.len())]
+                            );
+                            if authorized.contains(&pk)
+                                && verify_block_ack(&pk, &block_hash_hex, &signature_hex)
+                            {
+                                finality.ack(&block_hash_hex, pk);
+                                let _ = hub.broadcast(&GossipMsg::BlockAck {
+                                    height: ack.height,
+                                    block_hash_hex: block_hash_hex.clone(),
+                                    validator_pubkey_hex: hex::encode(pk),
+                                    signature_hex,
+                                });
                             }
                             try_finalize(
                                 &mut state,
@@ -821,14 +867,10 @@ pub fn run_validator(cfg: RunConfig) -> Result<()> {
                                     block: block.clone(),
                                 });
                                 if let Some(ref mut radio) = radio_transport {
-                                    if block.txs.len()
-                                        <= meshchain_transport::frame::AIR_MAX_TXS_PER_BLOCK
+                                    if let Ok(raw) =
+                                        meshchain_transport::frame::encode_block_for_air(&block)
                                     {
-                                        if let Ok(raw) =
-                                            meshchain_transport::frame::encode_block(&block)
-                                        {
-                                            let _ = radio.send_raw(&raw);
-                                        }
+                                        let _ = radio.send_raw(&raw);
                                     }
                                 }
                                 on_block(
@@ -838,6 +880,7 @@ pub fn run_validator(cfg: RunConfig) -> Result<()> {
                                     &mut seen_at_height,
                                     &hub,
                                     Some(kp),
+                                    my_index,
                                     &authorized,
                                     block,
                                     n,
@@ -939,6 +982,7 @@ fn on_block(
     seen_at_height: &mut HashMap<u64, String>,
     hub: &GossipHub,
     me: Option<&Keypair>,
+    my_index: Option<u8>,
     authorized: &HashSet<PublicKey>,
     block: Block,
     n_validators: usize,
@@ -975,10 +1019,9 @@ fn on_block(
             block: block.clone(),
         });
         if let Some(ref mut r) = radio {
-            if block.txs.len() <= meshchain_transport::frame::AIR_MAX_TXS_PER_BLOCK {
-                if let Ok(raw) = meshchain_transport::frame::encode_block(&block) {
-                    let _ = r.send_raw(&raw);
-                }
+            // Prefer full single-tx block on air; else compact hint.
+            if let Ok(raw) = meshchain_transport::frame::encode_block_for_air(&block) {
+                let _ = r.send_raw(&raw);
             }
         }
     }
@@ -997,15 +1040,30 @@ fn on_block(
                 validator_pubkey_hex: hex::encode(kp.public_key()),
                 signature_hex: signature_hex.clone(),
             });
+            // Compact AirBlockAck (105 B) fits LoRa; fat hex BlockAck does not.
             if let Some(ref mut r) = radio {
-                let ack_payload = meshchain_transport::frame::BlockAckPayload {
-                    height: block.header.height,
-                    block_hash_hex: hash_hex.clone(),
-                    validator_pubkey_hex: hex::encode(kp.public_key()),
-                    signature_hex: signature_hex.clone(),
-                };
-                if let Ok(raw) = meshchain_transport::frame::encode_block_ack(&ack_payload) {
-                    let _ = r.send_raw(&raw);
+                if let Some(idx) = my_index {
+                    let mut block_hash = [0u8; 32];
+                    if let Ok(hb) = hex::decode(&hash_hex) {
+                        if hb.len() == 32 {
+                            block_hash.copy_from_slice(&hb);
+                        }
+                    }
+                    let mut signature = [0u8; 64];
+                    if let Ok(sb) = hex::decode(signature_hex.trim()) {
+                        if sb.len() == 64 {
+                            signature.copy_from_slice(&sb);
+                        }
+                    }
+                    let air_ack = meshchain_transport::AirBlockAck {
+                        height: block.header.height,
+                        block_hash,
+                        validator_index: idx,
+                        signature,
+                    };
+                    if let Ok(raw) = meshchain_transport::encode_air_block_ack(&air_ack) {
+                        let _ = r.send_raw(&raw);
+                    }
                 }
             }
         }

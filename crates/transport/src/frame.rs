@@ -49,6 +49,9 @@ pub enum MsgType {
     BalQuery = 12,
     /// Balance reply over air: `short_id[8] | req_id[4] | balance[u64 LE] | nonce[u64 LE] | height[u64 LE] | found[u8]`.
     BalReply = 13,
+    /// Compact LoRa BlockAck: `height[u64 LE] | hash[32] | validator_index[u8] | sig[64]` (105 B).
+    /// Hex/bincode BlockAck (type 3) is ~288 B and does not fit MAX_PAYLOAD — use this for air finality.
+    AirBlockAck = 14,
     /// Legacy: full JSON gossip blob (radio relay MSG_GOSSIP=20)
     GossipJson = 20,
 }
@@ -69,6 +72,7 @@ impl MsgType {
             10 => Some(Self::Control),
             12 => Some(Self::BalQuery),
             13 => Some(Self::BalReply),
+            14 => Some(Self::AirBlockAck),
             20 => Some(Self::GossipJson),
             _ => None,
         }
@@ -299,6 +303,60 @@ pub fn decode_block_ack(frame: &Frame) -> Result<BlockAckPayload, FrameError> {
         return Err(FrameError::Codec("not a block_ack frame".into()));
     }
     bincode::deserialize(&frame.payload).map_err(|e| FrameError::Codec(e.to_string()))
+}
+
+/// Fixed-layout compact air BlockAck (105 bytes payload). Fits one LoRa frame.
+/// Layout: height[u64 LE] | block_hash[32] | validator_index[u8] | signature[64]
+pub const AIR_BLOCK_ACK_LEN: usize = 8 + 32 + 1 + 64;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AirBlockAck {
+    pub height: u64,
+    pub block_hash: [u8; 32],
+    /// Index into genesis.validators (0..N-1).
+    pub validator_index: u8,
+    pub signature: [u8; 64],
+}
+
+impl AirBlockAck {
+    pub fn block_hash_hex(&self) -> String {
+        hex::encode(self.block_hash)
+    }
+
+    pub fn signature_hex(&self) -> String {
+        hex::encode(self.signature)
+    }
+}
+
+pub fn encode_air_block_ack(ack: &AirBlockAck) -> Result<Vec<u8>, FrameError> {
+    let mut payload = Vec::with_capacity(AIR_BLOCK_ACK_LEN);
+    payload.extend_from_slice(&ack.height.to_le_bytes());
+    payload.extend_from_slice(&ack.block_hash);
+    payload.push(ack.validator_index);
+    payload.extend_from_slice(&ack.signature);
+    encode_frame(MsgType::AirBlockAck, &payload)
+}
+
+pub fn decode_air_block_ack(frame: &Frame) -> Result<AirBlockAck, FrameError> {
+    if frame.msg_type != MsgType::AirBlockAck {
+        return Err(FrameError::Codec("not an air_block_ack frame".into()));
+    }
+    if frame.payload.len() < AIR_BLOCK_ACK_LEN {
+        return Err(FrameError::Truncated);
+    }
+    let mut height_b = [0u8; 8];
+    height_b.copy_from_slice(&frame.payload[0..8]);
+    let mut block_hash = [0u8; 32];
+    block_hash.copy_from_slice(&frame.payload[8..40]);
+    let validator_index = frame.payload[40];
+    let mut signature = [0u8; 64];
+    signature.copy_from_slice(&frame.payload[41..105]);
+    Ok(AirBlockAck {
+        height: u64::from_le_bytes(height_b),
+        block_hash,
+        validator_index,
+        signature,
+    })
 }
 
 /// Fixed-layout air balance query (12 bytes). No bincode — Python relay must decode it.
@@ -540,5 +598,35 @@ mod tests {
         assert!(rbytes.len() < 50);
         let r2 = decode_bal_reply(&decode_frame(&rbytes).unwrap()).unwrap();
         assert_eq!(r, r2);
+    }
+
+    #[test]
+    fn roundtrip_air_block_ack_fits_lora() {
+        let mut hash = [0u8; 32];
+        hash[0] = 0xab;
+        hash[31] = 0xcd;
+        let mut sig = [0u8; 64];
+        sig[0] = 1;
+        sig[63] = 2;
+        let ack = AirBlockAck {
+            height: 677,
+            block_hash: hash,
+            validator_index: 2,
+            signature: sig,
+        };
+        let bytes = encode_air_block_ack(&ack).unwrap();
+        // header 6 + payload 105
+        assert_eq!(bytes.len(), HEADER_LEN + AIR_BLOCK_ACK_LEN);
+        assert!(bytes.len() <= HEADER_LEN + MAX_PAYLOAD);
+        let ack2 = decode_air_block_ack(&decode_frame(&bytes).unwrap()).unwrap();
+        assert_eq!(ack, ack2);
+        // legacy hex BlockAck does not fit air MTU
+        let fat = BlockAckPayload {
+            height: 677,
+            block_hash_hex: "aa".repeat(32),
+            validator_pubkey_hex: "bb".repeat(32),
+            signature_hex: "cc".repeat(64),
+        };
+        assert!(encode_block_ack(&fat).is_err());
     }
 }

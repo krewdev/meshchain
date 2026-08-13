@@ -50,11 +50,13 @@ MSG_TIP = 7
 MSG_BLOCK_HINT = 8
 MSG_BAL_QUERY = 12
 MSG_BAL_REPLY = 13
+MSG_AIR_BLOCK_ACK = 14  # compact LoRa finality ack (105 B payload)
 MSG_GOSSIP = 20
 MAX_PAYLOAD = 200
 HEADER_LEN = 6
 BAL_QUERY_LEN = 12
 BAL_REPLY_LEN = 37
+AIR_BLOCK_ACK_LEN = 105  # height8 + hash32 + vidx1 + sig64
 ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 
 
@@ -125,6 +127,27 @@ def decode_bal_reply_payload(payload: bytes) -> Optional[dict]:
         "height": height,
         "found": found,
     }
+
+
+def load_genesis_validators(data_dir: Path) -> List[str]:
+    """Ordered ed25519 pubkey hex list from genesis (matches validator_index)."""
+    candidates = [
+        data_dir / "genesis.json",
+        data_dir / "v0" / "genesis.json",
+        data_dir / "host" / "v0" / "genesis.json",
+        data_dir / "host" / "genesis.json",
+    ]
+    for p in candidates:
+        if not p.is_file():
+            continue
+        try:
+            g = json.loads(p.read_text())
+            vals = g.get("validators") or []
+            if vals:
+                return [str(v).lower() for v in vals]
+        except Exception:
+            continue
+    return []
 
 
 def load_best_chain_state(data_dir: Path) -> Optional[dict]:
@@ -385,6 +408,12 @@ def main():
     last_bal: Dict[str, float] = {}
     last_bal_lock = threading.Lock()
     bal_cooldown = float(os.environ.get("MESH_RADIO_BAL_COOLDOWN", "2"))
+    genesis_validators = load_genesis_validators(data_dir)
+    if genesis_validators:
+        print(
+            f"[relay] genesis validators: {len(genesis_validators)} (for air BlockAck index→pubkey)",
+            flush=True,
+        )
 
     def remember(key: str) -> bool:
         with seen_lock:
@@ -485,9 +514,28 @@ def main():
             return
 
         if mtype == "block_ack":
-            payload = json.dumps(msg, separators=(",", ":")).encode()
-            if len(payload) <= MAX_PAYLOAD:
-                air_send(MSG_GOSSIP, payload, "block_ack")
+            # Prefer compact AirBlockAck (105 B) so LoRa finality works.
+            try:
+                height = int(msg.get("height") or 0)
+                hh = (msg.get("block_hash_hex") or "").strip()
+                sh = (msg.get("signature_hex") or "").strip()
+                vidx = msg.get("validator_index")
+                if vidx is None:
+                    pk = (msg.get("validator_pubkey_hex") or "").strip().lower()
+                    if pk and pk in genesis_validators:
+                        vidx = genesis_validators.index(pk)
+                if vidx is not None and len(hh) == 64 and len(sh) == 128:
+                    body = (
+                        struct.pack("<Q", height)
+                        + bytes.fromhex(hh)
+                        + bytes([int(vidx) & 0xFF])
+                        + bytes.fromhex(sh)
+                    )
+                    air_send(MSG_AIR_BLOCK_ACK, body, f"air_ack-h{height}-v{vidx}")
+                    return
+            except Exception as e:
+                print(f"[relay] block_ack→air: {e}", flush=True)
+            # Fallback: skip fat JSON (does not fit MAX_PAYLOAD)
             return
 
         if mtype in ("ping", "pong"):
@@ -669,6 +717,45 @@ def main():
                     f"[{tag}] bal_reply {obj.get('mesh_name')} {obj.get('balance_tmesh')} tMESH",
                     flush=True,
                 )
+            return
+
+        if msg_type == MSG_AIR_BLOCK_ACK:
+            # Compact LoRa finality ACK → TCP gossip BlockAck for validators without radio.
+            if len(payload) < AIR_BLOCK_ACK_LEN:
+                print(f"[{tag}] bad air_block_ack {len(payload)}B", flush=True)
+                return
+            height = struct.unpack_from("<Q", payload, 0)[0]
+            block_hash = payload[8:40]
+            vidx = payload[40]
+            sig = payload[41:105]
+            pk_hex = ""
+            if 0 <= vidx < len(genesis_validators):
+                pk_hex = genesis_validators[vidx]
+            else:
+                print(
+                    f"[{tag}] air BlockAck v{vidx} not in genesis ({len(genesis_validators)} vals)",
+                    flush=True,
+                )
+            inject_tcp_json(
+                {
+                    "type": "block_ack",
+                    "height": height,
+                    "block_hash_hex": block_hash.hex(),
+                    "validator_index": vidx,
+                    "signature_hex": sig.hex(),
+                    "validator_pubkey_hex": pk_hex,
+                    "air": True,
+                }
+            )
+            print(
+                f"[{tag}] air BlockAck h={height} v{vidx} hash={block_hash.hex()[:16]}…",
+                flush=True,
+            )
+            return
+
+        if msg_type == MSG_BLOCK_ACK:
+            # Legacy fat ack (usually does not fit LoRa); forward if present.
+            print(f"[{tag}] BlockAck binary {len(payload)}B (legacy)", flush=True)
             return
 
         print(f"[{tag}] unhandled type={msg_type} {len(payload)}B", flush=True)
