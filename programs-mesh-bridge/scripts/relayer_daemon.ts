@@ -252,13 +252,8 @@ async function main() {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
   const idl = JSON.parse(fs.readFileSync(idlPath, "utf8"));
-  // Anchor 0.30+ Program(idl, provider); older: Program(idl, programId, provider)
-  let program: Program;
-  try {
-    program = new Program(idl, provider);
-  } catch {
-    program = new Program(idl, PROGRAM_ID, provider);
-  }
+  // Anchor 0.30+: new Program(idl, provider) — program id comes from idl.address / metadata
+  const program = new Program(idl as anchor.Idl, provider);
 
   console.log(
     `Subscribing to DepositEvents from program ${PROGRAM_ID.toBase58()}…`
