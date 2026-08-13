@@ -4,10 +4,12 @@
     { group: "Start" },
     { id: "GETTING_STARTED", title: "Getting started" },
     { id: "TESTNET", title: "Public testnet" },
+    { id: "STATUS", title: "Operator status" },
     { id: "RUN_A_NODE", title: "Run a node" },
     { id: "SCANNER", title: "Blockchain scanner" },
     { id: "HARDWARE", title: "Hardware" },
     { id: "MESHTASTIC", title: "Meshtastic air path" },
+    { id: "AIR_FINALITY", title: "Air finality" },
     { id: "DISCORD", title: "Discord" },
     { id: "DONATE", title: "Donate" },
 

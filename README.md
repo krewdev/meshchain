@@ -40,6 +40,9 @@ cargo build -p mesh -p meshchain-node
 ./target/debug/mesh new-wallet --name me.json --publish
 ./target/debug/mesh faucet-drip --wallet me.json
 ./target/debug/mesh balance --wallet me.json
+# optional: offline balance over radio relay
+./scripts/start_radio_relay.sh &
+./target/debug/mesh balance --air --wallet me.json
 ```
 
 ### Local-only lab (your own chain)
@@ -50,7 +53,17 @@ cargo build -p mesh -p meshchain-node
 ./scripts/start_testnet_host.sh   # optional local validators + faucet
 ```
 
-Guide: [docs/TESTNET.md](./docs/TESTNET.md) · **[Run a node](./docs/RUN_A_NODE.md)** · [Multi-operator](./docs/MULTI_OPERATOR.md) · [**Status**](./docs/STATUS.md) · [Cloud](./docs/CLOUD.md)
+### What’s live now
+
+| Feature | Docs / how |
+|---------|------------|
+| Public seed + faucet + scanner | [TESTNET](./docs/TESTNET.md) · [STATUS](./docs/STATUS.md) |
+| Air balance / air submit | [MESHTASTIC](./docs/MESHTASTIC.md) · `mesh balance --air` |
+| Compact AirBlockAck (LoRa finality frames) | [AIR_FINALITY](./docs/AIR_FINALITY.md) · `./scripts/e2e_air_finality.sh` |
+| Solana vault deposit → tMESH mint | [SOLANA_BRIDGE](./docs/SOLANA_BRIDGE.md) · systemd `meshchain-relayer` |
+| Hybrid dual-control unlock | [HYBRID_LOCK](./docs/HYBRID_LOCK.md) |
+
+Guide: [**Getting started**](./docs/GETTING_STARTED.md) · [TESTNET](./docs/TESTNET.md) · [Run a node](./docs/RUN_A_NODE.md) · [Status](./docs/STATUS.md)
 
 **Live multi-host:** seed `34.172.103.125:9100` · remote observer `35.192.20.103:9100`
 
@@ -72,11 +85,13 @@ Optional support for development:
 
 | Goal | How |
 |------|-----|
-| Use a simple wallet (no UI app required) | `mesh` CLI |
-| Run a local test network | `mesh setup` + `mesh demo` |
-| Cold storage off Wi‑Fi / 5G | `mesh new-cold-key` + hybrid vault docs |
-| Bridge SOL/stables ↔ mesh claims | Solana program in `programs-mesh-bridge/` |
-| Talk over real radios | `tools/meshtastic_bridge.py` + Meshtastic nodes |
+| Use a simple wallet (no UI app required) | `mesh` CLI · [Getting started](./docs/GETTING_STARTED.md) |
+| Run a local test network | `mesh testnet-setup` + `mesh demo` |
+| Check balance offline (radio) | `mesh balance --air` + radio relay |
+| Send over LoRa path | `mesh send … --air` |
+| Cold storage off Wi‑Fi / 5G | `mesh new-cold-key` + [hybrid vault](./docs/HYBRID_LOCK.md) |
+| Bridge SOL (devnet) → tMESH | [SOLANA_BRIDGE](./docs/SOLANA_BRIDGE.md) · deposit + relayer |
+| Talk over real radios | `tools/mesh_radio_relay.py` + Meshtastic nodes |
 
 ---
 

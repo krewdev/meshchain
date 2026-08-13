@@ -37,26 +37,53 @@ Full JSON: `testnet/network.json`.
 
 ---
 
-## Quick start (local testnet node)
+## Quick start (public seed — recommended)
 
 ```bash
 git clone https://github.com/krewdev/meshchain.git
 cd meshchain
 cargo build -p mesh -p meshchain-node
 
-# Initialize official testnet profile (chain_id + faucet)
-./target/debug/mesh testnet-setup
-
-# See parameters
-./target/debug/mesh testnet-info
-
-# Practice transfers
-./target/debug/mesh demo
-
-# Your wallet
-./target/debug/mesh new-wallet
-./target/debug/mesh balance --wallet alice.json
+./target/debug/mesh join-public
+./target/debug/mesh new-wallet --name me.json --publish
+./target/debug/mesh faucet-drip --wallet me.json
+./target/debug/mesh balance --wallet me.json
+./target/debug/mesh send <MESH_NAME> 1 --wallet me.json --submit 34.172.103.125:9100
 ```
+
+Full happy path: [GETTING_STARTED.md](./GETTING_STARTED.md)
+
+### Local lab only
+
+```bash
+./target/debug/mesh testnet-setup
+./target/debug/mesh testnet-info
+./target/debug/mesh demo
+```
+
+---
+
+## Air path (Meshtastic)
+
+| Feature | Command / note |
+|---------|----------------|
+| Air submit | `mesh send … --air --relay 127.0.0.1:9199` |
+| Air balance | `mesh balance --air` (compact BalQuery/BalReply frames) |
+| Radio relay | `./scripts/start_radio_relay.sh` or systemd unit |
+| Air finality frames | AirBlockAck type 14 — [AIR_FINALITY.md](./AIR_FINALITY.md) |
+
+Channel name: **`MeshChain-Testnet-1`** (private; do not put balances on LongFast).
+
+---
+
+## Solana hybrid vault (devnet)
+
+| Feature | Note |
+|---------|------|
+| Program | `CBRQcjk5DLJh1HcW3XF5TmUxZsBumhiABJa6M15r3Vkx` |
+| Deposit → mint | Relayer polls DepositRecord PDAs, mints via `mint-for-deposit --peer` |
+| Deferred mints | Retries until mesh short id is registered |
+| Docs | [SOLANA_BRIDGE.md](./SOLANA_BRIDGE.md) · [HYBRID_LOCK.md](./HYBRID_LOCK.md) |
 
 ---
 

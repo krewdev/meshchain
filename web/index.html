@@ -4,14 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>MeshChain — Off-grid private money on Meshtastic</title>
-  <meta name="description" content="Privacy-first, off-grid mesh ledger for Meshtastic. Quantum-safe cold storage, hybrid vaults, memorable wallet names. Testnet live." />
+  <meta name="description" content="Off-grid mesh ledger for Meshtastic. Air balance over LoRa, hybrid Solana vaults, quantum-safe cold keys. Public testnet live." />
   <meta property="og:title" content="MeshChain" />
-  <meta property="og:description" content="Off-grid. Private. Mesh-native value on LoRa." />
+  <meta property="og:description" content="Off-grid. Private. Air balance + hybrid vaults on Meshtastic. Testnet live." />
   <meta property="og:type" content="website" />
   <meta property="og:image" content="/assets/logo.svg" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="MeshChain — Off-grid private money on LoRa" />
-  <meta name="twitter:description" content="Privacy-first mesh ledger for Meshtastic. Quantum-safe cold storage, hybrid vaults. Testnet live." />
+  <meta name="twitter:description" content="Air balance, hybrid Solana vaults, quantum-safe cold keys. MeshChain public testnet live." />
   <meta name="twitter:image" content="/assets/logo.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -38,6 +38,7 @@
         MeshChain
       </a>
       <nav class="nav-links" id="navLinks">
+        <a href="#features">Features</a>
         <a href="#privacy">Privacy</a>
         <a href="#testnet">Testnet</a>
         <a href="/scanner/">Scanner</a>
@@ -56,18 +57,18 @@
     <section class="hero">
       <div class="wrap hero-grid">
         <div>
-          <div class="badge">Off-grid · Private · Testnet live</div>
+          <div class="badge">Off-grid · Air balance · Hybrid vault · Testnet live</div>
           <h1>Money that moves when the internet doesn’t.</h1>
           <p class="lead">
             MeshChain is a privacy-forward ledger for the
             <a href="https://meshtastic.org/" target="_blank" rel="noopener">Meshtastic</a>
-            LoRa mesh. Hold and spend offline. Cold keys stay air-gapped.
-            Hybrid vaults refuse internet-only unlocks.
+            LoRa mesh. Hold and spend offline. Check balances over radio.
+            Cold keys stay air-gapped. Hybrid vaults refuse internet-only unlocks.
           </p>
           <div class="hero-actions">
             <a class="btn btn-primary" href="/faucet/">Claim faucet tMESH</a>
             <a class="btn btn-ghost" href="/scanner/">Scanner</a>
-            <a class="btn btn-ghost" href="/docs/?doc=TESTNET">Join testnet</a>
+            <a class="btn btn-ghost" href="/docs/?doc=GETTING_STARTED">Happy path</a>
           </div>
 
           <div class="live-stats" id="liveStats" aria-live="polite">
@@ -95,18 +96,19 @@
               </div>
             </div>
             <div class="live-stats-links">
-              <a href="/scanner/">Explorer</a>
+              <a href="https://34.172.103.125.sslip.io/" target="_blank" rel="noopener">Live explorer</a>
               <a href="/faucet/">Faucet</a>
               <a href="/docs/?doc=GETTING_STARTED">CLI</a>
-              <a href="/docs/?doc=SECURITY_HARDENING">Security</a>
+              <a href="/docs/?doc=SOLANA_BRIDGE">Bridge</a>
+              <a href="/docs/?doc=AIR_FINALITY">Air finality</a>
             </div>
           </div>
 
           <div class="privacy-strip">
             <div><strong>No cell required</strong>Hold value with radio powered off</div>
+            <div><strong>Air balance</strong><code>mesh balance --air</code> over LoRa</div>
             <div><strong>Hybrid dual-control</strong>Vault unlock needs mesh proof</div>
             <div><strong>Quantum-safe cold</strong>ML-DSA-65 for large moves</div>
-            <div><strong>Mesh names</strong>M3SQRT-XTA1Y-ZJ6 style IDs</div>
           </div>
           <p class="meta" style="margin-top:1.25rem">
             Community software for Meshtastic · Not an official Meshtastic product ·
@@ -127,12 +129,15 @@
           </div>
           <div class="panel code-wrap" aria-label="CLI preview" style="width:100%;max-width:340px">
             <button class="copy-btn" data-target="hero-cli">copy</button>
-<pre id="hero-cli"><span class="cmt"># join public testnet in minutes</span>
-<span class="prompt">$</span> <span class="cmd">git clone https://github.com/krewdev/meshchain.git</span>
-<span class="prompt">$</span> <span class="cmd">cargo build -p mesh &amp;&amp; ./target/debug/mesh join-public</span>
+<pre id="hero-cli"><span class="cmt"># happy path — public testnet</span>
+<span class="prompt">$</span> <span class="cmd">git clone https://github.com/krewdev/meshchain.git &amp;&amp; cd meshchain</span>
+<span class="prompt">$</span> <span class="cmd">cargo build -p mesh -p meshchain-node</span>
+<span class="prompt">$</span> <span class="cmd">./target/debug/mesh join-public</span>
 <span class="prompt">$</span> <span class="cmd">./target/debug/mesh new-wallet --name me.json --publish</span>
 <span class="prompt">$</span> <span class="cmd">./target/debug/mesh faucet-drip --wallet me.json</span>
-<span class="cmt"># → mesh name like M3SQRT-XTA1Y-ZJ6</span></pre>
+<span class="prompt">$</span> <span class="cmd">./target/debug/mesh balance --wallet me.json</span>
+<span class="cmt"># optional offline check over radio relay</span>
+<span class="prompt">$</span> <span class="cmd">./target/debug/mesh balance --air --wallet me.json</span></pre>
           </div>
           <p class="launch-note">
             <a href="https://x.com/RealEyedropz/status/2085953042260578638" target="_blank" rel="noopener">Launch post on X</a>
@@ -145,22 +150,22 @@
     <section id="how-it-works">
       <div class="wrap">
         <h2 class="section-title">How it works</h2>
-        <p class="section-sub">Three commands from unboxing to your first off-grid transaction.</p>
+        <p class="section-sub">From clone to first off-grid transaction — then optional vault + radio paths.</p>
         <div class="steps">
           <div class="step" data-step="1">
             <span class="step-icon">📡</span>
-            <h3>Flash &amp; Join</h3>
-            <p>Flash a Meshtastic node over USB. Run <code>mesh join-public</code> to install the shared testnet genesis and peer seeds.</p>
+            <h3>Join the public seed</h3>
+            <p><code>mesh join-public</code> installs shared genesis + seeds. Optional: flash a Meshtastic node for the air path.</p>
           </div>
           <div class="step" data-step="2">
             <span class="step-icon">💳</span>
-            <h3>Create a Wallet</h3>
-            <p>Run <code>mesh new-wallet</code> to generate a keypair and a human-readable mesh name like <code>M3SQRT-XTA1Y-ZJ6</code>. No email, no KYC.</p>
+            <h3>Wallet + faucet</h3>
+            <p><code>mesh new-wallet --publish</code> then <code>faucet-drip</code>. Mesh name like <code>M3SQRT-XTA1Y-ZJ6</code>. No email, no KYC.</p>
           </div>
           <div class="step" data-step="3">
             <span class="step-icon">📦</span>
-            <h3>Transact Over LoRa</h3>
-            <p>Sign payments with <code>mesh send &lt;name&gt; &lt;amount&gt;</code>. Transactions hop peer-to-peer across Meshtastic nodes — no internet needed.</p>
+            <h3>Send, balance, air</h3>
+            <p><code>mesh send</code> over peer or radio. <code>mesh balance --air</code> checks tMESH offline via the radio relay.</p>
           </div>
         </div>
       </div>
@@ -195,36 +200,46 @@
 
     <section id="features">
       <div class="wrap">
-        <h2 class="section-title">Protocol capabilities</h2>
-        <p class="section-sub">Open-source stack: ledger, wallets, hybrid vault, multi-validator gossip.</p>
+        <h2 class="section-title">What’s live on testnet</h2>
+        <p class="section-sub">Recent stack: air path, bridge relayer, multi-validator PoA, open docs.</p>
         <div class="cards">
           <article class="card">
             <div class="icon">01</div>
             <h3>Mesh-native ledger</h3>
-            <p>tMESH balances, nonces, PoA finality — engineered for LoRa airtime limits.</p>
+            <p>tMESH balances, nonces, demand-driven PoA finality — sized for LoRa airtime limits.</p>
           </article>
           <article class="card">
             <div class="icon">02</div>
-            <h3>CLI wallets</h3>
-            <p>Plain-English <code class="inline-code">mesh</code> commands. No mandatory GUI. Mesh names included.</p>
+            <h3>Air balance &amp; submit</h3>
+            <p><code class="inline-code">mesh balance --air</code> and <code class="inline-code">mesh send … --air</code> via compact MC frames (BalQuery / Tx).</p>
           </article>
           <article class="card">
             <div class="icon">03</div>
-            <h3>Hybrid vault</h3>
-            <p>Devnet program live. Deposit SOL bound to mesh ID; unlock only with mesh + attestors.</p>
+            <h3>Air finality frames</h3>
+            <p>Compact <strong>AirBlockAck</strong> (type 14, 105&nbsp;B) so LoRa can carry validator ACKs. See <a href="/docs/?doc=AIR_FINALITY">AIR_FINALITY</a>.</p>
           </article>
           <article class="card">
             <div class="icon">04</div>
-            <h3>Quantum-safe cold path</h3>
-            <p>ML-DSA-65 (FIPS 204) for large and vault-linked burns. Multi-packet FRAG on air.</p>
+            <h3>Solana hybrid vault</h3>
+            <p>Devnet program live. Deposit SOL → automated relayer mints tMESH. Unlock needs mesh + multi-attestor co-sign.</p>
           </article>
           <article class="card">
             <div class="icon">05</div>
-            <h3>Multi-validator host</h3>
-            <p>TCP gossip lab + optional radio relay for site-to-site multi-hop awareness.</p>
+            <h3>Bridge relayer</h3>
+            <p>Production systemd path polls DepositRecord PDAs, mints via gossip peer, retries deferred short-ids.</p>
           </article>
           <article class="card">
             <div class="icon">06</div>
+            <h3>CLI wallets</h3>
+            <p>Plain-English <code class="inline-code">mesh</code> commands. Mesh names. Quantum-safe cold keys (ML-DSA-65).</p>
+          </article>
+          <article class="card">
+            <div class="icon">07</div>
+            <h3>Public seed + scanner</h3>
+            <p>3× PoA validators, faucet, HTTPS explorer. Live tip on this page.</p>
+          </article>
+          <article class="card">
+            <div class="icon">08</div>
             <h3>Open &amp; auditable</h3>
             <p>MIT licensed. Threat model documented. Fail-secure by default.</p>
           </article>
@@ -245,10 +260,12 @@
               <tr><td>chain_id</td><td><code>meshchain-testnet-1</code></td></tr>
               <tr><td>Token</td><td>tMESH (no cash value)</td></tr>
               <tr><td>Seed peer</td><td><code>34.172.103.125:9100</code></td></tr>
-              <tr><td>Scanner</td><td><a href="/scanner/">meshchain-sigma.vercel.app/scanner</a></td></tr>
+              <tr><td>Scanner</td><td><a href="https://34.172.103.125.sslip.io/" target="_blank" rel="noopener">34.172.103.125.sslip.io</a></td></tr>
               <tr><td>Faucet</td><td><a href="/faucet/">/faucet/</a></td></tr>
               <tr><td>Meshtastic channel</td><td><code>MeshChain-Testnet-1</code></td></tr>
               <tr><td>Solana program</td><td><code>CBRQcjk5…3Vkx</code> (devnet)</td></tr>
+              <tr><td>Air frames</td><td>Tx, Tip, BalQuery/Reply, AirBlockAck (type 14)</td></tr>
+              <tr><td>Bridge relayer</td><td>PDA poll → <code>mint-for-deposit --peer</code></td></tr>
             </tbody>
           </table>
         </div>
@@ -258,11 +275,14 @@
 <span class="prompt">$</span> <span class="cmd">cargo build -p mesh -p meshchain-node</span>
 <span class="prompt">$</span> <span class="cmd">./target/debug/mesh join-public</span>
 <span class="prompt">$</span> <span class="cmd">./target/debug/mesh new-wallet --name me.json --publish</span>
-<span class="prompt">$</span> <span class="cmd">./target/debug/mesh faucet-drip --wallet me.json</span></pre>
+<span class="prompt">$</span> <span class="cmd">./target/debug/mesh faucet-drip --wallet me.json</span>
+<span class="prompt">$</span> <span class="cmd">./target/debug/mesh balance --wallet me.json</span>
+<span class="prompt">$</span> <span class="cmd">./target/debug/mesh send MXXXXX-XXXXX-XXX 1 --wallet me.json --submit 34.172.103.125:9100</span></pre>
         </div>
         <div class="cta-row" style="margin-top:1.25rem">
           <a class="btn btn-primary" href="/faucet/">Claim faucet</a>
-          <a class="btn btn-ghost" href="/scanner/">Scanner</a>
+          <a class="btn btn-ghost" href="https://34.172.103.125.sslip.io/" target="_blank" rel="noopener">Live scanner</a>
+          <a class="btn btn-ghost" href="/docs/?doc=GETTING_STARTED">Happy path</a>
           <a class="btn btn-ghost" href="/docs/?doc=RUN_A_NODE">Run a node</a>
         </div>
       </div>
@@ -271,17 +291,19 @@
     <section id="wallets">
       <div class="wrap">
         <h2 class="section-title">Wallets without the noise</h2>
-        <p class="section-sub">Memorable names. Optional cold keys. Full service from a terminal.</p>
+        <p class="section-sub">Memorable names. Air checks. Optional cold keys. Full service from a terminal.</p>
         <div class="table-wrap">
           <table>
             <thead>
               <tr><th>Command</th><th>Action</th></tr>
             </thead>
             <tbody>
-              <tr><td><code>mesh new-wallet</code></td><td>Create wallet → mesh name like <code>MVGQK7-82943-QJC</code></td></tr>
-              <tr><td><code>mesh address</code></td><td>Show name + hex id</td></tr>
-              <tr><td><code>mesh balance</code></td><td>Show tMESH balance</td></tr>
-              <tr><td><code>mesh send &lt;name&gt; 5</code></td><td>Sign a payment</td></tr>
+              <tr><td><code>mesh join-public</code></td><td>Install public genesis + seeds</td></tr>
+              <tr><td><code>mesh new-wallet --publish</code></td><td>Create wallet + register on-chain</td></tr>
+              <tr><td><code>mesh faucet-drip</code></td><td>Claim testnet tMESH</td></tr>
+              <tr><td><code>mesh balance</code></td><td>Balance via scanner / local tip</td></tr>
+              <tr><td><code>mesh balance --air</code></td><td>Balance over radio relay (no internet)</td></tr>
+              <tr><td><code>mesh send &lt;name&gt; 5</code></td><td>Sign a payment (add <code>--air</code> for radio path)</td></tr>
               <tr><td><code>mesh new-cold-key</code></td><td>Quantum-safe cold key</td></tr>
               <tr><td><code>mesh security</code></td><td>Honest security posture</td></tr>
             </tbody>
@@ -293,31 +315,39 @@
     <section id="docs">
       <div class="wrap">
         <h2 class="section-title">Documentation</h2>
-        <p class="section-sub">Protocol, security, hybrid lock, host ops, VPS &amp; tunnel.</p>
+        <p class="section-sub">Happy path, air path, hybrid vault, security, host ops.</p>
         <div class="cards">
           <a class="card" href="/docs/?doc=GETTING_STARTED">
             <h3>Getting started</h3>
-            <p>Install, wallets, mesh names.</p>
+            <p>Happy path: join → faucet → send → air balance.</p>
           </a>
-          <a class="card" href="/docs/?doc=SECURITY_HARDENING">
-            <h3>Security hardening</h3>
-            <p>Threat model &amp; residual risk.</p>
+          <a class="card" href="/docs/?doc=MESHTASTIC">
+            <h3>Meshtastic air path</h3>
+            <p>Radio relay, air submit, BalQuery frames.</p>
+          </a>
+          <a class="card" href="/docs/?doc=AIR_FINALITY">
+            <h3>Air finality</h3>
+            <p>Compact AirBlockAck and Phase 2 roadmap.</p>
+          </a>
+          <a class="card" href="/docs/?doc=SOLANA_BRIDGE">
+            <h3>Solana bridge</h3>
+            <p>Vault deposit, relayer ops, deferred mints.</p>
           </a>
           <a class="card" href="/docs/?doc=HYBRID_LOCK">
             <h3>Hybrid lock</h3>
             <p>Internet + mesh dual control.</p>
           </a>
-          <a class="card" href="/docs/?doc=QUANTUM_COLD_STORAGE">
-            <h3>Quantum cold storage</h3>
-            <p>ML-DSA-65 offline custody.</p>
+          <a class="card" href="/docs/?doc=SECURITY_HARDENING">
+            <h3>Security hardening</h3>
+            <p>Threat model &amp; residual risk.</p>
           </a>
-          <a class="card" href="/docs/?doc=HOST_OPS">
-            <h3>Host ops</h3>
-            <p>Validators + faucet host.</p>
+          <a class="card" href="/docs/?doc=STATUS">
+            <h3>Operator status</h3>
+            <p>Live endpoints &amp; integrity posture.</p>
           </a>
-          <a class="card" href="/docs/?doc=VPS_PUBLIC">
-            <h3>VPS &amp; tunnel</h3>
-            <p>Public endpoints &amp; radio relay.</p>
+          <a class="card" href="/docs/?doc=RUN_A_NODE">
+            <h3>Run a node</h3>
+            <p>Observer / producer on public seed.</p>
           </a>
         </div>
       </div>
