@@ -10,6 +10,8 @@ Air policy:
   - MsgType Block=2    only if small (≤1 tx and fits MTU); else BlockHint=8
   - MsgType BlockAck=3 binary / compact JSON
   - MsgType Tip=7      chain tip (height + tip_hash) — periodic mesh gossip
+  - MsgType BalQuery=12  12-byte balance ask (short_id + req_id)
+  - MsgType BalReply=13  37-byte balance answer
   - MsgType GossipJson=20  legacy small JSON (hello, block_hint)
 
 Inject path (air-first submit without radio hardware):
@@ -36,7 +38,8 @@ import socket
 import struct
 import threading
 import time
-from typing import Any, Dict, List, Optional
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
 MAGIC = b"MC"
 FRAME_VER = 1
@@ -45,9 +48,14 @@ MSG_BLOCK = 2
 MSG_BLOCK_ACK = 3
 MSG_TIP = 7
 MSG_BLOCK_HINT = 8
+MSG_BAL_QUERY = 12
+MSG_BAL_REPLY = 13
 MSG_GOSSIP = 20
 MAX_PAYLOAD = 200
 HEADER_LEN = 6
+BAL_QUERY_LEN = 12
+BAL_REPLY_LEN = 37
+ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 
 
 def encode_mc(msg_type: int, payload: bytes) -> bytes:
@@ -67,6 +75,87 @@ def decode_mc(frame: bytes) -> Optional[tuple]:
     if len(frame) < HEADER_LEN + ln:
         return None
     return msg_type, frame[HEADER_LEN : HEADER_LEN + ln]
+
+
+def mesh_name_from_sid(sid: bytes) -> str:
+    """Crockford base32 mesh name from 8-byte short id (matches Rust mesh_name)."""
+    if len(sid) != 8:
+        return ""
+    n = int.from_bytes(sid, "big") << 1
+    chars = ["0"] * 13
+    for i in range(12, -1, -1):
+        chars[i] = ALPHABET[n & 31]
+        n >>= 5
+    body = "".join(chars)
+    return "M" + body[0:5] + "-" + body[5:10] + "-" + body[10:13]
+
+
+def encode_bal_reply(
+    sid: bytes, req_id: bytes, balance: int, nonce: int, height: int, found: bool
+) -> bytes:
+    payload = (
+        sid
+        + req_id
+        + struct.pack("<QQQ", int(balance), int(nonce), int(height))
+        + bytes([1 if found else 0])
+    )
+    return encode_mc(MSG_BAL_REPLY, payload)
+
+
+def decode_bal_query(payload: bytes) -> Optional[Tuple[bytes, bytes]]:
+    if len(payload) < BAL_QUERY_LEN:
+        return None
+    return payload[:8], payload[8:12]
+
+
+def decode_bal_reply_payload(payload: bytes) -> Optional[dict]:
+    if len(payload) < BAL_REPLY_LEN:
+        return None
+    sid, req = payload[:8], payload[8:12]
+    balance, nonce, height = struct.unpack("<QQQ", payload[12:36])
+    found = payload[36] != 0
+    return {
+        "type": "bal_reply",
+        "short_id_hex": sid.hex(),
+        "req_id_hex": req.hex(),
+        "mesh_name": mesh_name_from_sid(sid),
+        "balance": balance,
+        "balance_tmesh": balance / 1_000_000,
+        "nonce": nonce,
+        "height": height,
+        "found": found,
+    }
+
+
+def load_best_chain_state(data_dir: Path) -> Optional[dict]:
+    candidates = [
+        data_dir / "chain_state.json",
+        data_dir / "v0" / "chain_state.json",
+        data_dir / "host" / "v0" / "chain_state.json",
+    ]
+    best = None
+    best_h = -1
+    for p in candidates:
+        if not p.is_file():
+            continue
+        try:
+            st = json.loads(p.read_text())
+        except Exception:
+            continue
+        h = int(st.get("height") or 0)
+        if h >= best_h:
+            best_h = h
+            best = st
+    return best
+
+
+def lookup_balance(state: dict, sid_hex: str) -> Tuple[int, int, int, bool]:
+    acc = (state.get("accounts") or {}).get(sid_hex) or {}
+    found = bool(acc)
+    bal = int(acc.get("balance") or 0) if found else 0
+    nonce = int(acc.get("nonce") or 0) if found else 0
+    height = int(state.get("height") or 0)
+    return bal, nonce, height, found
 
 
 def bincode_tip(chain_id: str, height: int, tip_hash_hex: str) -> bytes:
@@ -277,6 +366,11 @@ def main():
         default=int(os.environ.get("MESH_RADIO_TIP_SECS", "30")),
         help="seconds between tip advertisements over air (0=off)",
     )
+    ap.add_argument(
+        "--data-dir",
+        default=os.environ.get("MESHCHAIN_DATA", "./data"),
+        help="dir with chain_state.json so the relay can answer balance queries",
+    )
     args = ap.parse_args()
 
     if not args.mock and not args.port:
@@ -287,6 +381,10 @@ def main():
     st = State()
     seen = set()
     seen_lock = threading.Lock()
+    data_dir = Path(args.data_dir)
+    last_bal: Dict[str, float] = {}
+    last_bal_lock = threading.Lock()
+    bal_cooldown = float(os.environ.get("MESH_RADIO_BAL_COOLDOWN", "2"))
 
     def remember(key: str) -> bool:
         with seen_lock:
@@ -395,9 +493,83 @@ def main():
         if mtype in ("ping", "pong"):
             return
 
+        if mtype == "bal_query":
+            sid_hex = (msg.get("short_id_hex") or "").strip().lower()
+            req_hex = (msg.get("req_id_hex") or "").strip().lower()
+            if len(sid_hex) == 16:
+                try:
+                    answer_balance(bytes.fromhex(sid_hex), bytes.fromhex(req_hex or "00000000"))
+                except Exception as e:
+                    print(f"[relay] bal_query tcp: {e}", flush=True)
+            return
+
+        if mtype == "bal_reply":
+            # Validator answered — push to inject clients and over air
+            try:
+                sid = bytes.fromhex(msg.get("short_id_hex") or "")
+                req = bytes.fromhex(msg.get("req_id_hex") or "00000000")
+                if len(sid) == 8 and len(req) == 4:
+                    frame = encode_bal_reply(
+                        sid,
+                        req,
+                        int(msg.get("balance") or 0),
+                        int(msg.get("nonce") or 0),
+                        int(msg.get("height") or 0),
+                        bool(msg.get("found")),
+                    )
+                    radio.send_frame(frame)
+            except Exception as e:
+                print(f"[relay] bal_reply forward: {e}", flush=True)
+            tcp.broadcast_line(json.dumps(msg, separators=(",", ":")))
+            return
+
         # sync_* too large for air — skip
         if mtype.startswith("sync") or mtype.startswith("blocks"):
             return
+
+    def answer_balance(sid: bytes, req_id: bytes) -> bool:
+        sid_hex = sid.hex()
+        now = time.time()
+        with last_bal_lock:
+            prev = last_bal.get(sid_hex, 0.0)
+            if now - prev < bal_cooldown:
+                print(f"[relay] bal cooldown {sid_hex[:8]}…", flush=True)
+                return False
+            last_bal[sid_hex] = now
+        chain = load_best_chain_state(data_dir)
+        if not chain:
+            # Ask a validator; it may reply as bal_reply
+            inject_tcp_json(
+                {
+                    "type": "bal_query",
+                    "short_id_hex": sid_hex,
+                    "req_id_hex": req_id.hex(),
+                }
+            )
+            print(f"[relay] bal_query {sid_hex} → tcp (no local chain_state)", flush=True)
+            return False
+        bal, nonce, height, found = lookup_balance(chain, sid_hex)
+        reply = {
+            "type": "bal_reply",
+            "short_id_hex": sid_hex,
+            "req_id_hex": req_id.hex(),
+            "mesh_name": mesh_name_from_sid(sid),
+            "balance": bal,
+            "balance_tmesh": bal / 1_000_000,
+            "nonce": nonce,
+            "height": height,
+            "found": found,
+        }
+        tcp.broadcast_line(json.dumps(reply, separators=(",", ":")))
+        try:
+            radio.send_frame(encode_bal_reply(sid, req_id, bal, nonce, height, found))
+        except Exception as e:
+            print(f"[relay] bal air send: {e}", flush=True)
+        print(
+            f"[relay] bal_reply {reply['mesh_name']} {reply['balance_tmesh']} tMESH h={height}",
+            flush=True,
+        )
+        return True
 
     def on_radio_frame(frame: bytes, from_inject: bool = False):
         decoded = decode_mc(frame)
@@ -479,6 +651,26 @@ def main():
             print(f"[{tag}] Block binary {len(payload)}B → tcp block_air", flush=True)
             return
 
+        if msg_type == MSG_BAL_QUERY:
+            decoded_q = decode_bal_query(payload)
+            if not decoded_q:
+                print(f"[{tag}] bad bal_query {len(payload)}B", flush=True)
+                return
+            sid, req_id = decoded_q
+            print(f"[{tag}] bal_query {sid.hex()} req={req_id.hex()}", flush=True)
+            answer_balance(sid, req_id)
+            return
+
+        if msg_type == MSG_BAL_REPLY:
+            obj = decode_bal_reply_payload(payload)
+            if obj:
+                tcp.broadcast_line(json.dumps(obj, separators=(",", ":")))
+                print(
+                    f"[{tag}] bal_reply {obj.get('mesh_name')} {obj.get('balance_tmesh')} tMESH",
+                    flush=True,
+                )
+            return
+
         print(f"[{tag}] unhandled type={msg_type} {len(payload)}B", flush=True)
 
     def tip_loop():
@@ -506,7 +698,9 @@ def main():
 
     print("[relay] MeshChain radio bridge running", flush=True)
     print("  channel: MeshChain-Testnet-1 (private; not LongFast)", flush=True)
+    print(f"  data-dir: {data_dir}", flush=True)
     print("  air-first: mesh air-submit … --relay 127.0.0.1:9199", flush=True)
+    print("  air-balance: mesh balance --air --relay 127.0.0.1:9199", flush=True)
     print("  internet optional for spend when radio+local validator up", flush=True)
     while True:
         time.sleep(3600)

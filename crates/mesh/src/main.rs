@@ -112,6 +112,17 @@ enum RadioAction {
         #[arg(long)]
         port: Option<String>,
     },
+    /// Ask the radio relay for a tMESH balance (no internet)
+    Balance {
+        #[arg(long, default_value = "wallet.json")]
+        wallet: String,
+        /// Radio relay host:port (default 127.0.0.1:9199)
+        #[arg(long, default_value = "")]
+        relay: String,
+        /// Query this mesh name instead of --wallet
+        #[arg(long, default_value = "")]
+        name: String,
+    },
 }
 
 // ── Top-level commands ────────────────────────────────────────────────────────
@@ -228,6 +239,15 @@ enum Commands {
     Balance {
         #[arg(long, default_value = "wallet.json")]
         wallet: String,
+        /// Ask over Meshtastic radio relay instead of local/scanner state
+        #[arg(long, default_value_t = false)]
+        air: bool,
+        /// Radio relay host:port (default 127.0.0.1:9199 or MESH_RADIO_RELAY)
+        #[arg(long, default_value = "")]
+        relay: String,
+        /// Query this mesh name instead of --wallet (balances are public)
+        #[arg(long, default_value = "")]
+        name: String,
     },
 
     /// Send MESH to someone (mesh name like M4K7X-J9P2Q-R3W, or hex)
@@ -451,6 +471,13 @@ fn main() -> Result<()> {
                     &port_str,
                 )?;
             }
+            RadioAction::Balance {
+                wallet,
+                relay,
+                name,
+            } => {
+                cmd::radio::cmd_air_balance(&dir, &wallet, &relay, &name)?;
+            }
         },
         Commands::Doctor => {
             cmd::doctor::cmd_doctor(&dir)?;
@@ -521,8 +548,13 @@ fn main() -> Result<()> {
         Commands::Address { wallet } => {
             cmd::wallet::cmd_address(&dir, &wallet)?;
         }
-        Commands::Balance { wallet } => {
-            cmd::wallet::cmd_balance(&dir, &wallet)?;
+        Commands::Balance {
+            wallet,
+            air,
+            relay,
+            name,
+        } => {
+            cmd::wallet::cmd_balance(&dir, &wallet, air, &relay, &name)?;
         }
         Commands::ValidatorKeygen { name } => {
             cmd::wallet::cmd_validator_keygen(&dir, &name)?;

@@ -2,7 +2,7 @@
 
 use anyhow::{bail, Result};
 use meshchain_ledger::state::ChainState;
-use meshchain_proto::address::{mesh_name, short_id, short_id_hex};
+use meshchain_proto::address::{mesh_name, parse_recipient, short_id, short_id_hex};
 use meshchain_proto::crypto::Keypair;
 use meshchain_proto::pq::PqKeypair;
 use meshchain_proto::tx::{Tx, TxBody};
@@ -185,7 +185,10 @@ pub fn cmd_address(dir: &Path, wallet: &str) -> Result<()> {
 
 // ── balance ───────────────────────────────────────────────────────────────────
 
-pub fn cmd_balance(dir: &Path, wallet: &str) -> Result<()> {
+pub fn cmd_balance(dir: &Path, wallet: &str, air: bool, relay: &str, name: &str) -> Result<()> {
+    if air {
+        return crate::cmd::radio::cmd_air_balance(dir, wallet, relay, name);
+    }
     let path = wallet_path(dir, wallet);
     promote_v0_snapshot(dir);
     // Prefer live scanner/seed tip so faucet-mint lag is less confusing.
@@ -196,8 +199,12 @@ pub fn cmd_balance(dir: &Path, wallet: &str) -> Result<()> {
     if !state_path.exists() {
         bail!("No network state yet. Run:\n  mesh join-public\n  # or mesh testnet-setup + demo");
     }
-    let kp = load_wallet(&path)?;
-    let sid = short_id(&kp.public_key());
+    let sid = if !name.is_empty() {
+        parse_recipient(name).map_err(|e| anyhow::anyhow!(e))?
+    } else {
+        let kp = load_wallet(&path)?;
+        short_id(&kp.public_key())
+    };
     let st = ChainState::load_json(&state_path).map_err(|e| anyhow::anyhow!(e.to_string()))?;
     let bal = st.balance_of(&sid);
     let nonce = st.account(&sid).map(|a| a.nonce).unwrap_or(0);

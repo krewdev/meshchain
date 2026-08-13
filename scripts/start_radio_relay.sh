@@ -7,6 +7,7 @@ cd "$ROOT"
 LISTEN="${MESH_RADIO_LISTEN:-127.0.0.1:9199}"
 TCP0="${MESH_RADIO_TCP:-127.0.0.1:9100}"
 TIP="${MESH_RADIO_TIP_SECS:-30}"
+DATA="${MESHCHAIN_DATA:-./data}"
 FLAGS=()
 
 if [[ -n "${MESH_RADIO_PORT:-}" ]]; then
@@ -26,4 +27,5 @@ exec python3 "$ROOT/tools/mesh_radio_relay.py" \
   --listen "$LISTEN" \
   --tcp "$TCP0" \
   "${EXTRA[@]}" \
-  --tip-secs "$TIP"
+  --tip-secs "$TIP" \
+  --data-dir "$DATA"

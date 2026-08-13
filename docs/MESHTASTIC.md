@@ -68,7 +68,32 @@ sudo systemctl enable --now meshchain-radio-relay
 Full multi-tx blocks are **not** pushed over LoRa. Relay sends `block_hint` + `tip` instead.  
 `block_air` inject is rejected if `tx_count > 1`.
 
-## 4. Mesh tip gossip
+## 4. Air balance check (no internet)
+
+Ask the radio relay for your tMESH balance over LoRa. One compact MC frame each way (12 B query / 37 B reply).
+
+```bash
+# Mock radio (lab)
+./scripts/start_radio_relay.sh &          # or: python3 tools/mesh_radio_relay.py --mock --data-dir ./data --tcp 127.0.0.1:9100
+
+mesh balance --air --wallet me.json
+# same:
+mesh radio balance --wallet me.json
+
+# Ask about someone else's public name (balances are on-chain / public)
+mesh balance --air --name M3SQRT-XTA1Y-ZJ6
+```
+
+Needs a relay that can see `chain_state.json` (`--data-dir`) or a validator on `--tcp`. No scanner, no Wi‑Fi.
+
+| Frame | Type | Size |
+|-------|------|------|
+| BalQuery | 12 | 12-byte payload (`short_id` + `req_id`) |
+| BalReply | 13 | 37-byte payload (balance, nonce, height, found) |
+
+Rate-limited on the relay (~2s per name) so LoRa is not used as a scanner.
+
+## 5. Mesh tip gossip
 
 Every `MESH_RADIO_TIP_SECS` (default 30s) the relay advertises:
 
@@ -78,7 +103,7 @@ Every `MESH_RADIO_TIP_SECS` (default 30s) the relay advertises:
 
 as an MC **Tip** frame (type 7). Validators log air tips and request block catch-up if behind.
 
-## 5. Internet optional (spend path)
+## 6. Internet optional (spend path)
 
 | Action | Needs internet? |
 |--------|-----------------|
@@ -100,6 +125,8 @@ Public seed `34.172.103.125` remains the internet hub for join/faucet.
 | 3 | BlockAck | ack fields |
 | 7 | Tip | height + tip hash |
 | 8 | BlockHint | height + hash when block too big |
+| 12 | BalQuery | short id + req id (12 B) |
+| 13 | BalReply | balance + nonce + height (37 B) |
 | 20 | GossipJson | small JSON hello/tx/ack |
 
 Max payload **200** bytes (+ 6-byte header).

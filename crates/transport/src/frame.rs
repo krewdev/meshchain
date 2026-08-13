@@ -45,6 +45,10 @@ pub enum MsgType {
     Compressed = 11,
     /// JSON control / bridge hint (relayer)
     Control = 10,
+    /// Balance query over air: `short_id[8] | req_id[4]`.
+    BalQuery = 12,
+    /// Balance reply over air: `short_id[8] | req_id[4] | balance[u64 LE] | nonce[u64 LE] | height[u64 LE] | found[u8]`.
+    BalReply = 13,
     /// Legacy: full JSON gossip blob (radio relay MSG_GOSSIP=20)
     GossipJson = 20,
 }
@@ -63,6 +67,8 @@ impl MsgType {
             9 => Some(Self::FragNack),
             11 => Some(Self::Compressed),
             10 => Some(Self::Control),
+            12 => Some(Self::BalQuery),
+            13 => Some(Self::BalReply),
             20 => Some(Self::GossipJson),
             _ => None,
         }
@@ -295,6 +301,86 @@ pub fn decode_block_ack(frame: &Frame) -> Result<BlockAckPayload, FrameError> {
     bincode::deserialize(&frame.payload).map_err(|e| FrameError::Codec(e.to_string()))
 }
 
+/// Fixed-layout air balance query (12 bytes). No bincode — Python relay must decode it.
+pub const BAL_QUERY_LEN: usize = 12;
+/// Fixed-layout air balance reply (37 bytes).
+pub const BAL_REPLY_LEN: usize = 37;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BalQuery {
+    pub short_id: [u8; 8],
+    pub req_id: [u8; 4],
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BalReply {
+    pub short_id: [u8; 8],
+    pub req_id: [u8; 4],
+    pub balance: u64,
+    pub nonce: u64,
+    pub height: u64,
+    pub found: bool,
+}
+
+pub fn encode_bal_query(q: &BalQuery) -> Result<Vec<u8>, FrameError> {
+    let mut payload = Vec::with_capacity(BAL_QUERY_LEN);
+    payload.extend_from_slice(&q.short_id);
+    payload.extend_from_slice(&q.req_id);
+    encode_frame(MsgType::BalQuery, &payload)
+}
+
+pub fn decode_bal_query(frame: &Frame) -> Result<BalQuery, FrameError> {
+    if frame.msg_type != MsgType::BalQuery {
+        return Err(FrameError::Codec("not a bal_query frame".into()));
+    }
+    if frame.payload.len() < BAL_QUERY_LEN {
+        return Err(FrameError::Truncated);
+    }
+    let mut short_id = [0u8; 8];
+    let mut req_id = [0u8; 4];
+    short_id.copy_from_slice(&frame.payload[0..8]);
+    req_id.copy_from_slice(&frame.payload[8..12]);
+    Ok(BalQuery { short_id, req_id })
+}
+
+pub fn encode_bal_reply(r: &BalReply) -> Result<Vec<u8>, FrameError> {
+    let mut payload = Vec::with_capacity(BAL_REPLY_LEN);
+    payload.extend_from_slice(&r.short_id);
+    payload.extend_from_slice(&r.req_id);
+    payload.extend_from_slice(&r.balance.to_le_bytes());
+    payload.extend_from_slice(&r.nonce.to_le_bytes());
+    payload.extend_from_slice(&r.height.to_le_bytes());
+    payload.push(u8::from(r.found));
+    encode_frame(MsgType::BalReply, &payload)
+}
+
+pub fn decode_bal_reply(frame: &Frame) -> Result<BalReply, FrameError> {
+    if frame.msg_type != MsgType::BalReply {
+        return Err(FrameError::Codec("not a bal_reply frame".into()));
+    }
+    if frame.payload.len() < BAL_REPLY_LEN {
+        return Err(FrameError::Truncated);
+    }
+    let mut short_id = [0u8; 8];
+    let mut req_id = [0u8; 4];
+    short_id.copy_from_slice(&frame.payload[0..8]);
+    req_id.copy_from_slice(&frame.payload[8..12]);
+    let mut bal_b = [0u8; 8];
+    let mut nonce_b = [0u8; 8];
+    let mut height_b = [0u8; 8];
+    bal_b.copy_from_slice(&frame.payload[12..20]);
+    nonce_b.copy_from_slice(&frame.payload[20..28]);
+    height_b.copy_from_slice(&frame.payload[28..36]);
+    Ok(BalReply {
+        short_id,
+        req_id,
+        balance: u64::from_le_bytes(bal_b),
+        nonce: u64::from_le_bytes(nonce_b),
+        height: u64::from_le_bytes(height_b),
+        found: frame.payload[36] != 0,
+    })
+}
+
 /// Everyday transfer without PQ usually fits one air frame.
 pub fn tx_fits_air(tx: &Tx) -> bool {
     match encode_tx(tx) {
@@ -429,5 +515,30 @@ mod tests {
         let frame = decode_frame(&encoded).unwrap();
         assert_eq!(frame.hop_limit, 5);
         assert_eq!(frame.payload, payload);
+    }
+
+    #[test]
+    fn roundtrip_bal_query_reply() {
+        let q = BalQuery {
+            short_id: [1, 2, 3, 4, 5, 6, 7, 8],
+            req_id: [9, 10, 11, 12],
+        };
+        let qbytes = encode_bal_query(&q).unwrap();
+        assert!(qbytes.len() < 40);
+        let q2 = decode_bal_query(&decode_frame(&qbytes).unwrap()).unwrap();
+        assert_eq!(q, q2);
+
+        let r = BalReply {
+            short_id: q.short_id,
+            req_id: q.req_id,
+            balance: 123_456_789,
+            nonce: 3,
+            height: 653,
+            found: true,
+        };
+        let rbytes = encode_bal_reply(&r).unwrap();
+        assert!(rbytes.len() < 50);
+        let r2 = decode_bal_reply(&decode_frame(&rbytes).unwrap()).unwrap();
+        assert_eq!(r, r2);
     }
 }

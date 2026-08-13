@@ -91,6 +91,29 @@ pub enum GossipMsg {
     },
     Ping,
     Pong,
+    /// Radio / relay: ask for a public tMESH balance by short id.
+    #[serde(rename = "bal_query")]
+    BalQuery {
+        short_id_hex: String,
+        #[serde(default)]
+        req_id_hex: String,
+    },
+    /// Radio / relay: compact balance answer.
+    #[serde(rename = "bal_reply")]
+    BalReply {
+        short_id_hex: String,
+        #[serde(default)]
+        req_id_hex: String,
+        balance: u64,
+        #[serde(default)]
+        nonce: u64,
+        height: u64,
+        found: bool,
+        #[serde(default)]
+        mesh_name: String,
+        #[serde(default)]
+        balance_tmesh: f64,
+    },
 }
 
 fn default_protocol_version() -> u32 {
@@ -328,6 +351,16 @@ fn read_peer(
                     }
                     GossipMsg::Ping => continue,
                     GossipMsg::Pong => continue,
+                    GossipMsg::BalQuery {
+                        short_id_hex,
+                        req_id_hex,
+                    } => format!("balq:{short_id_hex}:{req_id_hex}"),
+                    GossipMsg::BalReply {
+                        short_id_hex,
+                        req_id_hex,
+                        height,
+                        ..
+                    } => format!("balr:{short_id_hex}:{req_id_hex}:{height}"),
                 };
                 let mut seen_g = seen.lock().unwrap();
                 if seen_g.len() > MAX_SEEN_ENTRIES {

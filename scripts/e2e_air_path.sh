@@ -50,6 +50,7 @@ done
 echo "== mock radio relay =="
 python3 "$ROOT/tools/mesh_radio_relay.py" --mock \
   --tcp 127.0.0.1:9300 --listen 127.0.0.1:9198 \
+  --data-dir "$BASE/v0" \
   >"$BASE/relay.log" 2>&1 &
 PIDS+=($!)
 
@@ -96,4 +97,15 @@ if [[ "$H" -lt 3 ]]; then
   tail -40 "$BASE/relay.log" || true
   exit 1
 fi
-echo "AIR PATH E2E PASS (mock LoRa + MC frame inject)"
+echo "== air balance =="
+# chain_state exists after mint; copy latest tip into v0 if needed
+cp -f "$BASE/v0/chain_state.json" "$BASE/chain_state.json" 2>/dev/null || true
+BAL_OUT=$("$MESH" --dir "$BASE" balance --wallet a.json --air --relay 127.0.0.1:9198) || {
+  echo "FAIL air balance"
+  echo "$BAL_OUT"
+  tail -40 "$BASE/relay.log" || true
+  exit 1
+}
+echo "$BAL_OUT"
+echo "$BAL_OUT" | grep -q "Balance:" || { echo "FAIL no Balance line"; exit 1; }
+echo "AIR PATH E2E PASS (mock LoRa + MC frame inject + air balance)"

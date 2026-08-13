@@ -59,7 +59,8 @@ mesh send MVGQK7-82943-QJC 5
 |---------|----------------|
 | `mesh new-wallet` | Create a wallet + show mesh name |
 | `mesh address` | Show mesh name + hex id |
-| `mesh balance` | Show how much MESH you have |
+| `mesh balance` | Show how much MESH you have (local / scanner) |
+| `mesh balance --air` | Same check over Meshtastic radio (no internet) |
 | `mesh send <name> <amount>` | Pay a mesh name (or hex) |
 | `mesh status` | Network height & supply |
 | `mesh new-cold-key` | Long-term cold storage key |

@@ -9,6 +9,7 @@ use anyhow::{bail, Context, Result};
 use meshchain_ledger::genesis::GenesisConfig;
 use meshchain_ledger::registry::Registry;
 use meshchain_ledger::state::ChainState;
+use meshchain_proto::address::{mesh_name, parse_short_id_hex};
 use meshchain_proto::block::{Block, MAX_TXS_PER_BLOCK};
 use meshchain_proto::crypto::{Keypair, PublicKey};
 use meshchain_proto::tx::Tx;
@@ -557,6 +558,38 @@ pub fn run_validator(cfg: RunConfig) -> Result<()> {
                     }
                 }
                 GossipMsg::Ping | GossipMsg::Pong => {}
+                GossipMsg::BalQuery {
+                    short_id_hex,
+                    req_id_hex,
+                } => {
+                    if let Ok(reply) = bal_reply_for(&state, &short_id_hex, &req_id_hex) {
+                        let _ = hub.broadcast(&reply);
+                        if let Some(ref mut radio) = radio_transport {
+                            if let GossipMsg::BalReply {
+                                short_id_hex,
+                                req_id_hex,
+                                balance,
+                                nonce,
+                                height,
+                                found,
+                                ..
+                            } = &reply
+                            {
+                                if let Ok(frame) = encode_gossip_bal_reply(
+                                    short_id_hex,
+                                    req_id_hex,
+                                    *balance,
+                                    *nonce,
+                                    *height,
+                                    *found,
+                                ) {
+                                    let _ = radio.send_raw(&frame);
+                                }
+                            }
+                        }
+                    }
+                }
+                GossipMsg::BalReply { .. } => {}
             }
         }
 
@@ -631,6 +664,46 @@ pub fn run_validator(cfg: RunConfig) -> Result<()> {
                                 &state_path,
                                 &cfg.data_dir,
                             )?;
+                        }
+                    }
+                    meshchain_transport::frame::MsgType::BalQuery => {
+                        if let Ok(q) = meshchain_transport::frame::decode_bal_query(&frame) {
+                            let sid_hex = hex::encode(q.short_id);
+                            let req_hex = hex::encode(q.req_id);
+                            if let Ok(reply) = bal_reply_for(&state, &sid_hex, &req_hex) {
+                                println!(
+                                    "Radio RX: bal_query {} → {:?}",
+                                    sid_hex,
+                                    match &reply {
+                                        GossipMsg::BalReply { balance, found, .. } => {
+                                            format!("found={found} bal={balance}")
+                                        }
+                                        _ => "err".into(),
+                                    }
+                                );
+                                let _ = hub.broadcast(&reply);
+                                if let GossipMsg::BalReply {
+                                    balance,
+                                    nonce,
+                                    height,
+                                    found,
+                                    ..
+                                } = &reply
+                                {
+                                    if let Ok(raw) = meshchain_transport::encode_bal_reply(
+                                        &meshchain_transport::BalReply {
+                                            short_id: q.short_id,
+                                            req_id: q.req_id,
+                                            balance: *balance,
+                                            nonce: *nonce,
+                                            height: *height,
+                                            found: *found,
+                                        },
+                                    ) {
+                                        let _ = radio.send_raw(&raw);
+                                    }
+                                }
+                            }
                         }
                     }
                     meshchain_transport::frame::MsgType::Tip => {
@@ -800,6 +873,49 @@ pub fn run_validator(cfg: RunConfig) -> Result<()> {
 /// Pretend last slot was long enough ago that the first real slot is due soon (1s grace).
 fn slot_clock_init(genesis: &GenesisConfig) -> u64 {
     genesis.slot_secs.saturating_sub(1)
+}
+
+fn bal_reply_for(state: &ChainState, short_id_hex: &str, req_id_hex: &str) -> Result<GossipMsg> {
+    let sid = parse_short_id_hex(short_id_hex).map_err(|e| anyhow::anyhow!(e))?;
+    let acc = state.account(&sid);
+    let found = acc.is_some();
+    let balance = acc.map(|a| a.balance).unwrap_or(0);
+    let nonce = acc.map(|a| a.nonce as u64).unwrap_or(0);
+    Ok(GossipMsg::BalReply {
+        short_id_hex: short_id_hex.to_string(),
+        req_id_hex: req_id_hex.to_string(),
+        balance,
+        nonce,
+        height: state.height,
+        found,
+        mesh_name: mesh_name(&sid),
+        balance_tmesh: balance as f64 / 1_000_000.0,
+    })
+}
+
+fn encode_gossip_bal_reply(
+    short_id_hex: &str,
+    req_id_hex: &str,
+    balance: u64,
+    nonce: u64,
+    height: u64,
+    found: bool,
+) -> Result<Vec<u8>> {
+    let sid = parse_short_id_hex(short_id_hex).map_err(|e| anyhow::anyhow!(e))?;
+    let req_raw = hex::decode(req_id_hex.trim()).unwrap_or_default();
+    let mut req_id = [0u8; 4];
+    if req_raw.len() >= 4 {
+        req_id.copy_from_slice(&req_raw[..4]);
+    }
+    meshchain_transport::encode_bal_reply(&meshchain_transport::BalReply {
+        short_id: sid,
+        req_id,
+        balance,
+        nonce,
+        height,
+        found,
+    })
+    .map_err(|e| anyhow::anyhow!(e.to_string()))
 }
 
 fn request_blocks_catchup(hub: &GossipHub, state: &ChainState, _data_dir: &Path) {

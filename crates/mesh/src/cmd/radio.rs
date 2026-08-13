@@ -5,15 +5,145 @@ use anyhow::{bail, Context, Result};
 use meshchain_ledger::state::ChainState;
 use meshchain_proto::address::{mesh_name, parse_recipient, short_id};
 use meshchain_proto::tx::{Tx, TxBody};
-use meshchain_transport::{fragment_bytes, session_id_from_hash};
+use meshchain_transport::{
+    decode_bal_reply, decode_frame, encode_bal_query, fragment_bytes, session_id_from_hash,
+    BalQuery,
+};
 use std::fs;
+use std::io::{BufRead, BufReader, Write};
+use std::net::TcpStream;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::helpers::{
     best_chain_state_path, default_submit_peer, fmt_mesh, load_cold, load_wallet,
     parse_mesh_amount, promote_v0_snapshot, refresh_after_submit, run_external_node,
     submit_tx_to_peer, wallet_path,
 };
+
+fn default_relay(relay: &str) -> String {
+    if !relay.is_empty() {
+        return relay.to_string();
+    }
+    std::env::var("MESH_RADIO_RELAY").unwrap_or_else(|_| "127.0.0.1:9199".into())
+}
+
+/// Ask a radio relay (or mock) for this short id's balance. One LoRa frame each way.
+pub fn cmd_air_balance(dir: &Path, wallet: &str, relay: &str, name: &str) -> Result<()> {
+    let sid = if !name.is_empty() {
+        parse_recipient(name).map_err(|e| anyhow::anyhow!(e))?
+    } else {
+        let kp = load_wallet(&wallet_path(dir, wallet))?;
+        short_id(&kp.public_key())
+    };
+    let target = default_relay(relay);
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos() as u32)
+        .unwrap_or(1);
+    let req_id = nanos.to_le_bytes();
+    let frame = encode_bal_query(&BalQuery {
+        short_id: sid,
+        req_id,
+    })
+    .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+
+    println!("Radio balance query");
+    println!("  Name:   {}", mesh_name(&sid));
+    println!("  Relay:  {target}");
+    println!("  Frame:  {} B (MC BalQuery)", frame.len());
+
+    let mut stream = TcpStream::connect(&target).with_context(|| {
+        format!(
+            "Could not reach radio relay {target}.\n  Start one: ./scripts/start_radio_relay.sh\n  Or: python3 tools/mesh_radio_relay.py --mock --tcp 127.0.0.1:9100 --data-dir ./data"
+        )
+    })?;
+    stream.set_nodelay(true)?;
+    stream.set_read_timeout(Some(Duration::from_secs(8)))?;
+    stream.set_write_timeout(Some(Duration::from_secs(5)))?;
+    writeln!(stream, "MCHEX {}", hex::encode(&frame))?;
+    stream.flush()?;
+
+    let mut reader = BufReader::new(stream);
+    let want = hex::encode(req_id);
+    let mut line = String::new();
+    let deadline = SystemTime::now() + Duration::from_secs(8);
+    loop {
+        if SystemTime::now() > deadline {
+            bail!(
+                "No radio reply in 8s. Is the relay up and does it have chain_state?\n  python3 tools/mesh_radio_relay.py --mock --data-dir ./data --tcp 127.0.0.1:9100"
+            );
+        }
+        line.clear();
+        match reader.read_line(&mut line) {
+            Ok(0) => bail!("Relay closed the connection before a balance reply."),
+            Ok(_) => {}
+            Err(e)
+                if e.kind() == std::io::ErrorKind::WouldBlock
+                    || e.kind() == std::io::ErrorKind::TimedOut =>
+            {
+                continue;
+            }
+            Err(e) => return Err(e.into()),
+        }
+        let t = line.trim();
+        if t.is_empty() {
+            continue;
+        }
+        if let Some(reply) = parse_bal_reply_line(t, &want, &sid) {
+            println!("Balance:   {} MESH", fmt_mesh(reply.balance));
+            println!("Sends:     {} completed from this wallet", reply.nonce);
+            println!("Network:   block #{} (via radio)", reply.height);
+            if !reply.found {
+                println!("On-chain:  NO — this name is not in the relay's chain state yet.");
+            } else {
+                println!("Path:      LoRa / radio relay (no internet used)");
+            }
+            return Ok(());
+        }
+    }
+}
+
+struct AirBal {
+    balance: u64,
+    nonce: u64,
+    height: u64,
+    found: bool,
+}
+
+fn parse_bal_reply_line(line: &str, want_req: &str, sid: &[u8; 8]) -> Option<AirBal> {
+    let upper = line.to_ascii_uppercase();
+    if upper.starts_with("MCHEX ") {
+        let hx = line.split_whitespace().nth(1)?;
+        let raw = hex::decode(hx).ok()?;
+        let frame = decode_frame(&raw).ok()?;
+        let r = decode_bal_reply(&frame).ok()?;
+        if &r.short_id == sid && hex::encode(r.req_id) == want_req {
+            return Some(AirBal {
+                balance: r.balance,
+                nonce: r.nonce,
+                height: r.height,
+                found: r.found,
+            });
+        }
+        return None;
+    }
+    let v: serde_json::Value = serde_json::from_str(line).ok()?;
+    if v.get("type").and_then(|x| x.as_str()) != Some("bal_reply") {
+        return None;
+    }
+    let req = v.get("req_id_hex").and_then(|x| x.as_str()).unwrap_or("");
+    let got_sid = v.get("short_id_hex").and_then(|x| x.as_str()).unwrap_or("");
+    if req != want_req || got_sid != hex::encode(sid) {
+        return None;
+    }
+    Some(AirBal {
+        balance: v.get("balance").and_then(|x| x.as_u64()).unwrap_or(0),
+        nonce: v.get("nonce").and_then(|x| x.as_u64()).unwrap_or(0),
+        height: v.get("height").and_then(|x| x.as_u64()).unwrap_or(0),
+        found: v.get("found").and_then(|x| x.as_bool()).unwrap_or(false),
+    })
+}
 
 // ── send ──────────────────────────────────────────────────────────────────────
 
