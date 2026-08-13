@@ -147,6 +147,38 @@ Env (see `deploy/relayer.env.example`):
 
 IDL ships at `programs-mesh-bridge/idl/programs_mesh_bridge.json` (no Anchor rebuild required on the seed).
 
+### Fund the relayer wallet (devnet)
+
+Public RPC airdrops often fail. From a funded machine:
+
+```bash
+# Seed hot wallet (example — check /etc/meshchain/relayer.env)
+solana transfer <RELAYER_PUBKEY> 0.25 \
+  --url https://api.devnet.solana.com \
+  --allow-unfunded-recipient
+solana balance <RELAYER_PUBKEY> --url https://api.devnet.solana.com
+```
+
+The relayer only needs SOL if it also **signs deposits** from that key. Listening + minting mesh does **not** spend Solana SOL (mint is signed by mesh validator keys via `mint-for-deposit --peer`).
+
+### Deferred deposits (retry)
+
+If a deposit’s mesh short id is **not registered** on the mesh ledger yet, the relayer:
+
+1. Logs `deferred — register mesh wallet first (will retry)`
+2. Stores `seq` in `data/host/relayer_state.json` → `deferredSeqs`
+3. **Re-scans every poll** until `chain_state` / registry has the pubkey, then mints
+
+Register first:
+
+```bash
+mesh new-wallet --name me.json --publish
+# or faucet drip which registers
+mesh faucet-drip --wallet me.json
+```
+
+Then deposit SOL bound to that wallet’s short id (sha256(pubkey)[:8]).
+
 Manual mint (mesh side only, no Solana deposit):
 
 ```bash
@@ -160,5 +192,15 @@ meshchain-node mint-for-deposit \
 ```
 
 Recipient must already be on-chain (register / faucet) so the relayer can resolve short id → full pubkey.
+
+### Hybrid round-trip e2e
+
+```bash
+export ANCHOR_WALLET=~/.config/solana/id.json   # funded on devnet
+export MESH_MINT_PEER=34.172.103.125:9100       # or 127.0.0.1:9100 on seed
+./scripts/e2e_hybrid_roundtrip.sh
+# deposit only:
+SKIP_WITHDRAW=1 ./scripts/e2e_hybrid_roundtrip.sh
+```
 4. Multisig minter + withdraw attestation  
 5. Hardening + optional ZK deposit pool  

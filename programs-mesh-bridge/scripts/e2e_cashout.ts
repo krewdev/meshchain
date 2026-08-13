@@ -1,6 +1,11 @@
 /**
  * E2E cash-out: mesh burn (already done) → hybrid withdraw on Solana devnet.
- * Reads data/last_burn.json and deposit seq 0 (or --seq).
+ * Reads data/last_burn.json (or MESHCHAIN_DATA/last_burn.json).
+ *
+ * Env:
+ *   DEPOSIT_SEQ          deposit PDA sequence (default 0)
+ *   MESHCHAIN_DATA       data dir (default ../../data)
+ *   MESH_BRIDGE_IDL      path to idl json
  */
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
@@ -17,30 +22,40 @@ const DEPOSIT_SEED = Buffer.from("mesh-bridge-deposit");
 const WITHDRAW_SEED = Buffer.from("mesh-bridge-withdraw");
 
 const ROOT = path.resolve(__dirname, "../..");
-const DATA = path.join(ROOT, "data");
-const IDL_PATH = path.join(
-  ROOT,
-  "programs-mesh-bridge/target/idl/programs_mesh_bridge.json"
-);
+const DATA = process.env.MESHCHAIN_DATA
+  ? path.resolve(process.env.MESHCHAIN_DATA)
+  : path.join(ROOT, "data");
+const IDL_CANDIDATES = [
+  process.env.MESH_BRIDGE_IDL,
+  path.join(ROOT, "programs-mesh-bridge/idl/programs_mesh_bridge.json"),
+  path.join(ROOT, "programs-mesh-bridge/target/idl/programs_mesh_bridge.json"),
+].filter(Boolean) as string[];
+
+function findIdl(): string {
+  for (const p of IDL_CANDIDATES) {
+    if (p && fs.existsSync(p)) return p;
+  }
+  throw new Error(`IDL not found. Tried ${IDL_CANDIDATES.join(", ")}`);
+}
 
 async function main() {
-  const burn = JSON.parse(
-    fs.readFileSync(path.join(DATA, "last_burn.json"), "utf8")
-  );
+  const burnPath = fs.existsSync(path.join(DATA, "last_burn.json"))
+    ? path.join(DATA, "last_burn.json")
+    : path.join(DATA, "v0/last_burn.json");
+  const burn = JSON.parse(fs.readFileSync(burnPath, "utf8"));
   const burnTxid = Array.from(Buffer.from(burn.burn_txid_hex, "hex"));
   const amount = new anchor.BN(burn.amount);
   const meshHeight = new anchor.BN(burn.mesh_height);
   const meshShort = Array.from(Buffer.from(burn.mesh_short_id_hex, "hex"));
 
-  // deposit seq 0 from first e2e deposit (adjust if needed)
-  const depositSeq = 0;
+  const depositSeq = Number(process.env.DEPOSIT_SEQ || "0");
   const seqBuf = Buffer.alloc(8);
   seqBuf.writeBigUInt64LE(BigInt(depositSeq));
 
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
-  const idl = JSON.parse(fs.readFileSync(IDL_PATH, "utf8"));
-  const program = new Program(idl, provider);
+  const idl = JSON.parse(fs.readFileSync(findIdl(), "utf8"));
+  const program = new Program(idl as anchor.Idl, provider);
 
   const [configPda] = PublicKey.findProgramAddressSync([CONFIG_SEED], PROGRAM_ID);
   const [vaultPda] = PublicKey.findProgramAddressSync([VAULT_SEED], PROGRAM_ID);

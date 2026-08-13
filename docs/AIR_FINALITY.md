@@ -24,12 +24,19 @@ Meshtastic LoRa frames are tiny (~200 B payload after MeshChain’s 6-byte heade
 
 Same finality threshold as TCP: **ceil(2N/3)** authorized ACKs (producer sig counts as one).
 
-## Phase 2 (next)
+## Phase 2 (in progress)
 
-1. **Air-only lab e2e** — 3 validators with shared mock radio, TCP peers optional; assert height advances from air ACKs alone.
+1. **Lab e2e (shipped)** — `./scripts/e2e_air_finality.sh`  
+   3 validators + mock radio relay; asserts multi-node tip finality, air balance, and AirBlockAck framing/bridge.  
+   Full “TCP-off” finality still needs `--radio` on each producer (Phase 3).
 2. **Catch-up over air** — BlockHint + selective Frag for missing heights (today tip ads trigger TCP `BlocksRequest`).
 3. **Seed ops** — attach hardware or mock radio on producer hosts; document `--radio` / systemd unit.
 4. **Rate limits** — per-name BalQuery already limited; add per-peer air ACK storm guard.
+
+```bash
+./scripts/e2e_air_finality.sh
+# also: ./scripts/e2e_air_path.sh   # air submit + balance
+```
 
 ## Phase 3 (later)
 

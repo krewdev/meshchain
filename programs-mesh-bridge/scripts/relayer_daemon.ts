@@ -2,7 +2,7 @@
  * Automated Relayer: Solana vault deposits → MeshChain tMESH mint.
  *
  * Polls BridgeConfig.depositCount + DepositRecord PDAs (reliable on public RPC).
- * Event websockets on free RPCs often never fire.
+ * Retries deposits whose mesh short id is not registered yet (deferred).
  *
  *   systemd: deploy/meshchain-relayer.service
  *   manual:  ./scripts/start_relayer.sh
@@ -52,6 +52,10 @@ const MINT_PEER =
   process.env.MESH_MINT_PEER || process.env.MESH_SUBMIT_PEER || "127.0.0.1:9100";
 const VALIDATOR_INDEX = process.env.MESH_MINT_VALIDATOR_INDEX || "0";
 const POLL_MS = Number(process.env.MESH_RELAYER_POLL_MS || "4000");
+/** How often to log deferred retries (avoid spam). */
+const DEFER_LOG_COOLDOWN_MS = Number(
+  process.env.MESH_RELAYER_DEFER_LOG_MS || "60000"
+);
 
 function sha256(buf: Buffer): Buffer {
   return crypto.createHash("sha256").update(buf).digest();
@@ -59,7 +63,12 @@ function sha256(buf: Buffer): Buffer {
 
 const STATE_FILE = path.join(DATA, "relayer_state.json");
 
-type RelayerState = { processedSeqs: number[]; lastSeenSeq: number };
+type RelayerState = {
+  processedSeqs: number[];
+  /** Waiting for mesh registration of the short id. */
+  deferredSeqs: number[];
+  deferredReasons: Record<string, string>;
+};
 
 function loadRelayerState(): RelayerState {
   if (fs.existsSync(STATE_FILE)) {
@@ -67,13 +76,14 @@ function loadRelayerState(): RelayerState {
       const s = JSON.parse(fs.readFileSync(STATE_FILE, "utf8"));
       return {
         processedSeqs: s.processedSeqs || [],
-        lastSeenSeq: typeof s.lastSeenSeq === "number" ? s.lastSeenSeq : -1,
+        deferredSeqs: s.deferredSeqs || [],
+        deferredReasons: s.deferredReasons || {},
       };
     } catch {
       /* ignore */
     }
   }
-  return { processedSeqs: [], lastSeenSeq: -1 };
+  return { processedSeqs: [], deferredSeqs: [], deferredReasons: {} };
 }
 
 function saveRelayerState(state: RelayerState) {
@@ -147,10 +157,9 @@ function meshShortToHex(raw: unknown): string {
     if (/^[0-9a-fA-F]{16}$/.test(raw)) return raw.toLowerCase();
     return Buffer.from(raw).toString("hex").slice(0, 16);
   }
-  // BN / number array-like from anchor
-  if (raw && typeof raw === "object" && "length" in (raw as any)) {
+  if (raw && typeof raw === "object" && "length" in (raw as object)) {
     try {
-      return Buffer.from(raw as any).toString("hex");
+      return Buffer.from(raw as ArrayLike<number>).toString("hex");
     } catch {
       /* ignore */
     }
@@ -161,33 +170,51 @@ function meshShortToHex(raw: unknown): string {
 function amountToString(v: unknown): string {
   if (v == null) return "0";
   if (typeof v === "string" || typeof v === "number") return String(v);
-  if (typeof (v as any).toString === "function") return (v as any).toString();
+  if (typeof (v as { toString?: () => string }).toString === "function") {
+    return (v as { toString: () => string }).toString();
+  }
   return String(v);
 }
+
+type ProcessResult = "ok" | "deferred" | "error";
+
+const lastDeferLog: Record<number, number> = {};
 
 async function processDeposit(
   seq: number,
   shortHex: string,
   amountNet: string,
   externalRefSeed: string
-) {
+): Promise<ProcessResult> {
   const state = loadRelayerState();
   if (state.processedSeqs.includes(seq)) {
-    console.log(`[Relayer] seq=${seq} already processed`);
-    return;
+    return "ok";
+  }
+
+  const toPubkeyHex = resolvePublicKey(shortHex);
+  if (!toPubkeyHex) {
+    const now = Date.now();
+    if (
+      !lastDeferLog[seq] ||
+      now - lastDeferLog[seq] >= DEFER_LOG_COOLDOWN_MS
+    ) {
+      lastDeferLog[seq] = now;
+      console.warn(
+        `⏳ [Relayer] seq=${seq} short=${shortHex} deferred — register mesh wallet first (will retry)`
+      );
+    }
+    if (!state.deferredSeqs.includes(seq)) {
+      state.deferredSeqs.push(seq);
+    }
+    state.deferredReasons[String(seq)] = `no_pubkey:${shortHex}`;
+    saveRelayerState(state);
+    return "deferred";
   }
 
   console.log(`[Relayer] Deposit seq=${seq}`);
   console.log(`  Mesh Short: ${shortHex}`);
   console.log(`  Amount Net: ${amountNet} base units`);
-
-  const toPubkeyHex = resolvePublicKey(shortHex);
-  if (!toPubkeyHex) {
-    console.warn(
-      `⚠️ [Relayer] no pubkey for ${shortHex} — register wallet on mesh first. Deferred.`
-    );
-    return;
-  }
+  console.log(`  To pubkey:  ${toPubkeyHex.slice(0, 16)}…`);
 
   const extRef = sha256(Buffer.from(externalRefSeed))
     .subarray(0, 16)
@@ -218,15 +245,19 @@ async function processDeposit(
       ],
       { stdio: "inherit" }
     );
-    state.processedSeqs.push(seq);
-    if (state.processedSeqs.length > 10_000) {
-      state.processedSeqs = state.processedSeqs.slice(-5_000);
+    const st = loadRelayerState();
+    if (!st.processedSeqs.includes(seq)) st.processedSeqs.push(seq);
+    st.deferredSeqs = st.deferredSeqs.filter((s) => s !== seq);
+    delete st.deferredReasons[String(seq)];
+    if (st.processedSeqs.length > 10_000) {
+      st.processedSeqs = st.processedSeqs.slice(-5_000);
     }
-    if (seq > state.lastSeenSeq) state.lastSeenSeq = seq;
-    saveRelayerState(state);
+    saveRelayerState(st);
     console.log(`✅ [Relayer] minted seq=${seq}\n`);
+    return "ok";
   } catch (err) {
-    console.error(`❌ [Relayer] mint failed:`, err);
+    console.error(`❌ [Relayer] mint failed seq=${seq}:`, err);
+    return "error";
   }
 }
 
@@ -272,44 +303,40 @@ async function main() {
   console.log(`RPC     ${provider.connection.rpcEndpoint}`);
   console.log(`Wallet  ${provider.wallet.publicKey.toBase58()}`);
 
-  let state = loadRelayerState();
+  const boot = loadRelayerState();
   console.log(
-    `State: lastSeenSeq=${state.lastSeenSeq} processed=${state.processedSeqs.length}`
+    `State: processed=${boot.processedSeqs.length} deferred=${boot.deferredSeqs.length}`
   );
-  console.log("Relayer online — polling DepositRecord PDAs…");
+  console.log("Relayer online — polling DepositRecord PDAs (retries deferred)…");
 
-  // Catch-up: if lastSeenSeq is -1, start from 0 so past deposits are minted.
   for (;;) {
     try {
       const cfg = await program.account.bridgeConfig.fetch(configPda);
       const depositCount = Number(cfg.depositCount.toString());
-      // seq is 0-based index assigned at deposit; count is next free seq
-      // records exist for seq in [0, depositCount)
-      const start = Math.max(0, state.lastSeenSeq + 1);
-      for (let seq = start; seq < depositCount; seq++) {
-        if (state.processedSeqs.includes(seq)) {
-          state.lastSeenSeq = Math.max(state.lastSeenSeq, seq);
-          saveRelayerState(state);
-          continue;
-        }
+      const state = loadRelayerState();
+
+      // Always rescan [0, depositCount) for anything not yet minted.
+      // Deferred short-ids succeed once the mesh wallet is registered.
+      for (let seq = 0; seq < depositCount; seq++) {
+        if (state.processedSeqs.includes(seq)) continue;
+
         const pda = depositPda(seq);
-        let rec: any;
+        let rec: {
+          meshShortId?: unknown;
+          mesh_short_id?: unknown;
+          amountNet?: unknown;
+          amount_net?: unknown;
+        };
         try {
           rec = await program.account.depositRecord.fetch(pda);
         } catch (e) {
           console.warn(`[Relayer] deposit PDA seq=${seq} missing:`, e);
           continue;
         }
-        const shortHex = meshShortToHex(
-          rec.meshShortId ?? rec.mesh_short_id
-        );
+        const shortHex = meshShortToHex(rec.meshShortId ?? rec.mesh_short_id);
         const amountNet = amountToString(rec.amountNet ?? rec.amount_net);
-        // stable external ref without needing original sol sig
         const refSeed = `deposit-seq-${seq}-${shortHex}-${amountNet}`;
         await processDeposit(seq, shortHex, amountNet, refSeed);
-        state = loadRelayerState();
-        state.lastSeenSeq = Math.max(state.lastSeenSeq, seq);
-        saveRelayerState(state);
       }
     } catch (e) {
       console.error("[Relayer] poll error:", e);
