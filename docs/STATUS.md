@@ -1,6 +1,6 @@
 # MeshChain status (operator truth)
 
-**Updated:** 2026-07-11  
+**Updated:** 2026-08-13  
 **Network:** `meshchain-testnet-1` (public testnet — **no cash value**, state may wipe)
 
 ## Live endpoints
@@ -50,6 +50,9 @@ sudo EXTRA_PEERS=35.192.20.103:9100 /opt/meshchain/deploy/remote-bind-public.sh
 | Multi-tx blocks (≤16) | yes |
 | `protocol_version` in genesis / Hello | yes (v1) |
 | Faucet daily + global rate caps | yes |
+| Solana deposit → tMESH mint (PDA poll relayer) | yes (devnet) |
+| Air balance + AirBlockAck framing | yes (`e2e_air_finality.sh`) |
+| Deferred deposit retry until mesh register | yes |
 
 ## Known limitations
 
