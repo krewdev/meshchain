@@ -30,7 +30,7 @@ jobs:
           exit $code
 
       - name: Notify Discord on failure
-        if: failure() && env.DISCORD_WEBHOOK != ''
+        if: failure() && secrets.DISCORD_WEBHOOK != ''
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
         run: |
@@ -65,7 +65,7 @@ jobs:
           ./scripts/test_public_e2e.sh
 
       - name: Notify Discord on e2e failure
-        if: failure() && env.DISCORD_WEBHOOK != ''
+        if: failure() && secrets.DISCORD_WEBHOOK != ''
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
         run: |
