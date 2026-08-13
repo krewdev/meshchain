@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>MeshChain — Solana vault deposit (devnet)</title>
-  <meta name="description" content="Deposit Solana devnet SOL into the MeshChain hybrid vault. Public relayer mints tMESH on testnet." />
+  <meta name="description" content="Deposit Solana devnet SOL into the MeshChain hybrid vault. Relayer mints tMESH on public testnet." />
   <link rel="stylesheet" href="/styles.css" />
   <link rel="icon" href="/assets/logo.svg" type="image/svg+xml" />
   <style>
@@ -25,13 +25,15 @@
       background: rgba(220,160,40,0.12); border: 1px solid rgba(220,160,40,0.35);
       font-size: 0.92rem; line-height: 1.45;
     }
-    .steps-mini { margin: 1.25rem 0; padding-left: 1.2rem; line-height: 1.55; font-size: 0.95rem; }
-    .steps-mini li { margin: 0.35rem 0; }
     .mint-panel {
       margin-top: 1.5rem; padding: 1rem 1.1rem; border-radius: 12px;
       border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.03);
     }
     .mint-panel h3 { margin: 0 0 0.5rem; font-size: 1.05rem; }
+    .wallet-pill {
+      display: inline-block; margin-top: 0.5rem; padding: 0.25rem 0.6rem;
+      border-radius: 999px; font-size: 0.8rem; background: rgba(255,255,255,0.08);
+    }
   </style>
 </head>
 <body>
@@ -58,22 +60,16 @@
       <h1 style="margin:0 0 0.35rem;font-size:1.65rem">Hybrid vault deposit</h1>
       <p class="bridge-hint">
         Deposit <strong>Solana devnet</strong> SOL bound to your mesh short id.
-        The public seed <strong>relayer</strong> mints tMESH (minus fee). Cash-out later needs mesh burn + attestors.
+        The public seed relayer mints tMESH (minus fee). Cash-out: <code>mesh burn</code> + attestors.
       </p>
 
       <div class="warn-box">
-        <strong>1. Register on mesh first</strong> (or deposits stay deferred):
+        <strong>Register on mesh first</strong> or the relayer defers mint:
         <pre style="margin:0.5rem 0 0;font-size:0.78rem;white-space:pre-wrap">mesh join-public
 mesh new-wallet --name me.json --publish
 mesh faucet-drip --wallet me.json
-mesh address --wallet me.json   # copy the 16-char hex id</pre>
+mesh address --wallet me.json   # copy 16-char hex id</pre>
       </div>
-
-      <ol class="steps-mini">
-        <li>Paste your <strong>16-char hex short id</strong> (from <code>mesh address</code>).</li>
-        <li>Fund a Solana <strong>devnet</strong> wallet, then deposit with CLI (or Anchor script).</li>
-        <li>Watch <strong>mint status</strong> below — balance should jump after the relayer mints.</li>
-      </ol>
 
       <label for="shortId">Mesh short id (16 hex chars)</label>
       <input id="shortId" class="form-input" placeholder="939227b0aeba7e67" autocomplete="off" spellcheck="false" />
@@ -81,19 +77,19 @@ mesh address --wallet me.json   # copy the 16-char hex id</pre>
       <label for="amount">Amount (SOL, devnet)</label>
       <input id="amount" class="form-input" type="number" min="0.001" step="0.001" value="0.02" />
 
-      <div class="hero-actions" style="margin-top:0.75rem;flex-wrap:wrap;gap:0.5rem">
-        <button class="btn btn-primary" id="btnCli" type="button">Show deposit CLI</button>
+      <div class="hero-actions" style="margin-top:0.85rem;flex-wrap:wrap;gap:0.5rem">
+        <button class="btn btn-primary" id="btnConnect" type="button">Connect Phantom</button>
+        <button class="btn btn-primary" id="btnDeposit" type="button" disabled>Deposit with wallet</button>
         <button class="btn btn-ghost" id="btnWatch" type="button">Watch mint status</button>
-        <a class="btn btn-ghost" href="https://explorer.solana.com/address/CBRQcjk5DLJh1HcW3XF5TmUxZsBumhiABJa6M15r3Vkx?cluster=devnet" target="_blank" rel="noopener">Program</a>
+        <button class="btn btn-ghost" id="btnCli" type="button">CLI help</button>
       </div>
+      <div class="wallet-pill" id="walletPill">Wallet: not connected</div>
 
-      <div class="bridge-out" id="out">Paste short id, then show CLI or watch mint.</div>
+      <div class="bridge-out" id="out">Connect a Solana devnet wallet (Phantom) or use CLI help.</div>
 
       <div class="mint-panel">
         <h3>Mint status (public mesh)</h3>
-        <p class="bridge-hint" style="margin:0 0 0.6rem">
-          Polls live chain state for your short id. After a successful vault deposit + relayer mint, balance rises.
-        </p>
+        <p class="bridge-hint" style="margin:0 0 0.6rem">Polls live tip for your short id after deposit.</p>
         <div class="live-stats-grid">
           <div class="live-stat">
             <span class="live-stat-value" id="statHeight">—</span>
@@ -104,34 +100,40 @@ mesh address --wallet me.json   # copy the 16-char hex id</pre>
             <span class="live-stat-key">Account tMESH</span>
           </div>
           <div class="live-stat">
-            <span class="live-stat-value" id="statNonce">—</span>
-            <span class="live-stat-key">Nonce</span>
-          </div>
-          <div class="live-stat">
             <span class="live-stat-value" id="statFound">—</span>
             <span class="live-stat-key">On-chain</span>
+          </div>
+          <div class="live-stat">
+            <span class="live-stat-value" id="statDelta">—</span>
+            <span class="live-stat-key">Δ since watch</span>
           </div>
         </div>
         <p class="bridge-hint" id="watchMeta" style="margin-top:0.75rem">Idle</p>
       </div>
 
       <p class="bridge-hint" style="margin-top:1.5rem">
-        Docs:
-        <a href="/docs/?doc=SOLANA_BRIDGE">Solana bridge</a> ·
-        <a href="/docs/?doc=HYBRID_LOCK">Hybrid lock</a> ·
-        <a href="/docs/?doc=GETTING_STARTED">Getting started</a>
-        <br />Program <code>CBRQcjk5DLJh1HcW3XF5TmUxZsBumhiABJa6M15r3Vkx</code> (devnet)
+        <a href="/docs/?doc=SOLANA_BRIDGE">Bridge docs</a> ·
+        <a href="/docs/?doc=HYBRID_SECURITY_REVIEW">Security review brief</a> ·
+        Cash-out: <code>mesh burn 10 --dest-sol &lt;SolPk&gt; --wallet me.json --cold cold.json</code>
+        <br />Program <code>CBRQcjk5DLJh1HcW3XF5TmUxZsBumhiABJa6M15r3Vkx</code>
       </p>
     </div>
   </main>
 
+  <!-- web3 + anchor (UMD) -->
+  <script src="https://unpkg.com/@solana/web3.js@1.95.4/lib/index.iife.min.js"></script>
+  <script src="https://unpkg.com/@coral-xyz/anchor@0.29.0/dist/browser/index.js"></script>
   <script>
   (function () {
     const SCANNER = 'https://34.172.103.125.sslip.io';
-    const PROGRAM = 'CBRQcjk5DLJh1HcW3XF5TmUxZsBumhiABJa6M15r3Vkx';
+    const PROGRAM_ID = 'CBRQcjk5DLJh1HcW3XF5TmUxZsBumhiABJa6M15r3Vkx';
+    const RPC = 'https://api.devnet.solana.com';
     const out = document.getElementById('out');
+    const pill = document.getElementById('walletPill');
     let watchTimer = null;
     let baseline = null;
+    let provider = null;
+    let idl = null;
 
     function setOut(msg, cls) {
       out.textContent = msg;
@@ -140,37 +142,146 @@ mesh address --wallet me.json   # copy the 16-char hex id</pre>
 
     function shortId() {
       const s = (document.getElementById('shortId').value || '').trim().toLowerCase();
-      if (!/^[0-9a-f]{16}$/.test(s)) {
-        throw new Error('Enter a 16-character hex short id from `mesh address`');
-      }
+      if (!/^[0-9a-f]{16}$/.test(s)) throw new Error('Enter 16-char hex short id from mesh address');
       return s;
     }
+
+    function shortBytes(hex) {
+      const b = new Uint8Array(8);
+      for (let i = 0; i < 8; i++) b[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+      return Array.from(b);
+    }
+
+    async function loadIdl() {
+      const r = await fetch('/bridge/idl.json', { cache: 'no-store' });
+      if (!r.ok) throw new Error('Failed to load /bridge/idl.json');
+      return r.json();
+    }
+
+    function getInjected() {
+      return window.solana || window.phantom?.solana || null;
+    }
+
+    document.getElementById('btnConnect').onclick = async () => {
+      try {
+        const w = getInjected();
+        if (!w) {
+          setOut('No Solana wallet found. Install Phantom, set network to Devnet, then retry.', 'err');
+          return;
+        }
+        const resp = await w.connect();
+        const pk = (resp && resp.publicKey) ? resp.publicKey : w.publicKey;
+        const { Connection, PublicKey } = solanaWeb3;
+        const connection = new Connection(RPC, 'confirmed');
+        const publicKey = new PublicKey(pk.toString());
+        const wallet = {
+          publicKey,
+          signTransaction: (tx) => w.signTransaction(tx),
+          signAllTransactions: (txs) => w.signAllTransactions(txs),
+        };
+        // Anchor 0.29 browser global
+        const anchor = window.anchor;
+        if (!anchor) throw new Error('Anchor failed to load from CDN');
+        provider = new anchor.AnchorProvider(connection, wallet, { commitment: 'confirmed' });
+        anchor.setProvider(provider);
+        idl = await loadIdl();
+        document.getElementById('btnDeposit').disabled = false;
+        pill.textContent = 'Wallet: ' + publicKey.toBase58().slice(0, 4) + '…' + publicKey.toBase58().slice(-4) + ' (devnet)';
+        setOut('Connected ' + publicKey.toBase58() + '\nNetwork must be Devnet in wallet settings.', 'ok');
+      } catch (e) {
+        console.error(e);
+        setOut('Connect failed: ' + (e.message || e), 'err');
+      }
+    };
+
+    document.getElementById('btnDeposit').onclick = async () => {
+      try {
+        if (!provider || !idl) throw new Error('Connect wallet first');
+        const anchor = window.anchor;
+        const { PublicKey, SystemProgram } = solanaWeb3;
+        const sid = shortId();
+        const amountSol = parseFloat(document.getElementById('amount').value);
+        if (!(amountSol > 0 && amountSol < 100)) throw new Error('Amount out of range');
+
+        // Anchor 0.29: new Program(idl, programId, provider)
+        // Anchor 0.30+: new Program(idl, provider) when idl.address set
+        let program;
+        try {
+          program = new anchor.Program(idl, provider);
+        } catch (_) {
+          program = new anchor.Program(idl, new PublicKey(PROGRAM_ID), provider);
+        }
+
+        const programId = new PublicKey(PROGRAM_ID);
+        const [configPda] = PublicKey.findProgramAddressSync(
+          [new TextEncoder().encode('mesh-bridge-config')],
+          programId
+        );
+        const [vaultPda] = PublicKey.findProgramAddressSync(
+          [new TextEncoder().encode('mesh-bridge-vault')],
+          programId
+        );
+
+        const cfg = await program.account.bridgeConfig.fetch(configPda);
+        const seq = cfg.depositCount;
+        const seqBn = typeof seq.toNumber === 'function' ? seq : seq;
+        const seqNum = typeof seqBn.toNumber === 'function' ? seqBn.toNumber() : Number(seqBn.toString());
+        const seqBuf = new ArrayBuffer(8);
+        new DataView(seqBuf).setBigUint64(0, BigInt(seqNum), true);
+        const [depositPda] = PublicKey.findProgramAddressSync(
+          [new TextEncoder().encode('mesh-bridge-deposit'), new Uint8Array(seqBuf)],
+          programId
+        );
+
+        const lamports = Math.floor(amountSol * 1e9);
+        const amount = new anchor.BN(lamports);
+        const meshShort = shortBytes(sid);
+
+        setOut('Sending depositSol… seq=' + seqNum + ' short=' + sid, 'warn');
+
+        const sig = await program.methods
+          .depositSol(amount, meshShort)
+          .accounts({
+            depositor: provider.wallet.publicKey,
+            config: configPda,
+            solVault: vaultPda,
+            depositRecord: depositPda,
+            systemProgram: SystemProgram.programId,
+          })
+          .rpc();
+
+        setOut(
+          'DEPOSIT_OK\n' +
+          'tx: ' + sig + '\n' +
+          'https://explorer.solana.com/tx/' + sig + '?cluster=devnet\n' +
+          'seq: ' + seqNum + '\n' +
+          'Watch mint status below (relayer mints when short id is registered).',
+          'ok'
+        );
+        // auto-watch
+        document.getElementById('btnWatch').click();
+      } catch (e) {
+        console.error(e);
+        setOut('Deposit failed: ' + (e.message || String(e)), 'err');
+      }
+    };
 
     document.getElementById('btnCli').onclick = () => {
       try {
         const sid = shortId();
         const amt = document.getElementById('amount').value || '0.02';
         setOut(
-`# 1) Ensure mesh account exists
-mesh join-public
-mesh new-wallet --name me.json --publish
-mesh faucet-drip --wallet me.json
-
-# 2) Deposit SOL (devnet) bound to short id ${sid}
-# From monorepo with funded ANCHOR_WALLET:
+`# CLI / script path (funded ANCHOR_WALLET on devnet)
 export ANCHOR_PROVIDER_URL=https://api.devnet.solana.com
 export ANCHOR_WALLET=$HOME/.config/solana/id.json
+# use e2e helper or programs-mesh-bridge scripts
+SKIP_WITHDRAW=1 MESH_MINT_PEER=34.172.103.125:9100 ./scripts/e2e_hybrid_roundtrip.sh
 
-# Or use programs-mesh-bridge scripts / e2e helpers:
-#   SKIP_WITHDRAW=1 MESH_MINT_PEER=34.172.103.125:9100 ./scripts/e2e_hybrid_roundtrip.sh
+# Cash-out later:
+mesh new-cold-key --name cold.json
+mesh burn ${amt} --wallet me.json --cold cold.json --dest-sol <YourSolPubkey>
 
-# 3) Relayer on public seed mints tMESH automatically when short id is registered.
-# Watch below or:
-#   mesh balance --wallet me.json
-# Scanner: ${SCANNER}/
-
-# Program: ${PROGRAM}
-# Amount: ${amt} SOL (devnet only)`,
+# short id for this form: ${sid}`,
           'ok'
         );
       } catch (e) {
@@ -182,8 +293,6 @@ export ANCHOR_WALLET=$HOME/.config/solana/id.json
       const sid = shortId();
       const st = await fetch(SCANNER + '/api/v1/status', { cache: 'no-store' }).then((r) => r.json());
       document.getElementById('statHeight').textContent = st.height ?? '—';
-
-      // Prefer accounts endpoint if present, else chain_state
       let acc = null;
       try {
         const a = await fetch(SCANNER + '/api/v1/accounts/' + sid, { cache: 'no-store' });
@@ -192,38 +301,24 @@ export ANCHOR_WALLET=$HOME/.config/solana/id.json
       if (!acc) {
         const cs = await fetch(SCANNER + '/api/v1/chain_state', { cache: 'no-store' }).then((r) => r.json());
         const row = (cs.accounts || {})[sid];
-        if (row) {
-          acc = {
-            found: true,
-            balance: row.balance,
-            balance_tmesh: (row.balance || 0) / 1e6,
-            nonce: row.nonce,
-          };
-        }
+        if (row) acc = { balance: row.balance, balance_tmesh: (row.balance || 0) / 1e6, found: true };
       }
-
-      if (acc && (acc.found !== false) && acc.balance != null) {
+      if (acc && acc.balance != null) {
         const bal = Number(acc.balance_tmesh != null ? acc.balance_tmesh : acc.balance / 1e6);
         document.getElementById('statBal').textContent = bal.toFixed(6);
-        document.getElementById('statNonce').textContent = String(acc.nonce ?? '—');
         document.getElementById('statFound').textContent = 'yes';
         if (baseline == null) baseline = bal;
         const delta = bal - baseline;
-        let msg = 'Account ' + sid + ' · ' + bal.toFixed(6) + ' tMESH';
-        if (delta > 0.000001) {
-          msg += ' · +' + delta.toFixed(6) + ' since watch started (mint likely landed)';
-          document.getElementById('watchMeta').textContent = msg;
-          setOut(msg + '\nheight ' + st.height, 'ok');
-        } else {
-          document.getElementById('watchMeta').textContent = msg + ' · waiting for mint…';
-        }
+        document.getElementById('statDelta').textContent = (delta >= 0 ? '+' : '') + delta.toFixed(6);
+        const msg = sid + ' · ' + bal.toFixed(6) + ' tMESH · h' + st.height;
+        document.getElementById('watchMeta').textContent =
+          delta > 1e-6 ? msg + ' · mint likely landed' : msg + ' · waiting…';
+        if (delta > 1e-6) setOut(msg + '\nΔ +' + delta.toFixed(6) + ' tMESH since watch start', 'ok');
       } else {
         document.getElementById('statBal').textContent = '—';
-        document.getElementById('statNonce').textContent = '—';
         document.getElementById('statFound').textContent = 'no';
-        document.getElementById('watchMeta').textContent =
-          'Short id not on-chain yet — register/faucet first, or wait for relayer.';
-        setOut('Not found on mesh tip yet: ' + sid + '\nRegister with mesh new-wallet --publish', 'warn');
+        document.getElementById('statDelta').textContent = '—';
+        document.getElementById('watchMeta').textContent = 'Not on-chain — register/faucet first';
       }
     }
 
@@ -231,24 +326,17 @@ export ANCHOR_WALLET=$HOME/.config/solana/id.json
       try {
         baseline = null;
         if (watchTimer) clearInterval(watchTimer);
-        setOut('Watching ' + shortId() + ' …', 'warn');
+        setOut('Watching ' + shortId() + '…', 'warn');
         await pollOnce();
-        watchTimer = setInterval(() => {
-          pollOnce().catch((e) => {
-            document.getElementById('watchMeta').textContent = String(e.message || e);
-          });
-        }, 8000);
+        watchTimer = setInterval(() => pollOnce().catch(() => {}), 8000);
       } catch (e) {
         setOut(String(e.message || e), 'err');
       }
     };
 
-    // tip only
     fetch(SCANNER + '/api/v1/status', { cache: 'no-store' })
       .then((r) => r.json())
-      .then((d) => {
-        document.getElementById('statHeight').textContent = d.height ?? '—';
-      })
+      .then((d) => { document.getElementById('statHeight').textContent = d.height ?? '—'; })
       .catch(() => {});
   })();
   </script>

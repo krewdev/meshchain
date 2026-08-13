@@ -11,8 +11,8 @@ use std::path::{Path, PathBuf};
 
 use crate::helpers::{
     best_chain_state_path, default_scanner_url, default_submit_peer, fmt_mesh, keys_dir,
-    load_wallet, promote_v0_snapshot, refresh_after_submit, submit_tx_to_peer,
-    sync_state_from_scanner, wallet_path,
+    load_wallet, parse_mesh_amount, promote_v0_snapshot, refresh_after_submit, run_external_node,
+    submit_tx_to_peer, sync_state_from_scanner, wallet_path,
 };
 
 // ── register helper (shared by new-wallet --publish and register cmd) ─────────
@@ -255,6 +255,147 @@ pub fn cmd_register(
         println!("Account will appear after the next block (often a few seconds).");
         refresh_after_submit(dir, &peer);
     }
+    Ok(())
+}
+
+// ── burn (vault cash-out) ─────────────────────────────────────────────────────
+
+/// Burn tMESH for hybrid vault unlock (PQ cold key required when asset-id ≠ 0).
+/// Submits to a live peer by default (public seed).
+pub fn cmd_burn(
+    dir: &Path,
+    amount_str: &str,
+    wallet: &str,
+    cold: &str,
+    dest_sol: &str,
+    asset_id: u32,
+    submit: &str,
+    offline: bool,
+    scanner: &str,
+) -> Result<()> {
+    let amount = parse_mesh_amount(amount_str)?;
+    if amount == 0 {
+        bail!("amount must be > 0");
+    }
+    let wpath = wallet_path(dir, wallet);
+    let cpath = if Path::new(cold).is_absolute() || cold.contains('/') {
+        PathBuf::from(cold)
+    } else {
+        wallet_path(dir, cold)
+    };
+    if !wpath.exists() {
+        bail!("Wallet not found: {}", wpath.display());
+    }
+    if !cpath.exists() {
+        bail!(
+            "Cold key not found: {}.\n  Create with: mesh new-cold-key --name {cold}",
+            cpath.display()
+        );
+    }
+    if dest_sol.trim().is_empty() {
+        bail!("--dest-sol is required (Solana base58 address for vault release)");
+    }
+
+    // Prefer data_dir with chain_state at root (join-public layout)
+    let data_dir = dir.to_path_buf();
+    promote_v0_snapshot(dir);
+    let state_path = best_chain_state_path(dir);
+    if !state_path.exists() {
+        bail!("No chain state. Run: mesh join-public");
+    }
+    // burn-for-withdraw expects genesis.json next to chain_state
+    let data_arg = if state_path.parent() == Some(dir) {
+        data_dir
+    } else if dir.join("v0").join("chain_state.json").exists() {
+        dir.join("v0")
+    } else {
+        data_dir
+    };
+    // Ensure genesis is available beside state
+    if !data_arg.join("genesis.json").exists() {
+        let g = dir.join("genesis.json");
+        if g.exists() {
+            let _ = fs::copy(&g, data_arg.join("genesis.json"));
+        }
+    }
+
+    let peer = if offline {
+        String::new()
+    } else if !submit.is_empty() {
+        submit.to_string()
+    } else {
+        default_submit_peer(dir)
+    };
+
+    let amount_s = amount.to_string();
+    let asset_s = asset_id.to_string();
+    let mut args: Vec<&str> = vec![
+        "burn-for-withdraw",
+        "--data-dir",
+        data_arg.to_str().unwrap_or("."),
+        "--wallet",
+        wpath.to_str().unwrap_or("wallet.json"),
+        "--cold",
+        cpath.to_str().unwrap_or("cold.json"),
+        "--amount",
+        amount_s.as_str(),
+        "--dest-sol",
+        dest_sol.trim(),
+        "--asset-id",
+        asset_s.as_str(),
+    ];
+    let peer_owned = peer.clone();
+    let scanner_owned = if scanner.is_empty() {
+        default_scanner_url(dir)
+            .map(|u| {
+                if u.ends_with("/api/v1/status") {
+                    u
+                } else {
+                    format!("{}/api/v1/status", u.trim_end_matches('/'))
+                }
+            })
+            .unwrap_or_else(|| "https://34.172.103.125.sslip.io/api/v1/status".into())
+    } else {
+        scanner.to_string()
+    };
+
+    if offline {
+        args.push("--offline");
+    } else {
+        args.push("--peer");
+        args.push(peer_owned.as_str());
+        args.push("--scanner");
+        args.push(scanner_owned.as_str());
+    }
+
+    println!("Burning {} MESH for vault unlock…", fmt_mesh(amount));
+    println!("  Wallet:  {}", wpath.display());
+    println!("  Cold:    {}", cpath.display());
+    println!("  Dest SOL: {dest_sol}");
+    if offline {
+        println!("  Mode:    offline lab finality");
+    } else {
+        println!("  Peer:    {peer_owned}");
+    }
+    run_external_node(&args)?;
+    // last_burn lands under data_arg
+    let burn_path = data_arg.join("last_burn.json");
+    if burn_path.exists() {
+        if let Ok(raw) = fs::read_to_string(&burn_path) {
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&raw) {
+                if let Some(tx) = v.get("burn_txid_hex").and_then(|x| x.as_str()) {
+                    println!("Burn txid: {tx}");
+                }
+            }
+        }
+        // also copy to data root for hybrid scripts
+        let _ = fs::copy(&burn_path, dir.join("last_burn.json"));
+        println!("Artifact: {}", burn_path.display());
+    }
+    if !offline {
+        refresh_after_submit(dir, &peer_owned);
+    }
+    println!("Next: hybrid withdraw on Solana (see docs/SOLANA_BRIDGE.md or /bridge/)");
     Ok(())
 }
 

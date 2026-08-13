@@ -282,6 +282,33 @@ enum Commands {
         relay: String,
     },
 
+    /// Burn tMESH for hybrid vault unlock (needs cold key; submits to seed by default)
+    #[command(name = "burn", next_help_heading = "Vault")]
+    Burn {
+        /// Amount of MESH to burn (decimal, e.g. 10 or 10.5)
+        amount: String,
+        #[arg(long, default_value = "wallet.json")]
+        wallet: String,
+        /// Quantum cold key (required for vault-linked burns)
+        #[arg(long, default_value = "cold.json")]
+        cold: String,
+        /// Solana destination base58 (where vault SOL is released)
+        #[arg(long)]
+        dest_sol: String,
+        /// Asset id (1 = SOL vault path)
+        #[arg(long, default_value_t = 1)]
+        asset_id: u32,
+        /// Validator peer (default: seeds / MESH_SUBMIT / public seed)
+        #[arg(long, default_value = "")]
+        submit: String,
+        /// Offline lab finality only (needs local validator keys)
+        #[arg(long, default_value_t = false)]
+        offline: bool,
+        /// Scanner status URL for tip after submit
+        #[arg(long, default_value = "")]
+        scanner: String,
+    },
+
     /// Submit last_payment.json over Meshtastic air path (MC frame → relay/validator)
     #[command(name = "air-submit")]
     AirSubmit {
@@ -574,6 +601,20 @@ fn main() -> Result<()> {
         } => {
             cmd::radio::cmd_send(
                 &dir, &to, &amount, &wallet, &cold, &fee, out, submit, wait, air, &relay,
+            )?;
+        }
+        Commands::Burn {
+            amount,
+            wallet,
+            cold,
+            dest_sol,
+            asset_id,
+            submit,
+            offline,
+            scanner,
+        } => {
+            cmd::wallet::cmd_burn(
+                &dir, &amount, &wallet, &cold, &dest_sol, asset_id, &submit, offline, &scanner,
             )?;
         }
         Commands::AirSubmit { tx, peer, relay } => {

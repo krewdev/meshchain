@@ -2,9 +2,15 @@ name: Public seed health
 
 on:
   schedule:
-    # Every 6 hours
-    - cron: "0 */6 * * *"
+    # Every 2 hours
+    - cron: "15 */2 * * *"
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/status_public_seed.sh"
+      - "scripts/seed_health.sh"
+      - ".github/workflows/seed-health.yml"
 
 jobs:
   health:
@@ -14,9 +20,30 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Run status_public_seed.sh
+        id: status
         run: |
-          chmod +x scripts/status_public_seed.sh
-          ./scripts/status_public_seed.sh
+          chmod +x scripts/status_public_seed.sh scripts/seed_health.sh
+          set +e
+          ./scripts/status_public_seed.sh | tee /tmp/seed-status.txt
+          code=${PIPESTATUS[0]}
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit $code
+
+      - name: Notify Discord on failure
+        if: failure() && env.DISCORD_WEBHOOK != ''
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+        run: |
+          body=$(python3 - <<'PY'
+          import json, os, pathlib
+          text = pathlib.Path("/tmp/seed-status.txt").read_text(errors="replace")[-1800:]
+          payload = {
+            "content": "⚠️ MeshChain **public seed health FAIL**\n```\n" + text + "\n```\nRun: `./scripts/status_public_seed.sh` / `./scripts/deploy_public_seed.sh`"
+          }
+          print(json.dumps(payload))
+          PY
+          )
+          curl -fsS -H 'Content-Type: application/json' -d "$body" "$DISCORD_WEBHOOK" || true
 
   e2e:
     name: Public join → faucet e2e
@@ -36,3 +63,12 @@ jobs:
           cargo build -p mesh -q
           chmod +x scripts/test_public_e2e.sh
           ./scripts/test_public_e2e.sh
+
+      - name: Notify Discord on e2e failure
+        if: failure() && env.DISCORD_WEBHOOK != ''
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+        run: |
+          curl -fsS -H 'Content-Type: application/json' \
+            -d '{"content":"⚠️ MeshChain **public e2e FAIL** (join → faucet). Check seed faucet/mint."}' \
+            "$DISCORD_WEBHOOK" || true

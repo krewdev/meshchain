@@ -79,6 +79,7 @@ mesh send MVGQK7-82943-QJC 5 --wallet me.json --submit 34.172.103.125:9100
 | `mesh balance --wallet me.json` | Balance via scanner/local tip |
 | `mesh balance --air` | Balance via radio relay (offline) |
 | `mesh send <name> <amount>` | Pay a mesh name (or hex) |
+| `mesh burn <amount> --dest-sol <pk>` | Vault burn for hybrid cash-out (PQ cold) |
 | `mesh status` | Height & supply |
 | `mesh new-cold-key` | Long-term PQ cold key |
 
@@ -111,14 +112,13 @@ Deposit SOL into the vault → relayer mints tMESH. Cash-out needs mesh burn + 2
 ./scripts/e2e_hybrid_roundtrip.sh          # deposit → mint → burn(peer) → withdraw
 ./scripts/start_relayer.sh                 # or systemd meshchain-relayer on seed
 
-# Peer burn (public seed)
-meshchain-node burn-for-withdraw \
-  --data-dir ./data --wallet ./data/keys/me.json --cold ./data/keys/cold.json \
-  --amount <base_units> --dest-sol <SolPubkey> --asset-id 1 \
-  --peer 34.172.103.125:9100
+# Peer burn (public seed) — plain English
+mesh new-cold-key --name cold.json
+mesh burn 10 --wallet me.json --cold cold.json --dest-sol <YourSolPubkey>
+# then hybrid withdraw with attestors (docs/SOLANA_BRIDGE.md)
 ```
 
-See [SOLANA_BRIDGE.md](SOLANA_BRIDGE.md) and [HYBRID_LOCK.md](HYBRID_LOCK.md).
+See [SOLANA_BRIDGE.md](SOLANA_BRIDGE.md), [HYBRID_LOCK.md](HYBRID_LOCK.md), and [HYBRID_SECURITY_REVIEW.md](HYBRID_SECURITY_REVIEW.md).
 
 ## Seed ops
 

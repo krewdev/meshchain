@@ -34,6 +34,7 @@
     { group: "Bridge" },
     { id: "SOLANA_BRIDGE", title: "Solana bridge" },
     { id: "SOLANA_DEVNET", title: "Solana devnet" },
+    { id: "HYBRID_SECURITY_REVIEW", title: "Hybrid security brief" },
     { id: "BTC_VAULT", title: "BTC vault design" },
     { id: "E2E_TESTNET", title: "E2E results" },
   ];

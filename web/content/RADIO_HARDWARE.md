@@ -90,7 +90,42 @@ Today:
 
 Phase 2/3: selective Frag for missing heights over air (not yet default).
 
-## Checklist before field use
+## Field checklist (print / run before leaving the desk)
+
+### A. Desk prep
+- [ ] `cargo build -p mesh -p meshchain-node`  
+- [ ] `mesh join-public` on the gateway laptop  
+- [ ] Wallet created + funded on testnet (`faucet-drip`)  
+- [ ] Channel **MeshChain-Testnet-1** created; PSK saved offline  
+- [ ] Region / modem preset legal for site  
+- [ ] Spare USB cable + power bank  
+
+### B. On site (radios)
+- [ ] Both nodes same channel + region  
+- [ ] Gateway radio USB shows as `/dev/ttyUSB*` or TCP API up  
+- [ ] `MESH_RADIO_FLAGS=--port /dev/tty… ./scripts/start_radio_relay.sh`  
+- [ ] Relay log: `connected` to validator/observer TCP  
+- [ ] `mesh balance --air --wallet me.json` returns height + balance  
+- [ ] `mesh send <peer_name> 0.1 --air --wallet me.json` (tiny)  
+- [ ] Recipient sees balance update (air or scanner)  
+
+### C. Failure drills
+- [ ] Unplug internet: air balance still answers if relay has `chain_state`  
+- [ ] Kill relay: CLI errors clearly; restart restores  
+- [ ] Wrong channel: no bal reply within 8s  
+
+### D. After field
+- [ ] Power radios down  
+- [ ] Cold keys still offline  
+- [ ] Note firmware versions + GPS coords (optional coverage map)  
+
+### Quick lab (no hardware)
+```bash
+./scripts/e2e_air_path.sh
+./scripts/e2e_air_finality.sh
+```
+
+## Checklist before field use (short)
 
 - [ ] Private channel + correct region  
 - [ ] Relay sees `chain_state` (`--data-dir`)  

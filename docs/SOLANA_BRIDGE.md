@@ -206,19 +206,24 @@ SKIP_WITHDRAW=1 ./scripts/e2e_hybrid_roundtrip.sh
 ### Peer-submitted vault burn (public seed)
 
 ```bash
-# After join-public + funded wallet + cold key:
+# Plain English (preferred)
+mesh new-cold-key --name cold.json
+mesh burn 10 --wallet me.json --cold cold.json --dest-sol <YourSolPubkeyBase58>
+# defaults --submit to public seed from seeds.json / MESH_SUBMIT
+
+# Equivalent low-level:
 meshchain-node burn-for-withdraw \
   --data-dir ./data \
   --wallet ./data/keys/me.json \
   --cold ./data/keys/cold.json \
-  --amount 24925000 \
+  --amount 10000000 \
   --dest-sol <YourSolPubkeyBase58> \
   --asset-id 1 \
-  --peer 34.172.103.125:9100 \
-  --scanner https://34.172.103.125.sslip.io/api/v1/status
-# writes data/last_burn.json → use with e2e_cashout / hybrid withdraw
+  --peer 34.172.103.125:9100
+# writes last_burn.json → hybrid withdraw
 ```
 
-Web helper (deposit + mint watch): https://meshchain-sigma.vercel.app/bridge/
+Web helper (Phantom deposit + mint watch): https://meshchain-sigma.vercel.app/bridge/  
+Security brief for reviewers: [HYBRID_SECURITY_REVIEW.md](HYBRID_SECURITY_REVIEW.md)
 4. Multisig minter + withdraw attestation  
 5. Hardening + optional ZK deposit pool  

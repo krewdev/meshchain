@@ -69,12 +69,22 @@ jobs:
           chmod +x scripts/e2e_air_path.sh scripts/start_radio_relay.sh
           bash scripts/e2e_air_path.sh
 
+      - name: Air finality e2e (mock relay ACKs)
+        run: |
+          chmod +x scripts/e2e_air_finality.sh
+          bash scripts/e2e_air_finality.sh
+
+      - name: CLI burn help smoke
+        run: |
+          ./target/debug/mesh burn --help
+          ./target/debug/meshchain-node burn-for-withdraw --help | grep -q peer
+
       - name: Public seed HTTP smoke (best-effort)
         continue-on-error: true
         run: |
+          chmod +x scripts/status_public_seed.sh scripts/seed_health.sh
+          ./scripts/status_public_seed.sh || true
           # Live seed may be offline; don't fail the PR
           curl -fsS --max-time 10 http://34.172.103.125:8787/info || exit 0
           curl -fsS --max-time 10 http://34.172.103.125:8788/api/v1/status || exit 0
-          curl -fsS --max-time 10 http://35.192.20.103:9100 && true || true
-          # TCP probe observer (nc may not exist)
           timeout 3 bash -c 'echo >/dev/tcp/35.192.20.103/9100' 2>/dev/null && echo "observer :9100 open" || echo "observer probe skipped"
