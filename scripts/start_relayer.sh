@@ -33,6 +33,7 @@ if [[ ! -f node_modules/ts-node/package.json ]]; then
     || npm install ts-node typescript @types/node
 fi
 
-exec npx ts-node \
-  --compiler-options '{"module":"commonjs","esModuleInterop":true,"resolveJsonModule":true}' \
-  scripts/relayer_daemon.ts
+# transpileOnly avoids Anchor Program ctor type friction on mixed versions
+export TS_NODE_TRANSPILE_ONLY=1
+export TS_NODE_COMPILER_OPTIONS='{"module":"commonjs","esModuleInterop":true,"resolveJsonModule":true}'
+exec npx ts-node scripts/relayer_daemon.ts
