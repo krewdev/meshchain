@@ -2,6 +2,7 @@
 (function () {
   const DOCS = [
     { group: "Start" },
+    { id: "PRODUCT", title: "Product (the idea)" },
     { id: "GETTING_STARTED", title: "Getting started" },
     { id: "WALLET", title: "Browser wallet" },
     { id: "TESTNET", title: "Public testnet" },

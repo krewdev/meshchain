@@ -53,12 +53,16 @@ MSG_BLOCK_HINT = 8
 MSG_BAL_QUERY = 12
 MSG_BAL_REPLY = 13
 MSG_AIR_BLOCK_ACK = 14  # compact LoRa finality ack (105 B payload)
+MSG_AIR_IOU = 15  # vault-bound IOU (129 B) — product frame
+MSG_AIR_IOU_ACK = 16  # witness receipt (82 B)
 MSG_GOSSIP = 20
 MAX_PAYLOAD = 200
 HEADER_LEN = 6
 BAL_QUERY_LEN = 12
 BAL_REPLY_LEN = 37
 AIR_BLOCK_ACK_LEN = 105  # height8 + hash32 + vidx1 + sig64
+AIR_IOU_LEN = 129
+AIR_IOU_ACK_LEN = 82
 ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 
 
@@ -778,6 +782,42 @@ def main():
                 f"[{tag}] air BlockAck h={height} v{vidx} hash={block_hash.hex()[:16]}…",
                 flush=True,
             )
+            return
+
+        if msg_type == MSG_AIR_IOU:
+            if len(payload) != AIR_IOU_LEN:
+                print(f"[{tag}] bad air iou {len(payload)}B", flush=True)
+                return
+            iou_id = hashlib.sha256(payload[:65]).digest()[:16]
+            inject_tcp_json(
+                {
+                    "type": "air_iou",
+                    "iou_bincode_hex": binascii.hexlify(payload).decode(),
+                    "iou_id_hex": iou_id.hex(),
+                    "from_hex": payload[1:9].hex(),
+                    "dest_hex": payload[9:41].hex(),
+                    "amount": int.from_bytes(payload[41:49], "little"),
+                    "nonce": int.from_bytes(payload[49:53], "little"),
+                    "expiry_unix": int.from_bytes(payload[53:57], "little"),
+                    "deposit_seq": int.from_bytes(payload[57:65], "little"),
+                }
+            )
+            print(f"[{tag}] air IOU {iou_id.hex()} {len(payload)}B → tcp", flush=True)
+            return
+
+        if msg_type == MSG_AIR_IOU_ACK:
+            if len(payload) != AIR_IOU_ACK_LEN:
+                print(f"[{tag}] bad air iou ack {len(payload)}B", flush=True)
+                return
+            inject_tcp_json(
+                {
+                    "type": "air_iou_ack",
+                    "iou_id_hex": payload[1:17].hex(),
+                    "witness_index": payload[17],
+                    "signature_hex": payload[18:82].hex(),
+                }
+            )
+            print(f"[{tag}] air IOU ack {payload[1:17].hex()} v{payload[17]}", flush=True)
             return
 
         if msg_type == MSG_BLOCK_ACK:

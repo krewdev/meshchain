@@ -60,19 +60,20 @@
     <section class="hero">
       <div class="wrap hero-grid">
         <div>
-          <div class="badge">Off-grid · Air balance · Hybrid vault · Testnet live</div>
-          <h1>Money that moves when the internet doesn’t.</h1>
+          <div class="badge">Hybrid vault · Mesh witnesses · Testnet</div>
+          <h1>Solana-held value that cannot move with internet alone.</h1>
           <p class="lead">
-            MeshChain is a privacy-forward ledger for the
+            Load USDC or SOL while you have LTE. Pay on a
             <a href="https://meshtastic.org/" target="_blank" rel="noopener">Meshtastic</a>
-            LoRa mesh. Hold and spend offline. Check balances over radio.
-            Cold keys stay air-gapped. Hybrid vaults refuse internet-only unlocks.
+            channel when you don’t. Both sides get a radio receipt.
+            L1 settles when a gateway plus mesh witnesses show up.
+            A laptop on hotel Wi-Fi cannot drain the vault by itself.
           </p>
           <div class="hero-actions">
-            <a class="btn btn-primary" href="/wallet/">Create wallet</a>
-            <a class="btn btn-ghost" href="/faucet/">Claim faucet tMESH</a>
-            <a class="btn btn-ghost" href="/bridge/">Vault deposit</a>
-            <a class="btn btn-ghost" href="/docs/?doc=GETTING_STARTED">Happy path</a>
+            <a class="btn btn-primary" href="/bridge/">Vault deposit</a>
+            <a class="btn btn-ghost" href="/docs/?doc=PRODUCT">The idea</a>
+            <a class="btn btn-ghost" href="/docs/?doc=HYBRID_LOCK">Hybrid lock</a>
+            <a class="btn btn-ghost" href="/wallet/">Test counter wallet</a>
           </div>
 
           <div class="live-stats" id="liveStats" aria-live="polite">
@@ -110,10 +111,10 @@
           </div>
 
           <div class="privacy-strip">
-            <div><strong>No cell required</strong>Hold value with radio powered off</div>
-            <div><strong>Air balance</strong><code>mesh balance --air</code> over LoRa</div>
-            <div><strong>Hybrid dual-control</strong>Vault unlock needs mesh proof</div>
-            <div><strong>Quantum-safe cold</strong>ML-DSA-65 for large moves</div>
+            <div><strong>Vault first</strong>USDC/SOL locked on Solana</div>
+            <div><strong>Radio IOU</strong>129-byte spend + ack, not a Solana tx</div>
+            <div><strong>Witnessed unlock</strong>Internet alone cannot settle</div>
+            <div><strong>tMESH is a counter</strong>Testnet only · no cash value</div>
           </div>
           <p class="meta" style="margin-top:1.25rem">
             Community software for Meshtastic · Not an official Meshtastic product ·
@@ -201,8 +202,8 @@
         <div class="pillars">
           <article class="pillar">
             <span class="tag">Off-grid</span>
-            <h3>LoRa mesh as the settlement path</h3>
-            <p>No ISP. No SIM. Balances live on a mesh-native ledger that hops peer-to-peer across Meshtastic nodes.</p>
+            <h3>LoRa carries the IOU, not the bank</h3>
+            <p>One 129-byte AirIou frame plus an 82-byte ack. Settlement stays on the Solana vault. Radio is the last mile and the extra lock.</p>
           </article>
           <article class="pillar">
             <span class="tag">Privacy</span>
@@ -338,6 +339,10 @@
         <h2 class="section-title">Documentation</h2>
         <p class="section-sub">Happy path, air path, hybrid vault, security, host ops.</p>
         <div class="cards">
+          <a class="card" href="/docs/?doc=PRODUCT">
+            <h3>Product</h3>
+            <p>Mesh-gated Solana cash. Not a messenger. Not tMESH-as-money.</p>
+          </a>
           <a class="card" href="/docs/?doc=GETTING_STARTED">
             <h3>Getting started</h3>
             <p>Happy path: join → faucet → send → air balance.</p>

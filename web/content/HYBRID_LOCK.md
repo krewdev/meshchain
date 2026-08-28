@@ -1,5 +1,7 @@
 # Hybrid lock: internet vault + Meshtastic identifiers
 
+**Product thesis:** [PRODUCT.md](PRODUCT.md) — Solana-held value that cannot move with internet alone.
+
 ## Goal
 
 Funds locked in the internet vault **cannot be released by internet actors alone**.  

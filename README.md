@@ -1,8 +1,10 @@
 # MeshChain
 
-**Hold and move value on a [Meshtastic](https://meshtastic.org/) mesh — with optional hybrid vaults on Solana.**
+**Hold Solana value that cannot move with internet alone — it needs the mesh.**
 
-MeshChain is an open-source **mesh-native ledger** and wallet toolkit. Everyday use works offline from the internet over LoRa. Large / long-term storage uses **quantum-resistant (ML-DSA-65)** cold keys. Vaulted SOL/stables on the internet can only be released with **Meshtastic-side identifiers + mesh witnesses** (hybrid lock).
+MeshChain is the disconnected last mile and the extra lock on a Solana vault: deposit USDC/SOL while you have LTE, sign a bounded IOU on Meshtastic, settle when a gateway plus mesh witnesses appear. A laptop on hotel Wi-Fi cannot drain the vault by itself.
+
+tMESH is a **test counter**. Product settlement is vault USDC/SOL. Not a messenger. Not “Solana tx over LoRa.” See [PRODUCT.md](./docs/PRODUCT.md).
 
 > Built **for** the Meshtastic ecosystem. Not an official Meshtastic Foundation product — community software that runs **on** Meshtastic radios and channels.
 
