@@ -38,8 +38,10 @@ import socket
 import struct
 import threading
 import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import parse_qs, urlparse
 
 MAGIC = b"MC"
 FRAME_VER = 1
@@ -127,6 +129,26 @@ def decode_bal_reply_payload(payload: bytes) -> Optional[dict]:
         "height": height,
         "found": found,
     }
+
+
+def parse_recipient_to_sid(q: str) -> bytes:
+    raw = (q or "").strip()
+    compact = "".join(c for c in raw if c.isalnum())
+    if len(compact) == 16 and all(c in "0123456789abcdefABCDEF" for c in compact):
+        return bytes.fromhex(compact)
+    t = compact.upper().replace("I", "1").replace("L", "1").replace("O", "0").replace("U", "V")
+    if t.startswith("M"):
+        t = t[1:]
+    if len(t) != 13:
+        raise ValueError("need mesh name or 16-char hex short id")
+    n = 0
+    for c in t:
+        idx = ALPHABET.find(c)
+        if idx < 0:
+            raise ValueError(f"bad mesh name char {c}")
+        n = (n << 5) | idx
+    n >>= 1
+    return n.to_bytes(8, "big")
 
 
 def load_genesis_validators(data_dir: Path) -> List[str]:
@@ -388,6 +410,11 @@ def main():
         type=int,
         default=int(os.environ.get("MESH_RADIO_TIP_SECS", "30")),
         help="seconds between tip advertisements over air (0=off)",
+    )
+    ap.add_argument(
+        "--http",
+        default=os.environ.get("MESH_RADIO_HTTP", "127.0.0.1:9299"),
+        help="browser CORS HTTP for /submit and /balance (empty to disable)",
     )
     ap.add_argument(
         "--data-dir",
@@ -783,7 +810,92 @@ def main():
 
     threading.Thread(target=tip_loop, daemon=True).start()
 
-    print("[relay] MeshChain radio bridge running", flush=True)
+    if getattr(args, "http", ""):
+        http_bind = args.http.strip()
+        hh, _, hp = http_bind.partition(":")
+
+        class RadioHttp(BaseHTTPRequestHandler):
+            def _cors(self):
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+                self.send_header("Access-Control-Allow-Headers", "Content-Type")
+
+            def _json(self, code, obj):
+                raw = json.dumps(obj).encode()
+                self.send_response(code)
+                self.send_header("Content-Type", "application/json")
+                self._cors()
+                self.send_header("Content-Length", str(len(raw)))
+                self.end_headers()
+                self.wfile.write(raw)
+
+            def do_OPTIONS(self):
+                self.send_response(204)
+                self._cors()
+                self.end_headers()
+
+            def do_GET(self):
+                u = urlparse(self.path)
+                if u.path in ("/health", "/"):
+                    self._json(200, {"ok": True, "service": "meshchain-radio-http", "listen": http_bind})
+                    return
+                if u.path == "/balance":
+                    qs = parse_qs(u.query)
+                    q = (qs.get("q") or qs.get("name") or [""])[0]
+                    try:
+                        sid = parse_recipient_to_sid(q)
+                    except Exception as e:
+                        self._json(400, {"ok": False, "error": str(e)})
+                        return
+                    chain = load_best_chain_state(data_dir)
+                    if not chain:
+                        self._json(503, {"ok": False, "error": "no local chain_state"})
+                        return
+                    bal, nonce, height, found = lookup_balance(chain, sid.hex())
+                    self._json(
+                        200,
+                        {
+                            "ok": True,
+                            "found": found,
+                            "short_id_hex": sid.hex(),
+                            "mesh_name": mesh_name_from_sid(sid),
+                            "balance": bal,
+                            "balance_tmesh": bal / 1_000_000,
+                            "nonce": nonce,
+                            "height": height,
+                        },
+                    )
+                    return
+                self._json(404, {"ok": False, "error": "not found"})
+
+            def do_POST(self):
+                u = urlparse(self.path)
+                if u.path != "/submit":
+                    self._json(404, {"ok": False, "error": "not found"})
+                    return
+                n = int(self.headers.get("Content-Length", "0"))
+                raw = self.rfile.read(n) if n else b"{}"
+                try:
+                    body = json.loads(raw.decode() or "{}")
+                    tx = body.get("tx") if isinstance(body.get("tx"), dict) else body
+                    if not isinstance(tx, dict) or "body" not in tx:
+                        raise ValueError("tx.body required")
+                    inject_tcp_json({"type": "tx", "tx": tx})
+                    self._json(200, {"ok": True, "submitted": True, "via": "radio-relay", "path": "tcp+air"})
+                except Exception as e:
+                    self._json(400, {"ok": False, "error": str(e)})
+
+            def log_message(self, fmt, *a):
+                print("[radio-http]", fmt % a, flush=True)
+
+        def http_loop():
+            srv = ThreadingHTTPServer((hh or "127.0.0.1", int(hp or "9299")), RadioHttp)
+            print(f"[radio-http] browser API http://{hh or '127.0.0.1'}:{hp or '9299'}/health", flush=True)
+            srv.serve_forever()
+
+        threading.Thread(target=http_loop, daemon=True).start()
+
+    print("[relay] MeshChain radio bridge running", flush=True))
     print("  channel: MeshChain-Testnet-1 (private; not LongFast)", flush=True)
     print(f"  data-dir: {data_dir}", flush=True)
     print("  air-first: mesh air-submit … --relay 127.0.0.1:9199", flush=True)

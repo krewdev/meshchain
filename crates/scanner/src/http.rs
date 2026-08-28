@@ -10,6 +10,21 @@ use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+fn submit_peer() -> String {
+    std::env::var("MESH_SUBMIT_PEER").unwrap_or_else(|_| "127.0.0.1:9100".into())
+}
+
+fn forward_tx_line(line: &str) -> Result<()> {
+    let peer = submit_peer();
+    let mut stream = TcpStream::connect(peer.as_str())?;
+    stream.write_all(line.as_bytes())?;
+    if !line.ends_with('\n') {
+        stream.write_all(b"\n")?;
+    }
+    stream.flush()?;
+    Ok(())
+}
+
 /// Pending mesh2fa challenges: challenge_id → message (in-memory; fine for testnet).
 static CHALLENGES: Mutex<Vec<(String, String, u64)>> = Mutex::new(Vec::new());
 
@@ -94,6 +109,7 @@ fn handle_client(mut stream: TcpStream, state: AppState) -> Result<()> {
             | "/api/v1/network"
             | "/api/v1/auth/mode"
             | "/api/v1/auth/challenge"
+            | "/api/v1/submit"
             | "/favicon.ico"
     ) || path.starts_with("/assets/");
 
@@ -333,6 +349,52 @@ fn handle_client(mut stream: TcpStream, state: AppState) -> Result<()> {
                 ),
             }
         }
+        ("POST", "/api/v1/submit") => {
+            let v: serde_json::Value = match serde_json::from_str(body.trim()) {
+                Ok(v) => v,
+                Err(e) => {
+                    return write_json(
+                        &mut stream,
+                        400,
+                        &serde_json::json!({"ok":false,"error": format!("bad json: {e}")}),
+                        false,
+                    );
+                }
+            };
+            let tx = if v.get("body").is_some() {
+                v.clone()
+            } else {
+                v.get("tx").cloned().unwrap_or(v.clone())
+            };
+            if tx.get("body").is_none() {
+                return write_json(
+                    &mut stream,
+                    400,
+                    &serde_json::json!({"ok":false,"error":"tx.body required"}),
+                    false,
+                );
+            }
+            let line = serde_json::json!({"type":"tx","tx": tx}).to_string();
+            match forward_tx_line(&line) {
+                Ok(()) => write_json(
+                    &mut stream,
+                    200,
+                    &serde_json::json!({
+                        "ok": true,
+                        "submitted": true,
+                        "via": submit_peer(),
+                        "bytes": line.len()
+                    }),
+                    false,
+                ),
+                Err(e) => write_json(
+                    &mut stream,
+                    502,
+                    &serde_json::json!({"ok":false,"error": format!("gossip: {e}")}),
+                    false,
+                ),
+            }
+        }
         ("GET", "/favicon.ico") => {
             write_response(&mut stream, 204, "text/plain", "", &[], head_only)
         }
@@ -345,7 +407,7 @@ fn handle_client(mut stream: TcpStream, state: AppState) -> Result<()> {
                     "/","/api/v1/status","/api/v1/chain_state","/api/v1/network",
                     "/api/v1/blocks","/api/v1/accounts",
                     "/api/v1/search?q=","/api/v1/validators",
-                    "/api/v1/auth/challenge","/api/v1/auth/verify"
+                    "/api/v1/auth/challenge","/api/v1/auth/verify","/api/v1/submit"
                 ]
             }),
             head_only,
@@ -418,6 +480,7 @@ fn write_response(
         400 => "Bad Request",
         401 => "Unauthorized",
         404 => "Not Found",
+        502 => "Bad Gateway",
         _ => "Error",
     };
     let mut head = format!(

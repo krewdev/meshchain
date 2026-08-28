@@ -863,6 +863,43 @@ td code, .inline-code {
   line-height: 1.7;
 }
 
+/* Browser wallet */
+.wallet-page { padding: 2.5rem 1.25rem 4rem; max-width: 920px; }
+.wallet-page h1 { font-size: 1.9rem; margin: 0 0 0.4rem; }
+.wallet-shell { display: grid; gap: 0; }
+.wallet-path {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  margin-bottom: 0.85rem;
+  font-weight: 600;
+}
+.wallet-path label { display: inline-flex; align-items: center; gap: 0.4rem; cursor: pointer; }
+.wallet-hint { color: var(--muted); font-size: 0.9rem; margin: 0 0 1rem; }
+.wallet-hint code { font-family: var(--mono); font-size: 0.84em; color: var(--accent); }
+.wallet-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+@media (max-width: 860px) {
+  .wallet-grid { grid-template-columns: 1fr; }
+}
+.wallet-id { display: grid; gap: 0.65rem; margin-top: 1rem; }
+.wallet-id code {
+  display: block;
+  font-family: var(--mono);
+  font-size: 0.84rem;
+  color: #a5f3fc;
+  word-break: break-all;
+}
+.wallet-send-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+#wallet-root .live-stats { max-width: none; }
+
 /* How it works steps */
 .steps {
   display: grid;

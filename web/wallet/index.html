@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Wallet — MeshChain Testnet</title>
+  <meta name="description" content="Create a MeshChain wallet, claim faucet tMESH, register, and send over the public seed or a local radio relay." />
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="icon" href="/assets/logo.svg" type="image/svg+xml" />
+  <script>
+    window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
+  </script>
+  <script defer src="/_vercel/insights/script.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tweetnacl@1.0.3/nacl-fast.min.js"></script>
+</head>
+<body>
+  <div class="testnet-banner">
+    BROWSER WALLET · testnet keys in this browser · tMESH has <strong>no cash value</strong> ·
+    <a href="/docs/?doc=GETTING_STARTED">CLI</a> ·
+    <a href="https://34.172.103.125.sslip.io/" target="_blank" rel="noopener">Scanner</a>
+  </div>
+  <header class="nav">
+    <div class="wrap nav-inner">
+      <a class="brand" href="/"><img class="logo-img" src="/assets/logo.svg" width="36" height="36" alt="MeshChain" /> MeshChain</a>
+      <nav class="nav-links" id="navLinks">
+        <a href="/">Home</a>
+        <a class="active" href="/wallet/">Wallet</a>
+        <a href="/faucet/">Faucet</a>
+        <a href="/scanner/">Scanner</a>
+        <a href="/docs/">Docs</a>
+        <a href="https://github.com/krewdev/meshchain" target="_blank" rel="noopener">GitHub</a>
+      </nav>
+      <button class="nav-toggle" id="navToggle" aria-expanded="false" aria-controls="navLinks" aria-label="Open navigation">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </header>
+
+  <main class="wrap wallet-page">
+    <h1>Wallet</h1>
+    <p class="section-sub">
+      Create a key in the browser, register it on <code class="inline-code">meshchain-testnet-1</code>,
+      drip faucet tMESH, then send over the public net or a local Meshtastic radio relay.
+    </p>
+    <div id="wallet-root"></div>
+  </main>
+
+  <footer class="footer">
+    <div class="wrap footer-inner">
+      <div class="footer-brand">
+        <img src="/assets/logo.svg" width="32" height="32" alt="" />
+        <div>MeshChain · browser wallet · testnet</div>
+      </div>
+      <div class="footer-links">
+        <a href="/">Home</a>
+        <a href="/faucet/">Faucet</a>
+        <a href="/scanner/">Scanner</a>
+        <a href="/docs/">Docs</a>
+      </div>
+    </div>
+  </footer>
+  <script type="module" src="/wallet/ui.js"></script>
+</body>
+</html>

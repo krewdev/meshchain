@@ -2,7 +2,8 @@
 """
 MeshChain testnet faucet — drip tMESH to a mesh name.
 
-POST /drip  { "mesh_name": "M3SQRT-XTA1Y-ZJ6" }
+POST /drip    { "mesh_name": "M3SQRT-XTA1Y-ZJ6", "public_key_hex": "..." }
+POST /submit  { "tx": { ...signed Tx... } }
 GET  /health
 GET  /info
 
@@ -31,6 +32,7 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
+import socket
 
 DATA = Path(os.environ.get("MESHCHAIN_DATA", "./data")).resolve()
 BIN = os.environ.get(
@@ -69,6 +71,32 @@ def mesh_name_to_short_hex(name: str) -> str:
     bits >>= 1
     raw = bits.to_bytes(8, "big")
     return raw.hex()
+
+
+def gossip_peer() -> tuple[str, int]:
+    peer = os.environ.get("MESH_MINT_PEER", "127.0.0.1:9100")
+    host, _, port = peer.partition(":")
+    return host or "127.0.0.1", int(port or "9100")
+
+
+def submit_gossip_tx(tx_obj: dict) -> dict:
+    """Push a signed Tx onto the local validator gossip port."""
+    if not isinstance(tx_obj, dict):
+        raise RuntimeError("tx must be a JSON object")
+    if "body" not in tx_obj or "signature" not in tx_obj or "signer" not in tx_obj:
+        raise RuntimeError("tx missing body / signature / signer")
+    line = json.dumps({"type": "tx", "tx": tx_obj}, separators=(",", ":")) + "\n"
+    host, port = gossip_peer()
+    with socket.create_connection((host, port), timeout=8) as s:
+        s.sendall(line.encode())
+    kind = next(iter(tx_obj.get("body") or {}), "tx")
+    return {
+        "ok": True,
+        "submitted": True,
+        "kind": kind,
+        "via": f"peer:{host}:{port}",
+        "bytes": len(line),
+    }
 
 
 def load_state() -> dict:
@@ -275,13 +303,18 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlparse(self.path).path
-        if path != "/drip":
+        if path != "/drip" and path != "/submit":
             self._json(404, {"ok": False, "error": "not found"})
             return
         n = int(self.headers.get("Content-Length", "0"))
         raw = self.rfile.read(n) if n else b"{}"
         try:
             body = json.loads(raw.decode() or "{}")
+            if path == "/submit":
+                tx = body.get("tx") or body
+                result = submit_gossip_tx(tx)
+                self._json(200, result)
+                return
             name = body.get("mesh_name") or body.get("name") or ""
             pk = body.get("public_key_hex") or body.get("pubkey")
             result = drip(name, pk)

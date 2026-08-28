@@ -38,6 +38,7 @@
         MeshChain
       </a>
       <nav class="nav-links" id="navLinks">
+        <a href="/wallet/">Wallet</a>
         <a href="#features">Features</a>
         <a href="#privacy">Privacy</a>
         <a href="#testnet">Testnet</a>
@@ -67,7 +68,8 @@
             Cold keys stay air-gapped. Hybrid vaults refuse internet-only unlocks.
           </p>
           <div class="hero-actions">
-            <a class="btn btn-primary" href="/faucet/">Claim faucet tMESH</a>
+            <a class="btn btn-primary" href="/wallet/">Create wallet</a>
+            <a class="btn btn-ghost" href="/faucet/">Claim faucet tMESH</a>
             <a class="btn btn-ghost" href="/bridge/">Vault deposit</a>
             <a class="btn btn-ghost" href="/docs/?doc=GETTING_STARTED">Happy path</a>
           </div>
@@ -98,6 +100,7 @@
             </div>
             <div class="live-stats-links">
               <a href="https://34.172.103.125.sslip.io/" target="_blank" rel="noopener">Live explorer</a>
+              <a href="/wallet/">Wallet</a>
               <a href="/faucet/">Faucet</a>
               <a href="/docs/?doc=GETTING_STARTED">CLI</a>
               <a href="/docs/?doc=SOLANA_BRIDGE">Bridge</a>
@@ -145,6 +148,21 @@
             · <a href="https://discord.gg/9YXVtXf2yX" target="_blank" rel="noopener">Discord</a>
           </p>
         </div>
+      </div>
+    </section>
+
+    <section id="wallet">
+      <div class="wrap">
+        <h2 class="section-title">Create, faucet, send</h2>
+        <p class="section-sub">
+          Browser wallet for testnet. Keys stay on this device. Use <strong>Net</strong> for the public seed
+          or <strong>Radio</strong> if you are running a local Meshtastic relay.
+        </p>
+        <div id="wallet-root"></div>
+        <p class="meta" style="margin-top:1rem">
+          Full page: <a href="/wallet/">/wallet/</a> ·
+          CLI still works: <code>mesh new-wallet --publish</code>
+        </p>
       </div>
     </section>
 
@@ -281,7 +299,7 @@
 <span class="prompt">$</span> <span class="cmd">./target/debug/mesh send MXXXXX-XXXXX-XXX 1 --wallet me.json --submit 34.172.103.125:9100</span></pre>
         </div>
         <div class="cta-row" style="margin-top:1.25rem">
-          <a class="btn btn-primary" href="/faucet/">Claim faucet</a>
+          <a class="btn btn-primary" href="/wallet/">Open wallet</a>
           <a class="btn btn-ghost" href="https://34.172.103.125.sslip.io/" target="_blank" rel="noopener">Live scanner</a>
           <a class="btn btn-ghost" href="/docs/?doc=GETTING_STARTED">Happy path</a>
           <a class="btn btn-ghost" href="/docs/?doc=RUN_A_NODE">Run a node</a>
@@ -405,6 +423,7 @@
       </div>
       <div class="footer-links">
         <a href="https://github.com/krewdev/meshchain">GitHub</a>
+        <a href="/wallet/">Wallet</a>
         <a href="/scanner/">Scanner</a>
         <a href="/faucet/">Faucet</a>
         <a href="/docs/">Docs</a>
@@ -516,4 +535,6 @@
       });
   })();
 </script>
+  <script src="https://cdn.jsdelivr.net/npm/tweetnacl@1.0.3/nacl-fast.min.js"></script>
+  <script type="module" src="/wallet/ui.js"></script>
 </html>
