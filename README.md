@@ -6,7 +6,7 @@ MeshChain is an open-source **mesh-native ledger** and wallet toolkit. Everyday 
 
 > Built **for** the Meshtastic ecosystem. Not an official Meshtastic Foundation product — community software that runs **on** Meshtastic radios and channels.
 
-**Live site:** [meshchain-sigma.vercel.app](https://meshchain-sigma.vercel.app) · [Docs](https://meshchain-sigma.vercel.app/docs/) · [**Testnet**](https://meshchain-sigma.vercel.app/docs/?doc=TESTNET) · [Scanner](https://34.172.103.125.sslip.io/) · [Faucet](https://meshchain-sigma.vercel.app/faucet/) · [**Discord**](https://discord.gg/9YXVtXf2yX) · [**Launch post on X**](https://x.com/RealEyedropz/status/2085953042260578638)
+**Live site:** [meshchain-sigma.vercel.app](https://meshchain-sigma.vercel.app) · [**Wallet**](https://meshchain-sigma.vercel.app/wallet/) · [Docs](https://meshchain-sigma.vercel.app/docs/) · [**Testnet**](https://meshchain-sigma.vercel.app/docs/?doc=TESTNET) · [Scanner](https://34.172.103.125.sslip.io/) · [Faucet](https://meshchain-sigma.vercel.app/faucet/) · [**Discord**](https://discord.gg/9YXVtXf2yX) · [**Launch post on X**](https://x.com/RealEyedropz/status/2085953042260578638)
 
 [![Discord](https://img.shields.io/badge/Discord-MeshChain-5865F2?logo=discord&logoColor=white)](https://discord.gg/9YXVtXf2yX)
 [![X launch](https://img.shields.io/badge/X-Launch_post-000000?logo=x&logoColor=white)](https://x.com/RealEyedropz/status/2085953042260578638)
@@ -57,6 +57,7 @@ cargo build -p mesh -p meshchain-node
 
 | Feature | Docs / how |
 |---------|------------|
+| Browser wallet (create / faucet / send / radio) | [WALLET](./docs/WALLET.md) · https://meshchain-sigma.vercel.app/wallet/ |
 | Public seed + faucet + scanner | [TESTNET](./docs/TESTNET.md) · [STATUS](./docs/STATUS.md) |
 | Air balance / air submit | [MESHTASTIC](./docs/MESHTASTIC.md) · `mesh balance --air` |
 | Compact AirBlockAck (LoRa finality frames) | [AIR_FINALITY](./docs/AIR_FINALITY.md) · `./scripts/e2e_air_finality.sh` |

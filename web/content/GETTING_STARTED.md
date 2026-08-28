@@ -4,7 +4,16 @@
 
 MeshChain is a mesh-native ledger for [Meshtastic](https://meshtastic.org/). Everyday spend can stay offline; large vaults optionally hybrid-lock on Solana **devnet**.
 
-## Happy path (public testnet)
+## Happy path (browser)
+
+1. Open [the wallet](https://meshchain-sigma.vercel.app/wallet/)
+2. Create wallet → download `mesh-wallet.json`
+3. Claim faucet → wait for inclusion
+4. Send to a mesh name over **Net**, or start `./scripts/start_radio_relay.sh` and use **Radio**
+
+Details: [WALLET.md](WALLET.md)
+
+## Happy path (CLI / public testnet)
 
 One path that should always work on the live seed:
 
@@ -34,7 +43,7 @@ cargo build -p mesh -p meshchain-node
 
 | Live service | URL |
 |--------------|-----|
-| Site / docs | https://meshchain-sigma.vercel.app |
+| Site / docs / wallet | https://meshchain-sigma.vercel.app · [/wallet/](https://meshchain-sigma.vercel.app/wallet/) |
 | Scanner | https://34.172.103.125.sslip.io/ |
 | Faucet | https://meshchain-sigma.vercel.app/faucet/ |
 | Seed peer | `34.172.103.125:9100` |

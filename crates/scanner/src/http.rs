@@ -232,6 +232,25 @@ fn handle_client(mut stream: TcpStream, state: AppState) -> Result<()> {
                 head_only,
             )
         }
+        ("GET", p) if p.starts_with("/api/v1/accounts/") && p.ends_with("/activity") => {
+            let inner = &p["/api/v1/accounts/".len()..];
+            let id = inner.trim_end_matches("/activity").trim_end_matches('/');
+            let id = urlencoding_decode(id);
+            let limit = query_param(query, "limit")
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(20usize)
+                .min(100);
+            let c = state.chain.read().unwrap();
+            match model::account_activity(&id, &c, &state.data_dir, limit) {
+                Some(a) => write_json(&mut stream, 200, &a, head_only),
+                None => write_json(
+                    &mut stream,
+                    404,
+                    &serde_json::json!({"error":"account not found"}),
+                    head_only,
+                ),
+            }
+        }
         ("GET", p) if p.starts_with("/api/v1/accounts/") => {
             let id = &p["/api/v1/accounts/".len()..];
             let id = urlencoding_decode(id);
@@ -405,7 +424,7 @@ fn handle_client(mut stream: TcpStream, state: AppState) -> Result<()> {
                 "error": "not found",
                 "paths": [
                     "/","/api/v1/status","/api/v1/chain_state","/api/v1/network",
-                    "/api/v1/blocks","/api/v1/accounts",
+                    "/api/v1/blocks","/api/v1/accounts","/api/v1/accounts/{id}/activity",
                     "/api/v1/search?q=","/api/v1/validators",
                     "/api/v1/auth/challenge","/api/v1/auth/verify","/api/v1/submit"
                 ]

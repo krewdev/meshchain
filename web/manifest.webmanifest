@@ -1,0 +1,12 @@
+{
+  "name": "MeshChain",
+  "short_name": "MeshChain",
+  "description": "Off-grid testnet wallet for MeshChain on Meshtastic",
+  "start_url": "/wallet/",
+  "display": "standalone",
+  "background_color": "#0b1220",
+  "theme_color": "#0b1220",
+  "icons": [
+    { "src": "/assets/logo.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

@@ -900,6 +900,41 @@ td code, .inline-code {
 }
 #wallet-root .live-stats { max-width: none; }
 
+.wallet-qr-wrap {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+.wallet-qr svg {
+  width: 132px;
+  height: 132px;
+  background: #fff;
+  border-radius: 8px;
+  padding: 4px;
+}
+.wallet-activity {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.45rem;
+  font-family: var(--mono);
+  font-size: 0.86rem;
+}
+.wallet-activity .act-kind { color: var(--accent); text-transform: uppercase; }
+.wallet-activity .act-h { color: var(--muted); }
+.wallet-cmd {
+  background: rgba(0,0,0,0.35);
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: #cbd5e1;
+  white-space: pre-wrap;
+}
+
 /* How it works steps */
 .steps {
   display: grid;

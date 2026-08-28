@@ -5,6 +5,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 LISTEN="${MESH_RADIO_LISTEN:-127.0.0.1:9199}"
+HTTP="${MESH_RADIO_HTTP:-127.0.0.1:9299}"
 TCP0="${MESH_RADIO_TCP:-127.0.0.1:9100}"
 TIP="${MESH_RADIO_TIP_SECS:-30}"
 DATA="${MESHCHAIN_DATA:-./data}"
@@ -25,6 +26,7 @@ done
 exec python3 "$ROOT/tools/mesh_radio_relay.py" \
   "${FLAGS[@]}" \
   --listen "$LISTEN" \
+  --http "$HTTP" \
   --tcp "$TCP0" \
   "${EXTRA[@]}" \
   --tip-secs "$TIP" \

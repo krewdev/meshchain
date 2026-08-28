@@ -297,4 +297,55 @@ mod tests {
         assert_eq!(tx2.priority_fee(), 50_000);
         assert!(transfer_wire_size_estimate() < 200);
     }
+
+    /// Frozen vectors for the browser wallet (`web/wallet/wallet.js`).
+    /// Seed 00..1f — do not change without updating the JS fixture.
+    #[test]
+    fn browser_wallet_sign_vectors() {
+        let mut secret = [0u8; 32];
+        for (i, b) in secret.iter_mut().enumerate() {
+            *b = i as u8;
+        }
+        let kp = Keypair::from_bytes(secret);
+        let pk = kp.public_key();
+        let from = short_id(&pk);
+        let to = [0x22u8; 8];
+
+        let transfer = TxBody::Transfer {
+            nonce: 7,
+            from,
+            to,
+            amount: 1_000_000,
+            fee: 0,
+        };
+        let t_bytes = transfer.sign_bytes().unwrap();
+        let t_tx = Tx::sign(transfer, &kp).unwrap();
+
+        let register = TxBody::Register { nonce: 0, pubkey: pk };
+        let r_bytes = register.sign_bytes().unwrap();
+        let r_tx = Tx::sign(register, &kp).unwrap();
+        t_tx.verify().unwrap();
+        r_tx.verify().unwrap();
+        assert_eq!(
+            hex::encode(pk),
+            "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8"
+        );
+        assert_eq!(hex::encode(from), "56475aa75463474c");
+        assert_eq!(
+            hex::encode(&t_bytes),
+            "01000000000700000056475aa75463474c222222222222222240420f00000000000000000000000000"
+        );
+        assert_eq!(
+            hex::encode(&r_bytes),
+            "01010000000000000003a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8"
+        );
+        assert_eq!(
+            hex::encode(t_tx.signature.as_bytes()),
+            "0dad9d9f90f16403ced48ddb8acc1fe493a01c756d1775ab3ee0ac01cbc62d0ae9220c1ed8803abec4208cf6dba3f7260da3be35a98ec6c692914ce832441803"
+        );
+        assert_eq!(
+            hex::encode(r_tx.signature.as_bytes()),
+            "6765269be48083e33de6a5103b250b344ef813940b11ab66306b005bbbac0007142107564999ca4be218d580100c7b0bdb81f7efcca5aa6bbc436ffa253e510d"
+        );
+    }
 }

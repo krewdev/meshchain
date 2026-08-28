@@ -1,6 +1,6 @@
 # MeshChain status (operator truth)
 
-**Updated:** 2026-08-13  
+**Updated:** 2026-08-28  
 **Network:** `meshchain-testnet-1` (public testnet — **no cash value**, state may wipe)
 
 ## Live endpoints
@@ -10,8 +10,13 @@
 | Seed peer (TCP gossip) | `34.172.103.125:9100` (+ `:9101`, `:9102`) |
 | **Remote observer** (GCE) | `35.192.20.103:9100` — non-PoA full node |
 | Scanner | https://34.172.103.125.sslip.io/ |
+| Scanner submit | `POST https://34.172.103.125.sslip.io/api/v1/submit` |
+| Scanner activity | `GET /api/v1/accounts/{name}/activity` |
 | Faucet | https://faucet.34.172.103.125.sslip.io/info |
+| Faucet submit | `POST https://faucet.34.172.103.125.sslip.io/submit` |
 | Site | https://meshchain-sigma.vercel.app |
+| Browser wallet | https://meshchain-sigma.vercel.app/wallet/ |
+| Radio HTTP (local) | `http://127.0.0.1:9299/health` (`./scripts/start_radio_relay.sh`) |
 
 | Host | Role | Instance |
 |------|------|----------|

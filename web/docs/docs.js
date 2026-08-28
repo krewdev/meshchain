@@ -3,6 +3,7 @@
   const DOCS = [
     { group: "Start" },
     { id: "GETTING_STARTED", title: "Getting started" },
+    { id: "WALLET", title: "Browser wallet" },
     { id: "TESTNET", title: "Public testnet" },
     { id: "STATUS", title: "Operator status" },
     { id: "RUN_A_NODE", title: "Run a node" },

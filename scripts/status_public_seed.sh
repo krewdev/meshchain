@@ -27,6 +27,23 @@ check "faucet HTTPS" "${HTTPS_FAUCET}/info"
 check "scanner HTTPS" "${HTTPS_SCANNER}/api/v1/status"
 check "chain_state"  "${HTTPS_SCANNER}/api/v1/chain_state"
 
+# Browser wallet gateways: empty POST must not 404
+submit_check() {
+  local name="$1" url="$2"
+  local code
+  code=$(curl -sk --max-time 8 -o /tmp/mesh_status_body -w "%{http_code}" \
+    -H "Content-Type: application/json" -d '{"tx":{}}' "$url" 2>/dev/null || echo 000)
+  if [[ "$code" == "404" || "$code" == "000" ]]; then
+    echo "FAIL $name  $url  (http $code — /submit missing or seed down)"
+    ok=1
+  else
+    echo "OK  $name  $url  (http $code)"
+    head -c 120 /tmp/mesh_status_body 2>/dev/null; echo
+  fi
+}
+submit_check "faucet /submit" "${HTTPS_FAUCET}/submit"
+submit_check "scanner /submit" "${HTTPS_SCANNER}/api/v1/submit"
+
 for p in 9100 9101 9102; do
   if python3 -c "import socket, sys; s=socket.create_connection(('$IP', $p), timeout=3); s.close()" 2>/dev/null; then
     echo "OK  peer :$p"

@@ -174,6 +174,144 @@ pub fn list_accounts(state: &ChainState, limit: usize, min_balance: u64) -> Vec<
     rows
 }
 
+#[derive(Serialize)]
+pub struct ActivityTx {
+    pub height: u64,
+    pub kind: String,
+    pub amount: Option<u64>,
+    pub amount_tmesh: Option<f64>,
+    pub fee: Option<u64>,
+    pub from_hex: Option<String>,
+    pub to_hex: Option<String>,
+    pub nonce: u32,
+}
+
+#[derive(Serialize)]
+pub struct ActivityResponse {
+    pub short_id_hex: String,
+    pub mesh_name: String,
+    pub scanned_blocks: usize,
+    pub txs: Vec<ActivityTx>,
+    pub note: Option<String>,
+}
+
+/// Scan archived blocks newest-first for txs touching this short id.
+pub fn account_activity(
+    q: &str,
+    state: &ChainState,
+    data_dir: &Path,
+    limit: usize,
+) -> Option<ActivityResponse> {
+    let view = resolve_account_query(q, state)?;
+    let sid = parse_short_id_hex(&view.short_id_hex).ok()?;
+    let limit = limit.clamp(1, 100);
+    let mut txs = Vec::new();
+    let mut scanned = 0usize;
+    let mut missing_archive = 0usize;
+    for b in state.applied.iter().rev() {
+        if txs.len() >= limit {
+            break;
+        }
+        scanned += 1;
+        let Some(full) = load_archived_block(data_dir, b.height) else {
+            missing_archive += 1;
+            continue;
+        };
+        for tx in full.txs {
+            let hit = match &tx.body {
+                meshchain_proto::tx::TxBody::Transfer { from, to, .. } => {
+                    *from == sid || *to == sid
+                }
+                meshchain_proto::tx::TxBody::Register { pubkey, .. } => {
+                    meshchain_proto::address::short_id(pubkey) == sid
+                }
+                meshchain_proto::tx::TxBody::Mint { to, .. } => *to == sid,
+                meshchain_proto::tx::TxBody::Burn { from, .. } => *from == sid,
+            };
+            if !hit {
+                continue;
+            }
+            let row = match &tx.body {
+                meshchain_proto::tx::TxBody::Transfer {
+                    nonce,
+                    from,
+                    to,
+                    amount,
+                    fee,
+                } => ActivityTx {
+                    height: b.height,
+                    kind: "transfer".into(),
+                    amount: Some(*amount),
+                    amount_tmesh: Some(*amount as f64 / DECIMALS),
+                    fee: Some(*fee),
+                    from_hex: Some(hex::encode(from)),
+                    to_hex: Some(hex::encode(to)),
+                    nonce: *nonce,
+                },
+                meshchain_proto::tx::TxBody::Register { nonce, .. } => ActivityTx {
+                    height: b.height,
+                    kind: "register".into(),
+                    amount: None,
+                    amount_tmesh: None,
+                    fee: None,
+                    from_hex: None,
+                    to_hex: None,
+                    nonce: *nonce,
+                },
+                meshchain_proto::tx::TxBody::Mint {
+                    nonce, to, amount, ..
+                } => ActivityTx {
+                    height: b.height,
+                    kind: "mint".into(),
+                    amount: Some(*amount),
+                    amount_tmesh: Some(*amount as f64 / DECIMALS),
+                    fee: None,
+                    from_hex: None,
+                    to_hex: Some(hex::encode(to)),
+                    nonce: *nonce,
+                },
+                meshchain_proto::tx::TxBody::Burn {
+                    nonce,
+                    from,
+                    amount,
+                    ..
+                } => ActivityTx {
+                    height: b.height,
+                    kind: "burn".into(),
+                    amount: Some(*amount),
+                    amount_tmesh: Some(*amount as f64 / DECIMALS),
+                    fee: None,
+                    from_hex: Some(hex::encode(from)),
+                    to_hex: None,
+                    nonce: *nonce,
+                },
+            };
+            txs.push(row);
+            if txs.len() >= limit {
+                break;
+            }
+        }
+        if scanned >= 200 {
+            break;
+        }
+    }
+    let note = if missing_archive > 0 && txs.is_empty() {
+        Some(
+            "older heights have no archived block bodies; activity starts after archive_first"
+                .into(),
+        )
+    } else {
+        None
+    };
+    Some(ActivityResponse {
+        short_id_hex: view.short_id_hex,
+        mesh_name: view.mesh_name,
+        scanned_blocks: scanned,
+        txs,
+        note,
+    })
+}
+
 pub fn resolve_account_query(q: &str, state: &ChainState) -> Option<AccountView> {
     let q = q.trim();
     // Try mesh name or hex short id

@@ -837,7 +837,21 @@ def main():
             def do_GET(self):
                 u = urlparse(self.path)
                 if u.path in ("/health", "/"):
-                    self._json(200, {"ok": True, "service": "meshchain-radio-http", "listen": http_bind})
+                    cid, height, tip = st.snapshot()
+                    self._json(
+                        200,
+                        {
+                            "ok": True,
+                            "service": "meshchain-radio-http",
+                            "listen": http_bind,
+                            "tcp_peers": list(args.tcp or []),
+                            "mock": bool(args.mock),
+                            "chain_id": cid,
+                            "height": height,
+                            "tip_hash_hex": tip,
+                            "start": "./scripts/start_radio_relay.sh",
+                        },
+                    )
                     return
                 if u.path == "/balance":
                     qs = parse_qs(u.query)
@@ -895,7 +909,7 @@ def main():
 
         threading.Thread(target=http_loop, daemon=True).start()
 
-    print("[relay] MeshChain radio bridge running", flush=True))
+    print("[relay] MeshChain radio bridge running", flush=True)
     print("  channel: MeshChain-Testnet-1 (private; not LongFast)", flush=True)
     print(f"  data-dir: {data_dir}", flush=True)
     print("  air-first: mesh air-submit … --relay 127.0.0.1:9199", flush=True)

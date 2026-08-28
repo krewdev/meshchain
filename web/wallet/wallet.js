@@ -201,35 +201,6 @@ export function buildTransferTx(file, info, to8, amountBase, nonce, feeBase = 0)
   };
 }
 
-export function loadStoredWallet() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const j = JSON.parse(raw);
-    if (!j?.secret_hex || !j?.public_hex) return null;
-    return j;
-  } catch {
-    return null;
-  }
-}
-
-export function storeWallet(file) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(file));
-}
-
-export function clearStoredWallet() {
-  localStorage.removeItem(STORAGE_KEY);
-}
-
-export function downloadWallet(file, name = "mesh-wallet.json") {
-  const blob = new Blob([JSON.stringify(file, null, 2)], { type: "application/json" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = name;
-  a.click();
-  URL.revokeObjectURL(a.href);
-}
-
 export function parseAmountTmesh(s) {
   const n = Number(String(s).trim());
   if (!Number.isFinite(n) || n <= 0) throw new Error("amount must be > 0");
@@ -305,7 +276,264 @@ export async function radioBalance(radioBase, nameOrHex) {
   return j;
 }
 
-export async function radioHealth(radioBase) {
-  const r = await fetch(radioBase.replace(/\/$/, "") + "/health", { cache: "no-store" });
-  return parseJson(r);
+export const SIGN_VECTORS = {
+  secret_hex: "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+  public_hex: "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8",
+  short_id_hex: "56475aa75463474c",
+  transfer_sign_hex:
+    "01000000000700000056475aa75463474c222222222222222240420f00000000000000000000000000",
+  register_sign_hex:
+    "01010000000000000003a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8",
+  transfer_sig_hex:
+    "0dad9d9f90f16403ced48ddb8acc1fe493a01c756d1775ab3ee0ac01cbc62d0ae9220c1ed8803abec4208cf6dba3f7260da3be35a98ec6c692914ce832441803",
+  register_sig_hex:
+    "6765269be48083e33de6a5103b250b344ef813940b11ab66306b005bbbac0007142107564999ca4be218d580100c7b0bdb81f7efcca5aa6bbc436ffa253e510d",
+};
+
+/** Compare JS bincode + ed25519 against frozen Rust vectors. */
+export function verifySignVectors() {
+  const file = {
+    secret_hex: SIGN_VECTORS.secret_hex,
+    public_hex: SIGN_VECTORS.public_hex,
+  };
+  const pk = hexToBytes(file.public_hex);
+  const from = hexToBytes(SIGN_VECTORS.short_id_hex);
+  const to = new Uint8Array(8).fill(0x22);
+  const t = signBytesTransfer(7, from, to, 1_000_000, 0);
+  const r = signBytesRegister(0, pk);
+  const out = {
+    transfer_bytes: bytesToHex(t) === SIGN_VECTORS.transfer_sign_hex,
+    register_bytes: bytesToHex(r) === SIGN_VECTORS.register_sign_hex,
+    transfer_sig: false,
+    register_sig: false,
+  };
+  try {
+    const ts = signDetached(t, file);
+    const rs = signDetached(r, file);
+    out.transfer_sig = bytesToHex(ts) === SIGN_VECTORS.transfer_sig_hex;
+    out.register_sig = bytesToHex(rs) === SIGN_VECTORS.register_sig_hex;
+  } catch {
+    /* nacl missing */
+  }
+  out.ok = out.transfer_bytes && out.register_bytes && out.transfer_sig && out.register_sig;
+  return out;
 }
+
+const LIST_KEY = "meshchain.wallets.v2";
+
+function listState() {
+  try {
+    const raw = localStorage.getItem(LIST_KEY);
+    if (raw) {
+      const j = JSON.parse(raw);
+      if (Array.isArray(j.wallets)) return j;
+    }
+  } catch {
+    /* ignore */
+  }
+  const one = loadStoredWalletPlain();
+  if (one) {
+    return { active: one.public_hex, wallets: [one] };
+  }
+  return { active: null, wallets: [] };
+}
+
+function saveList(state) {
+  localStorage.setItem(LIST_KEY, JSON.stringify(state));
+}
+
+function loadStoredWalletPlain() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const j = JSON.parse(raw);
+    if (!j?.public_hex) return null;
+    return j;
+  } catch {
+    return null;
+  }
+}
+
+export function listWallets() {
+  return listState().wallets.map((w) => ({
+    public_hex: w.public_hex,
+    label: w.label || "",
+    wrapped: Boolean(w.wrapped),
+    created: w.created || null,
+  }));
+}
+
+export function loadStoredWallet() {
+  const st = listState();
+  const w =
+    st.wallets.find((x) => x.public_hex === st.active) || st.wallets[st.wallets.length - 1] || null;
+  if (!w) return loadStoredWalletPlain();
+  if (w.secret_hex && w.public_hex) return w;
+  if (w.wrapped) return { ...w, locked: true };
+  return w;
+}
+
+export function storeWallet(file, opts = {}) {
+  const st = listState();
+  const rec = {
+    public_hex: file.public_hex,
+    secret_hex: file.wrapped ? undefined : file.secret_hex,
+    wrapped: file.wrapped || undefined,
+    label: opts.label || file.label || "",
+    created: file.created || new Date().toISOString(),
+  };
+  const i = st.wallets.findIndex((w) => w.public_hex === rec.public_hex);
+  if (i >= 0) st.wallets[i] = { ...st.wallets[i], ...rec };
+  else st.wallets.push(rec);
+  st.active = rec.public_hex;
+  saveList(st);
+  localStorage.setItem(
+    STORAGE_KEY,
+    JSON.stringify({
+      secret_hex: rec.secret_hex,
+      public_hex: rec.public_hex,
+      wrapped: rec.wrapped,
+    })
+  );
+}
+
+export function setActiveWallet(publicHex) {
+  const st = listState();
+  st.active = publicHex;
+  saveList(st);
+  const w = st.wallets.find((x) => x.public_hex === publicHex);
+  if (w) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(w));
+  }
+}
+
+export function clearStoredWallet() {
+  const st = listState();
+  const active = st.active;
+  st.wallets = st.wallets.filter((w) => w.public_hex !== active);
+  st.active = st.wallets[0]?.public_hex || null;
+  saveList(st);
+  if (st.active) {
+    const w = st.wallets[0];
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(w));
+  } else {
+    localStorage.removeItem(STORAGE_KEY);
+  }
+}
+
+export function downloadWallet(file, name = "mesh-wallet.json") {
+  const payload = file.wrapped
+    ? {
+        public_hex: file.public_hex,
+        wrapped: file.wrapped,
+        note: "Passphrase-wrapped MeshChain testnet key. Unlock in /wallet/.",
+      }
+    : { secret_hex: file.secret_hex, public_hex: file.public_hex };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+async function deriveAesKey(pass, salt) {
+  const enc = new TextEncoder().encode(pass);
+  const base = await crypto.subtle.importKey("raw", enc, "PBKDF2", false, ["deriveKey"]);
+  return crypto.subtle.deriveKey(
+    { name: "PBKDF2", salt, iterations: 120_000, hash: "SHA-256" },
+    base,
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["encrypt", "decrypt"]
+  );
+}
+
+export async function wrapSecret(file, passphrase) {
+  if (!passphrase || passphrase.length < 6) throw new Error("passphrase must be at least 6 characters");
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await deriveAesKey(passphrase, salt);
+  const pt = new TextEncoder().encode(JSON.stringify({ secret_hex: file.secret_hex, public_hex: file.public_hex }));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, pt));
+  return {
+    public_hex: file.public_hex,
+    wrapped: {
+      v: 1,
+      alg: "pbkdf2-sha256-aes-gcm",
+      salt: bytesToHex(salt),
+      iv: bytesToHex(iv),
+      ct: bytesToHex(ct),
+    },
+  };
+}
+
+export async function unwrapSecret(file, passphrase) {
+  if (file.secret_hex && file.public_hex) return { secret_hex: file.secret_hex, public_hex: file.public_hex };
+  const w = file.wrapped;
+  if (!w) throw new Error("wallet is not wrapped");
+  const key = await deriveAesKey(passphrase, hexToBytes(w.salt));
+  const pt = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: hexToBytes(w.iv) },
+    key,
+    hexToBytes(w.ct)
+  );
+  const j = JSON.parse(new TextDecoder().decode(pt));
+  if (!j.secret_hex) throw new Error("unwrap produced empty secret");
+  return { secret_hex: j.secret_hex, public_hex: j.public_hex || file.public_hex };
+}
+
+export async function waitForInclusion(scanner, nameOrHex, before, opts = {}) {
+  const timeout = opts.timeoutMs ?? 20000;
+  const interval = opts.intervalMs ?? 1500;
+  const start = Date.now();
+  let last = null;
+  let lastErr = null;
+  while (Date.now() - start < timeout) {
+    try {
+      const acc = await scannerAccount(scanner, nameOrHex);
+      last = acc;
+      const nonceOk = before.nonce == null || Number(acc.nonce) > Number(before.nonce);
+      const balChanged =
+        before.balance == null || Number(acc.balance) !== Number(before.balance);
+      if (nonceOk || balChanged) {
+        return { included: true, account: acc, waited_ms: Date.now() - start };
+      }
+    } catch (e) {
+      lastErr = e;
+    }
+    await new Promise((r) => setTimeout(r, interval));
+  }
+  return {
+    included: false,
+    account: last,
+    error: lastErr ? String(lastErr.message || lastErr) : "timeout",
+    waited_ms: Date.now() - start,
+  };
+}
+
+export async function scannerActivity(base, nameOrHex, limit = 20) {
+  const url =
+    base.replace(/\/$/, "") +
+    "/api/v1/accounts/" +
+    encodeURIComponent(nameOrHex) +
+    "/activity?limit=" +
+    limit;
+  const r = await fetch(url, { cache: "no-store" });
+  const j = await parseJson(r);
+  if (!r.ok) throw new Error(j.error || "activity unavailable");
+  return j;
+}
+
+export function scannerAccountUrl(scanner, nameOrHex) {
+  return scanner.replace(/\/$/, "") + "/?q=" + encodeURIComponent(nameOrHex);
+}
+
+export const RADIO_START_HINT = `./scripts/start_radio_relay.sh
+# default HTTP for the browser wallet:
+#   MESH_RADIO_HTTP=127.0.0.1:9299
+# mock LoRa if no serial radio:
+#   (omit MESH_RADIO_PORT)
+# real radio:
+#   MESH_RADIO_PORT=/dev/ttyUSB0 ./scripts/start_radio_relay.sh`;
+
