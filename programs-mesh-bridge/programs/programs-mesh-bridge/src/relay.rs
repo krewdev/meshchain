@@ -1,6 +1,6 @@
-//! Path A RELAY. Splice with docs/INTEGRATION.md before `anchor build`.
-//! Matches scripts/init_relay_devnet.ts and scripts/post_air_acks.ts.
-//! claim_settle stays EmissionsDark until set_emissions_enabled.
+//! Path A RELAY. After `python3 scripts/apply_lib_rs_splice.py`, run `anchor build`.
+//! Matches init_relay_devnet.ts and post_air_acks.ts.
+//! claim_settle stays EmissionsDark.
 
 use anchor_lang::prelude::*;
 use crate::{
@@ -13,6 +13,20 @@ pub const RELAY_NODE_SEED: &[u8] = b"mesh-relay-node";
 pub const RELAY_ACK_SEED: &[u8] = b"mesh-relay-ack";
 pub const RELAY_SCORE_SEED: &[u8] = b"mesh-relay-score";
 pub const RELAY_CREDIT_SEED: &[u8] = b"mesh-relay-credit";
+
+#[error_code]
+pub enum RelayError {
+    #[msg("RELAY mint path is dark until mainnet vault + flag flip")]
+    EmissionsDark,
+    #[msg("validator_index out of attestor set")]
+    InvalidValidatorIndex,
+    #[msg("signer is not a registered attestor")]
+    NotAttestor,
+    #[msg("signer is not listed on this settle credit")]
+    NotSettleAttestor,
+    #[msg("settle fee already claimed for this index")]
+    FeeAlreadyClaimed,
+}
 
 #[account]
 #[derive(InitSpace)]
@@ -70,7 +84,7 @@ pub fn init_relay_config(
     emissions_enabled: bool,
 ) -> Result<()> {
     require!(relay_bps > 0 && relay_bps <= 10_000, BridgeError::InvalidFee);
-    require!(!emissions_enabled, BridgeError::EmissionsDark);
+    require!(!emissions_enabled, RelayError::EmissionsDark);
     let rc = &mut ctx.accounts.relay_config;
     rc.authority = ctx.accounts.authority.key();
     rc.relay_mint = Pubkey::default();
@@ -115,11 +129,11 @@ pub fn post_air_ack(
     let config = &ctx.accounts.config;
     require!(
         (validator_index as usize) < config.attestor_count as usize,
-        BridgeError::InvalidValidatorIndex
+        RelayError::InvalidValidatorIndex
     );
     require!(
         ctx.accounts.validator.key() == config.attestors[validator_index as usize],
-        BridgeError::NotAttestor
+        RelayError::NotAttestor
     );
     let ack = &mut ctx.accounts.ack;
     ack.height = height;
@@ -149,13 +163,16 @@ pub fn open_settle_credit(ctx: Context<OpenSettleCredit>, _burn_txid: [u8; 32]) 
 
 pub fn claim_settle_fee(ctx: Context<ClaimSettleFee>, index: u8) -> Result<()> {
     let credit = &mut ctx.accounts.settle_credit;
-    require!((index as usize) < credit.attestor_count as usize, BridgeError::NotSettleAttestor);
+    require!(
+        (index as usize) < credit.attestor_count as usize,
+        RelayError::NotSettleAttestor
+    );
     require!(
         ctx.accounts.claimant.key() == credit.attestors[index as usize],
-        BridgeError::NotSettleAttestor
+        RelayError::NotSettleAttestor
     );
     let bit = 1u8 << index;
-    require!(credit.claimed_bitmap & bit == 0, BridgeError::FeeAlreadyClaimed);
+    require!(credit.claimed_bitmap & bit == 0, RelayError::FeeAlreadyClaimed);
     let pot = credit
         .fee
         .checked_mul(ctx.accounts.relay_config.relay_bps_of_withdraw_fee as u64)
@@ -169,7 +186,10 @@ pub fn claim_settle_fee(ctx: Context<ClaimSettleFee>, index: u8) -> Result<()> {
     let vault = ctx.accounts.sol_vault.to_account_info();
     let dest = ctx.accounts.claimant.to_account_info();
     let min_rent = Rent::get()?.minimum_balance(8 + SolVault::INIT_SPACE);
-    require!(vault.lamports().saturating_sub(share) >= min_rent, BridgeError::InsufficientVault);
+    require!(
+        vault.lamports().saturating_sub(share) >= min_rent,
+        BridgeError::InsufficientVault
+    );
     **vault.try_borrow_mut_lamports()? -= share;
     **dest.try_borrow_mut_lamports()? += share;
     credit.claimed_bitmap |= bit;
@@ -177,7 +197,7 @@ pub fn claim_settle_fee(ctx: Context<ClaimSettleFee>, index: u8) -> Result<()> {
 }
 
 pub fn claim_settle(_ctx: Context<ClaimSettle>, _index: u8) -> Result<()> {
-    err!(BridgeError::EmissionsDark)
+    err!(RelayError::EmissionsDark)
 }
 
 #[derive(Accounts)]
@@ -186,7 +206,13 @@ pub struct InitRelayConfig<'info> {
     pub authority: Signer<'info>,
     #[account(has_one = authority, seeds = [CONFIG_SEED], bump = config.bump)]
     pub config: Account<'info, BridgeConfig>,
-    #[account(init, payer = authority, space = 8 + RelayConfig::INIT_SPACE, seeds = [RELAY_CONFIG_SEED], bump)]
+    #[account(
+        init,
+        payer = authority,
+        space = 8 + RelayConfig::INIT_SPACE,
+        seeds = [RELAY_CONFIG_SEED],
+        bump
+    )]
     pub relay_config: Account<'info, RelayConfig>,
     pub system_program: Program<'info, System>,
 }
@@ -203,9 +229,21 @@ pub struct AuthRelay<'info> {
 pub struct RegisterNode<'info> {
     #[account(mut)]
     pub wallet: Signer<'info>,
-    #[account(init, payer = wallet, space = 8 + NodeRecord::INIT_SPACE, seeds = [RELAY_NODE_SEED, mesh_short_id.as_ref()], bump)]
+    #[account(
+        init,
+        payer = wallet,
+        space = 8 + NodeRecord::INIT_SPACE,
+        seeds = [RELAY_NODE_SEED, mesh_short_id.as_ref()],
+        bump
+    )]
     pub node: Account<'info, NodeRecord>,
-    #[account(init, payer = wallet, space = 8 + RelayerScore::INIT_SPACE, seeds = [RELAY_SCORE_SEED, wallet.key().as_ref()], bump)]
+    #[account(
+        init,
+        payer = wallet,
+        space = 8 + RelayerScore::INIT_SPACE,
+        seeds = [RELAY_SCORE_SEED, wallet.key().as_ref()],
+        bump
+    )]
     pub score: Account<'info, RelayerScore>,
     pub system_program: Program<'info, System>,
 }
@@ -213,14 +251,27 @@ pub struct RegisterNode<'info> {
 #[derive(Accounts)]
 #[instruction(height: u64, block_hash: [u8; 32], validator_index: u8)]
 pub struct PostAirAck<'info> {
+    /// Pays rent for AckRecord. Must be mut because it is the init payer.
+    #[account(mut)]
     pub validator: Signer<'info>,
     #[account(seeds = [CONFIG_SEED], bump = config.bump)]
     pub config: Account<'info, BridgeConfig>,
-    #[account(init, payer = validator, space = 8 + AckRecord::INIT_SPACE, seeds = [RELAY_ACK_SEED, &height.to_le_bytes(), &[validator_index]], bump)]
+    #[account(
+        init,
+        payer = validator,
+        space = 8 + AckRecord::INIT_SPACE,
+        seeds = [RELAY_ACK_SEED, &height.to_le_bytes(), &[validator_index]],
+        bump
+    )]
     pub ack: Account<'info, AckRecord>,
     #[account(mut, seeds = [RELAY_NODE_SEED, node.mesh_short_id.as_ref()], bump = node.bump)]
     pub node: Account<'info, NodeRecord>,
-    #[account(mut, seeds = [RELAY_SCORE_SEED, validator.key().as_ref()], bump = score.bump, constraint = score.wallet == validator.key())]
+    #[account(
+        mut,
+        seeds = [RELAY_SCORE_SEED, validator.key().as_ref()],
+        bump = score.bump,
+        constraint = score.wallet == validator.key()
+    )]
     pub score: Account<'info, RelayerScore>,
     pub system_program: Program<'info, System>,
 }
@@ -234,7 +285,13 @@ pub struct OpenSettleCredit<'info> {
     pub config: Account<'info, BridgeConfig>,
     #[account(seeds = [WITHDRAW_SEED, &burn_txid], bump = withdraw_record.bump)]
     pub withdraw_record: Account<'info, WithdrawRecord>,
-    #[account(init, payer = payer, space = 8 + SettleCredit::INIT_SPACE, seeds = [RELAY_CREDIT_SEED, &burn_txid], bump)]
+    #[account(
+        init,
+        payer = payer,
+        space = 8 + SettleCredit::INIT_SPACE,
+        seeds = [RELAY_CREDIT_SEED, &burn_txid],
+        bump
+    )]
     pub settle_credit: Account<'info, SettleCredit>,
     pub system_program: Program<'info, System>,
 }
