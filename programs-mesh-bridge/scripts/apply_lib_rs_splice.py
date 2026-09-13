@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """Insert Path A wrappers into programs-mesh-bridge src/lib.rs.
 
-Run from programs-mesh-bridge/ or repo root:
-  python3 scripts/apply_lib_rs_splice.py
+Anchor's #[program] macro needs account structs AND the generated
+`__client_accounts_*` modules at crate root. That means:
 
-Idempotent. Does not touch withdraw_hybrid_*. Does not flip emissions.
+    pub mod relay;
+    pub use relay::*;
 
-Anchor's #[program] macro cannot take Context<crate::relay::Foo> — it looks
-for __client_accounts_crate. Import the account structs at crate root instead.
+A selective `use relay::{InitRelayConfig, ...}` is not enough — that was E0432.
 """
 from __future__ import annotations
 
@@ -19,10 +19,7 @@ CANDIDATES = [
 ]
 
 MOD = "pub mod relay;"
-USE = (
-    "use relay::{AuthRelay, ClaimSettle, ClaimSettleFee, InitRelayConfig,"
-    " OpenSettleCredit, PostAirAck, RegisterNode};"
-)
+USE = "pub use relay::*;"
 
 WRAPPERS = '''
     pub fn init_relay_config(
@@ -90,7 +87,17 @@ def main() -> None:
         text = text.replace("Context<crate::relay::", "Context<")
         text = text.replace("crate::relay::", "relay::")
         changed = True
-        print("rewrote crate::relay:: Context paths (Anchor E0432)")
+        print("rewrote crate::relay:: Context paths")
+
+    # drop the broken selective import from the previous script
+    old_use = (
+        "use relay::{AuthRelay, ClaimSettle, ClaimSettleFee, InitRelayConfig,"
+        " OpenSettleCredit, PostAirAck, RegisterNode};"
+    )
+    if old_use in text:
+        text = text.replace(old_use + "\n", "")
+        changed = True
+        print("removed selective relay import")
 
     if MOD not in text:
         needle = 'declare_id!("CBRQcjk5DLJh1HcW3XF5TmUxZsBumhiABJa6M15r3Vkx");'
@@ -98,13 +105,13 @@ def main() -> None:
             raise SystemExit("declare_id! needle missing")
         text = text.replace(needle, needle + "\n\n" + MOD + "\n" + USE, 1)
         changed = True
-        print("inserted pub mod relay + account imports")
+        print("inserted pub mod relay + pub use relay::*")
     else:
         print("pub mod relay already present")
         if USE not in text:
             text = text.replace(MOD, MOD + "\n" + USE, 1)
             changed = True
-            print("inserted relay account imports")
+            print("inserted pub use relay::*")
 
     if "fn init_relay_config(" not in text:
         mark = "\n}\n\nfn mul_bps"
