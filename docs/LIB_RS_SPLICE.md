@@ -1,44 +1,19 @@
-# lib.rs splice (Path A)
+# lib.rs Path A splice
 
-File: `programs-mesh-bridge/programs/programs-mesh-bridge/src/lib.rs`
-Program id stays `CBRQcjk5DLJh1HcW3XF5TmUxZsBumhiABJa6M15r3Vkx`.
+`relay.rs` is on the branch. `lib.rs` still needs the inserts below, or run:
 
-## 1. After the `use` block
+```
+python3 programs-mesh-bridge/scripts/apply_lib_rs_splice.py
+cd programs-mesh-bridge && anchor build
+```
+
+## 1. After `declare_id!`
 
 ```rust
 pub mod relay;
 ```
 
-## 2. Helper visibility
-
-Change
-
-```rust
-fn count_attestor_signers(
-```
-
-to
-
-```rust
-pub(crate) fn count_attestor_signers(
-```
-
-## 3. Append these variants to `BridgeError` (end of enum, before `}`)
-
-```rust
-    #[msg("RELAY mint path is dark until mainnet vault + flag flip")]
-    EmissionsDark,
-    #[msg("validator_index out of range")]
-    InvalidValidatorIndex,
-    #[msg("signer is not a registered attestor")]
-    NotAttestor,
-    #[msg("signer is not a settle attestor at this index")]
-    NotSettleAttestor,
-    #[msg("this attestor already claimed the fee share")]
-    FeeAlreadyClaimed,
-```
-
-## 4. Paste inside `#[program] pub mod programs_mesh_bridge`, after `withdraw_hybrid_spl`
+## 2. Before the `#[program]` module closes (ahead of `fn mul_bps`)
 
 ```rust
     pub fn init_relay_config(
@@ -80,26 +55,19 @@ pub(crate) fn count_attestor_signers(
         crate::relay::open_settle_credit(ctx, burn_txid)
     }
 
-    pub fn claim_settle_fee(
-        ctx: Context<crate::relay::ClaimSettleFee>,
-        index: u8,
-    ) -> Result<()> {
+    pub fn claim_settle_fee(ctx: Context<crate::relay::ClaimSettleFee>, index: u8) -> Result<()> {
         crate::relay::claim_settle_fee(ctx, index)
     }
 
-    pub fn claim_settle(
-        ctx: Context<crate::relay::ClaimSettle>,
-        index: u8,
-    ) -> Result<()> {
+    pub fn claim_settle(ctx: Context<crate::relay::ClaimSettle>, index: u8) -> Result<()> {
         crate::relay::claim_settle(ctx, index)
     }
 ```
 
-Wrappers match the landed `src/relay.rs` (account names `validator` / `ack` / `node` / `score`).
+## 3. `count_attestor_signers` → `pub(crate) fn`
 
-Then:
+## 4. Append to `BridgeError`
 
-```bash
-cd programs-mesh-bridge
-anchor build
-```
+`EmissionsDark`, `InvalidValidatorIndex`, `NotAttestor`, `NotSettleAttestor`, `FeeAlreadyClaimed`.
+
+Do not `anchor deploy` a new id. Upgrade `CBRQcjk5…` on **devnet** only.
