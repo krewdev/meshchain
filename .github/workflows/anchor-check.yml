@@ -1,0 +1,25 @@
+name: Anchor check
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check:
+    name: splice + cargo check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: programs-mesh-bridge
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust 1.89.0
+        uses: dtolnay/rust-toolchain@1.89.0
+
+      - name: Apply Path A splice
+        working-directory: .
+        run: python3 programs-mesh-bridge/scripts/apply_lib_rs_splice.py
+
+      - name: cargo check (host, no-entrypoint)
+        run: cargo check -p programs-mesh-bridge --features no-entrypoint --offline || cargo check -p programs-mesh-bridge --features no-entrypoint
